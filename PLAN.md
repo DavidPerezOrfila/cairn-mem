@@ -45,17 +45,17 @@
 
 **Aceptación:** `pip install -e ".[dev]" && pytest -q` → M1 en rojo, M2 *skipped*.
 
-### M1 — Núcleo (1–2 días)
-- [ ] `Store`: `save/get/search/archive/rebuild/dump` según `docs/DESIGN.md`
-- [ ] JSONL append-only (`O_APPEND` + 1 `os.write`), UTF-8 sin BOM, `ensure_ascii=False`
-- [ ] Aplicación de eventos: `topic_key` → anterior `superseded` **antes** de insertar; orden `(ts, nº línea)`
-- [ ] Huella del JSONL + `user_version` → rebuild automático
-- [ ] Rechazo de secretos y de `body > 500`
-- [ ] Búsqueda saneada AND→OR, `bm25(mem_fts,5.0,1.0,0.5)`, snippet
-- [ ] CLI: `init [--share]`, `save`, `search`, `get`, `archive`, `rebuild` (texto y `--json`); raíz `.cairn/` hacia arriba o `CAIRN_DIR`
-- [ ] Arranque rápido: imports mínimos, sin imports pesados al inicio
+### M1 — Núcleo (1–2 días) ✅
+- [x] `Store`: `save/get/search/archive/rebuild/dump` según `docs/DESIGN.md`
+- [x] JSONL append-only (`O_APPEND` + 1 `os.write`), UTF-8 sin BOM, `ensure_ascii=False`
+- [x] Aplicación de eventos: `topic_key` → anterior `superseded` **antes** de insertar; orden `(ts, nº línea)`
+- [x] Huella del JSONL + `user_version` → rebuild automático
+- [x] Rechazo de secretos y de `body > 500`
+- [x] Búsqueda saneada AND→OR, `bm25(mem_fts,5.0,1.0,0.5)`, snippet
+- [x] CLI: `init [--share]`, `save`, `search`, `get`, `archive`, `rebuild` (texto y `--json`); raíz `.cairn/` hacia arriba o `CAIRN_DIR`
+- [x] Arranque rápido: imports mínimos, sin imports pesados al inicio
 
-**Aceptación:** `tests/test_store.py` en verde · `rebuild` idempotente · `search` interno < 10 ms con 10k sintéticos.
+**Aceptación:** `tests/test_store.py` en verde · `rebuild` idempotente · `search` interno < 10 ms con 10k sintéticos (medido 2026-11-01: rebuild 507 ms, `search` p95 3.87 ms).
 **Dogfooding:** desde aquí, guarda las decisiones del propio proyecto con `cairn`.
 
 ### M2 — L0 y anclas (1 día)

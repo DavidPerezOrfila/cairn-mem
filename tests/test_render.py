@@ -1,8 +1,9 @@
 """Tests de M2: L0 con presupuesto, determinista y con marca de stale."""
+
 import pytest
 
 render = pytest.importorskip("cairn_mem.render", reason="M2 pendiente")
-from cairn_mem.store import Store  # noqa: E402
+from cairn_mem.store import Store
 
 
 def _fill(store, n):
@@ -34,7 +35,14 @@ def test_l0_marks_stale(tmp_path):
     root = tmp_path
     (root / "a.py").write_text("v1\n", encoding="utf-8")
     from cairn_mem.anchor import file_hash
+
     s = Store(str(root / ".cairn"))
-    s.save(kind="gotcha", title="G", body="x", anchor_path="a.py", anchor_hash=file_hash(str(root / "a.py")))
+    s.save(
+        kind="gotcha",
+        title="G",
+        body="x",
+        anchor_path="a.py",
+        anchor_hash=file_hash(str(root / "a.py")),
+    )
     (root / "a.py").write_text("v2\n", encoding="utf-8")
     assert "⚠" in render.render_l0(s, project_root=str(root))

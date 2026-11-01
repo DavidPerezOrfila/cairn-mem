@@ -7,7 +7,7 @@ Funciona con cualquier agente/arnés que tenga shell.
 - Cómo usarla desde un agente: [`docs/AGENT_SNIPPET.md`](docs/AGENT_SNIPPET.md)
 
 ## Estado
-M0 listo (esqueleto + tests rojos de M1). Siguiente: **M1**.
+M1 listo (núcleo + CLI + tests). Siguiente: **M2**.
 
 ## Uso previsto
 ```bash
