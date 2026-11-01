@@ -1,10 +1,10 @@
 # AGENTS.md — reglas para construir cairn-mem
 
 ## Estado y alcance
-- **M0 cerrado.** `store.py` y `cli.py` son stubs; `tests/test_store.py` es el contrato de M1, en rojo.
+- **M1 cerrado.** `store.py` y `cli.py` implementados; `tests/test_cli.py` cubre la CLI.
 - Implementa **un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
 - Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
-- `test_anchor.py` y `test_render.py` usan `pytest.importorskip`: **skipped** significa que `anchor.py`/`render.py` no existen todavía, no que estén bien. Hoy `cli.py` solo imprime "no implementado" y devuelve 2.
+- `test_anchor.py` y `test_render.py` usan `pytest.importorskip`: **skipped** significa que `anchor.py`/`render.py` no existen (M2), no que estén bien.
 
 ## Setup y comandos
 ```bash
@@ -29,7 +29,7 @@ python scripts/export.py <carpeta_vacia>           # export multiplataforma, sol
 - Raíz del proyecto: busca `.cairn/` hacia arriba desde el cwd o usa `CAIRN_DIR`.
 
 ## Reglas no obvias
-- **Windows primero:** todo fichero con `encoding="utf-8"` y JSON con `ensure_ascii=False`; rutas de ancla POSIX relativas a la raíz; hash sha1 con CRLF→LF (si no, falsos stale entre SO). Commits en LF: el repo no tiene `.gitattributes` y `core.autocrlf=true`.
+- **Windows primero:** todo fichero con `encoding="utf-8"` y JSON con `ensure_ascii=False`; rutas de ancla POSIX relativas a la raíz; hash sha1 con CRLF→LF (si no, falsos stale entre SO). `os.open` del JSONL necesita `O_BINARY` (si no, Windows traduce `\n` a `\r\n`). Commits en LF: el repo no tiene `.gitattributes` y `core.autocrlf=true`.
 - **FTS5:** nunca pasar texto crudo a `MATCH`; sanea (`\w+` → `"t"*`, prefijo), usa AND y cae a OR si no hay resultados. Crudo falla con `-`, `:`, `"`. Ranking `bm25(mem_fts, 5.0, 1.0, 0.5)`.
 - **Seguridad:** rechaza (no redactes) secretos antes de escribir: claves cloud, `BEGIN … PRIVATE KEY`, JWT `eyJ…`, `password|secret|token|api_key = valor`, URLs `://user:pass@`. `body` > 500 caracteres → error.
 - Imports mínimos al arranque: el SLO es end-to-end (p95 `search` < 150 ms, `save` < 200 ms, arranque de Python incluido).
