@@ -1,28 +1,43 @@
 # AGENTS.md — reglas para construir cairn-mem
 
-## Contexto
-Lee `PLAN.md` y `docs/DESIGN.md` antes de tocar código. Trabaja **un hito (M#) cada vez**.
-Si algo se puede hacer de forma simple, hazlo simple. Nada del **backlog** sin una medición que lo justifique.
+## Estado y alcance
+- **M0 cerrado.** `store.py` y `cli.py` son stubs; `tests/test_store.py` es el contrato de M1, en rojo.
+- Implementa **un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
+- Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
+- `test_anchor.py` y `test_render.py` usan `pytest.importorskip`: **skipped** significa que `anchor.py`/`render.py` no existen todavía, no que estén bien. Hoy `cli.py` solo imprime "no implementado" y devuelve 2.
 
-## Reglas
-- **Python 3.10+, solo stdlib.** Cero dependencias en el núcleo.
-- **TDD:** test rojo → implementación mínima → verde → refactor. Muestra la salida real de `pytest`.
-- **Sin LLM** en ninguna ruta.
-- **Fuente de verdad:** `.cairn/events.jsonl` (append-only, 2 ops: `save`, `archive`). `cairn.db` y `MEMORY.md` son derivados.
-- **Windows primero:** ficheros siempre `encoding="utf-8"`, JSON con `ensure_ascii=False`, rutas ancla en POSIX relativo, hash con CRLF→LF.
-- **Seguridad:** rechazar secretos antes de escribir (ver DESIGN).
-- **Consultas FTS5:** nunca pasar texto crudo del usuario a `MATCH`; usar el saneado.
-- Cambios de diseño → una línea en `docs/DECISIONS.md` (fecha + motivo).
-- Dogfooding: usa `cairn` en este mismo repo para guardar decisiones del proyecto en cuanto M1 funcione.
+## Setup y comandos
+```bash
+pip install -e ".[dev]"                            # obligatorio; sin esto pytest falla con ModuleNotFoundError
+pytest -q
+pytest tests/test_store.py::test_save_and_get -q   # un solo test
+ruff check src tests
+python scripts/export.py <carpeta_vacia>           # export multiplataforma, solo stdlib
+```
+- No hay CI, ni config de ruff, ni pre-commit: la verificación es local (pytest + ruff + criterios de `PLAN.md`).
+- Python 3.10+, **solo stdlib** en el núcleo. `dev` solo aporta pytest y ruff.
+
+## Arquitectura
+- `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` y `cairn-mem`, texto y `--json`) y `src/cairn_mem/store.py` (núcleo). M2 añadirá `anchor.py` y `render.py`.
+- **Verdad:** `.cairn/events.jsonl` (append-only, 2 ops: `save`, `archive`). `cairn.db` y `MEMORY.md` son derivados y regenerables: no los edites a mano.
+- `Store(root)` debe crear `.cairn/` y la DB si no existen: los tests lo instancian sin `cairn init`.
+- IDs de 12 hex (`secrets.token_hex(6)`) + `ts` en `time_ns`; orden de aplicación `(ts, nº de línea)`. `save` con `topic_key` marca `superseded` el anterior **antes** de insertar.
+- Escritura: `O_APPEND` + **una sola** `os.write` por evento, sin locks.
+- Al abrir la DB se compara `(size, mtime_ns)` del JSONL y `PRAGMA user_version`; si difieren → rebuild automático (cubre `git pull`).
+- `stale` se calcula al leer; no se persiste ni hay evento de verificación.
+- L0 (`.cairn/MEMORY.md`) ≤ 3000 caracteres; orden `convention > decision > gotcha > fact` y `ts` desc; salida determinista (caché de prompt).
+- Raíz del proyecto: busca `.cairn/` hacia arriba desde el cwd o usa `CAIRN_DIR`.
+
+## Reglas no obvias
+- **Windows primero:** todo fichero con `encoding="utf-8"` y JSON con `ensure_ascii=False`; rutas de ancla POSIX relativas a la raíz; hash sha1 con CRLF→LF (si no, falsos stale entre SO). Commits en LF: el repo no tiene `.gitattributes` y `core.autocrlf=true`.
+- **FTS5:** nunca pasar texto crudo a `MATCH`; sanea (`\w+` → `"t"*`, prefijo), usa AND y cae a OR si no hay resultados. Crudo falla con `-`, `:`, `"`. Ranking `bm25(mem_fts, 5.0, 1.0, 0.5)`.
+- **Seguridad:** rechaza (no redactes) secretos antes de escribir: claves cloud, `BEGIN … PRIVATE KEY`, JWT `eyJ…`, `password|secret|token|api_key = valor`, URLs `://user:pass@`. `body` > 500 caracteres → error.
+- Imports mínimos al arranque: el SLO es end-to-end (p95 `search` < 150 ms, `save` < 200 ms, arranque de Python incluido).
+- Sin LLM en ninguna ruta. Nada del backlog (`hits`, MCP, decay, sqlite-vec, git hook pasivo) sin una medición que lo justifique.
+- Cambio de diseño → una fila en `docs/DECISIONS.md` (fecha + decisión + motivo).
+- Dogfooding: en cuanto M1 funcione, guarda las decisiones del proyecto con `cairn`.
 
 ## Definición de hecho (por hito)
-1. Tests del hito en verde (y los de hitos anteriores).
+1. Tests del hito en verde, y los de hitos anteriores (un skipped no cuenta).
 2. Criterios de aceptación de `PLAN.md` medidos y anotados.
-3. Checklist del hito marcada.
-
-## Comandos
-```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-pytest -q
-```
+3. Checklist del hito marcada en `PLAN.md`.
