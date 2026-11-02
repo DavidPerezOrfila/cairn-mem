@@ -1,10 +1,10 @@
 # AGENTS.md — reglas para construir cairn-mem
 
 ## Estado y alcance
-- **M2 cerrado.** `store.py`, `cli.py`, `anchor.py` y `render.py` implementados; `tests/` cubre la CLI, el store, L0 y anclas.
+- **M3 cerrado.** `store.py`, `cli.py`, `anchor.py` y `render.py` implementados; `tests/` cubre la CLI, el store, L0 y anclas. Instalación y ciclo entre arneses verificados.
 - Implementa **un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
 - Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
-- Lo siguiente es **M3** (integración: otro arnés y `pipx install .`).
+- Lo siguiente es **M4** (bench, golden set y release).
 
 ## Setup y comandos
 ```bash
