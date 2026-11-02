@@ -1,49 +1,49 @@
 # cairn-mem
 
-**The project memory that travels with your code.**
+Project memory for coding agents, stored as files you can read.
 
 [![PyPI](https://img.shields.io/pypi/v/cairn-mem.svg)](https://pypi.org/project/cairn-mem/)
 [![Python](https://img.shields.io/pypi/pyversions/cairn-mem.svg)](https://pypi.org/project/cairn-mem/)
 [![CI](https://github.com/DavidPerezOrfila/cairn-mem/actions/workflows/ci.yml/badge.svg)](https://github.com/DavidPerezOrfila/cairn-mem/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Coding agents forget everything when the session ends. Cairn gives them a small,
-typed memory that lives **inside your repository**: decisions, conventions, gotchas
-and facts, each with the reason behind it.
+An agent finishes a session and the next one starts from zero. You explain again why
+the auth flow works that way and which migration is risky.
 
-No daemon. No Go binary. No API key. No LLM calls. One `pip install` and a JSONL file
-you can read, diff and review in a pull request.
+Cairn keeps that context in `.cairn/events.jsonl`, inside the repository. Each entry
+is a short decision, convention, gotcha or fact, with the reason behind it. A new
+session loads a compact summary and searches the rest when it needs it.
 
 ```console
 $ cairn save --kind decision --topic storage/fts5 \
     --title "Use FTS5, not embeddings" \
     --body "BM25 over SQLite is enough for 10k memories" \
-    --why "Internal query stays under 6 ms"
+    --why "The internal query stays under 6 ms"
 
 $ cairn search "search backend"
-a1b2c3d4e5f6  decision  Use FTS5, not embeddings — BM25 over SQLite is enough…
+a1b2c3d4e5f6  decision  Use FTS5, not embeddings - BM25 over SQLite is enough...
 ```
 
-## Why another memory tool?
+There is nothing to run in the background and no extra binary to install. Python
+3.10 or newer and the standard library are enough.
 
-Most agent memory lives in an opaque local database and is written by an LLM. That
-works until you need to review it, share it with a teammate, move it to another
-machine, or explain why the agent believes something.
+## How it compares
 
-Cairn takes the opposite trade-off:
+Memory tools usually keep entries in a local database and let a model decide what to
+save. That works until you need to review the memory, share it with a teammate, or
+explain why the agent believes something.
 
-| | Typical agent memory | cairn-mem |
+| | Database-backed memory tools | cairn-mem |
 |---|---|---|
-| Storage | Local database, invisible | `.cairn/events.jsonl`, plain text |
-| Review | Open a DB | Read the diff in a PR |
-| Sharing | Export/import | `git clone` (or local-only by default) |
-| Extraction | LLM summarizes and guesses | The agent writes what it learned, with a reason |
-| Results | Change with the model | Deterministic, same input → same output |
-| Runtime | Server or binary to install | Python stdlib only |
-| Harness support | MCP-only | MCP or any shell |
+| Storage | Local database, outside the repo | `.cairn/events.jsonl`, plain text |
+| Review | Open the database | Read the diff in a pull request |
+| Sharing | Export and import | `git clone`, or local-only by default |
+| Who writes | Often an LLM extracts a summary | The agent writes what it learned, with a reason |
+| Output | Varies with the model | Same input gives the same result |
+| Runtime | A server or a separate binary | Python standard library |
 
-Cairn is not a chat log, a vector store, or an auto-summarizer. It is a small set of
-durable facts that a new session can load in under a second.
+Cairn is a place for the things you would otherwise repeat in the next session. Task
+state and logs belong in the task tracker.
 
 ## Install
 
@@ -53,19 +53,20 @@ uv tool install cairn-mem     # or: pipx install cairn-mem
 pip install -e ".[dev]"
 ```
 
-Python 3.10+. SQLite with FTS5 ships with CPython on Linux, macOS and Windows.
+SQLite with FTS5 ships with CPython on Linux, macOS and Windows. The core has no
+third-party dependencies; the `dev` extra only adds pytest and ruff.
 
-> MCP support lands in **0.2.0**. The latest PyPI release (0.1.0) provides the CLI;
-> use `main` until 0.2.0 is published.
+MCP support lands in 0.2.0. The latest PyPI release is 0.1.0, which provides the CLI,
+so install from `main` if you want the MCP server now.
 
 ## Quickstart
 
 ```bash
-cairn init                 # .cairn/ for this repo (local-only by default)
+cairn init                 # .cairn/ for this repo, local-only
 cairn init --share         # commit events.jsonl so the team shares memory
 ```
 
-Save something worth remembering:
+Save something worth keeping:
 
 ```bash
 cairn save \
@@ -97,68 +98,65 @@ One process, four tools (`save`, `search`, `get`, `context`), JSON-RPC over stdi
 }
 ```
 
-The server keeps the index open, so a tool call takes milliseconds instead of paying
-Python startup on every request.
+The server keeps the index open, so a tool call takes a few milliseconds instead of
+paying Python startup on every request.
 
 ### Any other harness
 
 Copy the snippet from [`docs/AGENT_SNIPPET.md`](docs/AGENT_SNIPPET.md) into your
-`AGENTS.md` or `CLAUDE.md`. The agent reads `MEMORY.md` at start, searches before
-writing, and saves only what is worth keeping.
+`AGENTS.md` or `CLAUDE.md`. The agent reads `MEMORY.md` at the start of a task,
+searches before writing, and saves only what is worth keeping.
 
 ## How it works
 
 ```text
 agent ── MCP or shell ──> cairn ──> .cairn/events.jsonl   (truth, append-only)
                                     ├── cairn.db          (derived, FTS5)
-                                    └── MEMORY.md         (L0, ≤ 3000 chars)
+                                    └── MEMORY.md         (L0, <= 3000 chars)
 ```
 
-- **L0** — a compact `MEMORY.md` (≤ 3000 characters) the agent loads at session start.
-- **L1** — `search` returns id, kind, title, snippet and a `stale` flag.
-- **L2** — `get` returns the full memory, body and reason.
-- **Anchors** — an optional file path plus its hash. When the file changes, the memory
-  is flagged `⚠ revisar`; nothing is deleted or silently hidden.
-- **Topics** — saving with the same `topic` supersedes the previous memory, so the
-  store stays small and current.
+`MEMORY.md` is the compact summary an agent reads at startup. `cairn search` returns
+id, kind, title, snippet and a `stale` flag; `cairn get` returns the full entry.
 
-Everything except `events.jsonl` is derived and regenerable. Delete the database and
-the next command rebuilds it.
+An entry can point to a file with `--anchor`. Cairn stores a hash of that file, and
+when the file changes the entry is flagged `⚠ revisar`. Nothing is deleted and nothing
+is hidden. Saving with the same `topic` replaces the previous entry, so the list stays
+current.
+
+Only `events.jsonl` is the source of truth. The database and `MEMORY.md` are derived;
+delete either one and the next command rebuilds it.
 
 ## What it stores
 
-Four kinds, one body of at most 500 characters:
+Four kinds, with a body of at most 500 characters:
 
 | Kind | Use it for |
 |---|---|
-| `decision` | A choice with a reason: storage, architecture, a library |
+| `decision` | A choice and its reason: storage, architecture, a library |
 | `convention` | How this repo does things: naming, commits, structure |
-| `gotcha` | A trap that cost time: platform quirks, API failures |
+| `gotcha` | A trap that cost time, such as a platform quirk or an API failure |
 | `fact` | Stable context that is not obvious from the code |
 
-Cairn **rejects** text that looks like a secret (cloud keys, private keys, JWTs,
-`password = ...`, URLs with credentials) instead of redacting it silently.
+Cairn refuses text that looks like a secret, such as cloud keys, private keys, JWTs,
+`password = ...` or URLs with credentials. It does not redact them silently.
 
-It does not store task state, logs, or anything derivable from `git log`. That rule is
-what keeps retrieval precise.
+## Measurements
 
-## Measured, not promised
-
-Numbers from a Windows 11 machine, 10k memories, idle system
+From one Windows 11 machine with 10k memories and an idle CPU
 ([details](docs/BENCHMARKS.md)):
 
 | Operation | p95 |
 |---|---|
-| `search` via CLI (includes Python startup) | 304 ms |
-| `save` via CLI (includes L0 render) | 451 ms |
+| `search` via CLI, including Python startup | 304 ms |
+| `save` via CLI, including the summary render | 451 ms |
 | `search` via MCP tool call | 8 ms |
 | `save` via MCP tool call | 23 ms |
 | Internal query | 5.9 ms |
 
-Retrieval precision@3 on the bundled golden set: **30/30**.
-A small paired pilot (8 tasks, 2 repetitions) went from **0/16** correct answers and
-26,826 tokens without memory to **16/16** and 20,982 tokens with it. Sample size is
-small; treat it as directional, not proof.
+Retrieval precision@3 on the bundled golden set is 30/30. A small paired test, 8 tasks
+run twice, went from 0/16 correct answers and 26,826 tokens without memory to 16/16 and
+20,982 tokens with it. The sample is too small to prove much, but the direction was
+consistent.
 
 ## Commands
 
@@ -176,14 +174,19 @@ small; treat it as directional, not proof.
 
 `--json` is available on `save`, `search`, `get` and `check` for agent consumption.
 
-## Design constraints
+## Design choices
 
-- **No LLM in any path.** Saving is explicit and deterministic.
-- **No dependencies.** The core is Python stdlib; `dev` only adds pytest and ruff.
-- **Local-only by default.** Memory can contain internal context; sharing is opt-in.
-- **Windows first, not Windows only.** UTF-8 everywhere, LF files, CRLF-insensitive
-  anchor hashes, CI on Linux, macOS and Windows.
-- **Small surface.** Additions need a measurement that justifies them, not a hunch.
+Saving is explicit. No model decides what to keep, and nothing calls an LLM, so the
+same input produces the same memory store.
+
+Memory stays local unless you run `cairn init --share`. Internal context does not
+leave the machine by default.
+
+The JSONL format and anchor hashes work the same on Linux, macOS and Windows. CI runs
+the test suite on all three.
+
+New capabilities need a measurement that justifies them. The backlog lives in
+[`PLAN.md`](PLAN.md).
 
 ## Development
 
