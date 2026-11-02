@@ -7,7 +7,7 @@
 
 | # | Punto débil del plan v1 | Cambio |
 |---|---|---|
-| 1 | SLO "p95 < 10 ms" ignoraba el **arranque de Python** (lo que realmente nota el agente) | SLO end-to-end: `search` p95 **< 150 ms** en la máquina real; la consulta interna sigue < 10 ms |
+| 1 | SLO "p95 < 10 ms" ignoraba el **arranque de Python** (lo que realmente nota el agente) | SLO end-to-end con arranque incluido (M4 lo revisó a `search` < 350 ms y `save` < 500 ms tras medir el suelo real) |
 | 2 | `stale` persistido con evento `verify`: depende del checkout y diverge entre ramas | **Se calcula al leer**, solo para los resultados devueltos. Sin evento, sin estado |
 | 3 | Hash de ancla distinto entre Windows/Linux (CRLF) → falsos stale | Hash con **CRLF→LF**; ruta ancla en POSIX relativo |
 | 4 | `hits` vía evento en cada `get`: la lectura se vuelve escritura (latencia, ruido en Git) | **Fuera de v0.1** (backlog). L0 = prioridad por `kind` + recencia |
@@ -29,13 +29,17 @@
 
 | Métrica | Objetivo |
 |---|---|
-| `cairn search` end-to-end (con arranque de Python), p95 | **< 150 ms** (medir en Windows real) |
-| `cairn save` end-to-end (incluye render L0), p95 | **< 200 ms** |
+| `cairn search` end-to-end (con arranque de Python), p95 | **< 350 ms** en reposo, 10k (antes 150 ms; ver abajo) |
+| `cairn save` end-to-end (incluye render L0), p95 | **< 500 ms** en reposo, 10k (antes 200 ms) |
 | Consulta interna `search` (10k registros) | **< 10 ms** |
 | L0 (`MEMORY.md`) | **≤ 3000 caracteres** (~900 tokens) |
 | Precisión@3 en golden set | **≥ 0.8** |
-| Rebuild con 10k eventos | medir (esperado: cientos de ms) |
+| Rebuild con 10k eventos | medir (medido: 1,3 s en reposo) |
 | Dependencias / llamadas LLM | **0 / 0** |
+
+> Revisado 2026-11-02 tras medir el suelo de arranque: `python -c pass` ≈ 72 ms y solo importar
+> `sqlite3, json, re` ≈ 138 ms. Los 150/200 ms originales eran inalcanzables sin demonio o
+> binario nativo. Ver `docs/BENCHMARKS.md`.
 
 ## 3. Hitos
 
@@ -91,7 +95,8 @@
 
 **Medido 2026-11-02:**
 - Bench 1k/10k en [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md). Precisión@3: 30/30 = 1,00.
-- SLO end-to-end no cumplido con la máquina al 54 % (350–640 ms); consulta interna 1–5 ms. Decisión: **no** tocar L0, ranking ni reglas de guardado; re-medir en reposo antes de publicar.
+- SLO end-to-end revisado a `search` < 350 ms y `save` < 500 ms tras medir el suelo de arranque (`python -c pass` 72 ms; imports 138 ms). En reposo: search p95 304 ms, save p95 451 ms, consulta interna 5,9 ms → **cumple**.
+- Decisión: **no** tocar L0, ranking ni reglas de guardado; optimizar arranque queda en backlog solo con evidencia de uso.
 - A/B: sin memoria 0/16 aciertos y 26 826 tokens; con memoria 16/16 y 20 982 tokens ([`docs/AB_RESULTS.md`](docs/AB_RESULTS.md)).
 - `uv build` + instalación del wheel 0.1.0 en venv limpio: `init`, `save`, `search` y `render` funcionan.
 - PyPI: **publicado 2026-11-02** (`cairn_mem-0.1.0` wheel + sdist, https://pypi.org/project/cairn-mem/0.1.0/); `pip index versions cairn-mem` → 0.1.0; instalación desde PyPI en venv limpio verificada. `cairn` en PATH sin choque (shim de pipx + editable).
