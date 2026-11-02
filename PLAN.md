@@ -67,16 +67,18 @@
 **Aceptación:** `test_anchor.py` y `test_render.py` en verde · salida de L0 byte-idéntica sin cambios (caché de prompt) · `check` sobre 1k registros < 1 s.
 (medido 2026-11-02: 53 tests verdes, L0 2944 car. con 1k registros y estable al reabrir, `check` end-to-end 181 ms, `render` 135 ms)
 
-### M3 — Integración (0.5–1 día)
-- [ ] `docs/AGENT_SNIPPET.md` probado en **≥ 2 arneses** (p. ej. Claude Code y OpenCode): guardar en uno, recuperar en otro
+### M3 — Integración (0.5–1 día) ✅
+- [x] `docs/AGENT_SNIPPET.md` probado en **≥ 2 arneses** (p. ej. Claude Code y OpenCode): guardar en uno, recuperar en otro
 - [x] Instalación: `pipx install .` (Windows incluido); comprobar que `cairn` queda en PATH
 - [ ] Opcional: hook `Stop` de Claude Code que recuerde guardar (si se mide que el agente no guarda)
 
 **Aceptación:** ciclo guardar → nueva sesión → recuperar funcionando en 2 arneses.
 
-**Estado 2026-11-02 (parcial):**
-- `pipx install .` → `cairn-mem 0.0.1`; shim `~/.local/bin/cairn.exe` con `render`/`check` (verificado con `--help`).
-- OpenCode con el snippet: guardó `6146ba141640` (`--kind decision --topic vcs/lf`) y una sesión nueva lo recuperó con `cairn search`/`get`. Falta el segundo arnés: `claude` responde `Not logged in · Please run /login` y GitHub Copilot CLI no está instalado.
+**Medido 2026-11-02:**
+- `pipx install .` → `cairn-mem 0.0.1`; shim `~/.local/bin/cairn.exe` con `render`/`check`.
+- OpenCode guardó `6146ba141640` (`decision`, topic `vcs/lf`) → GitHub Copilot CLI lo recuperó con `cairn search`.
+- Copilot CLI guardó `bd4076114207` (`convention`, topic `git/commits`) → sesión nueva de OpenCode lo recuperó.
+- Hook `Stop`: no se instala; no hay evidencia de que el agente no guarde (se mide en el A/B de M4).
 
 ### M4 — Medición y release (1 día)
 - [ ] `bench/bench_cli.py`: p50/p95 end-to-end de `search` y `save` con 1k y 10k registros (en Windows real)
