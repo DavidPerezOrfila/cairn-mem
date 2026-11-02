@@ -12,14 +12,7 @@ TITLE = "# Memoria del proyecto (cairn L0)"
 def render_l0(store, max_chars: int = 3000, project_root=None) -> str:
     """Orden fijo por kind y ts desc, cortado al presupuesto."""
     root = Path(project_root) if project_root else Path(store.root).parent
-    rows = [row for row in store.dump() if row["status"] == "active"]
-    rows.sort(
-        key=lambda row: (
-            KIND_PRIORITY.get(row["kind"], len(KIND_PRIORITY)),
-            -row["ts"],
-            row["id"],
-        )
-    )
+    rows = store.active_ordered()
     lines = [TITLE]
     for row in rows:
         line = _line(row, root)

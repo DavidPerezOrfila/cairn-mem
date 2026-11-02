@@ -16,6 +16,18 @@ Medición **2026-11-02** en la máquina real del usuario.
 
 La primera pasada se hizo con el editor/agente ocupando la CPU; la segunda con la máquina en reposo (16 %).
 
+## MCP (tool call en proceso, 10k registros)
+
+`python bench/bench_mcp.py --reps 20` (2026-11-02, misma máquina):
+
+| Tool | p50 | p95 |
+|---|---|---|
+| `search` | 3,4 ms | 4,0 ms |
+| `save` | 28,4 ms | 37,4 ms |
+| `context` (L0) | 14,5 ms | 18,4 ms |
+
+SLO nuevo: tool call p95 < 50 ms → **cumple** sin arranque de Python.
+
 ## Precisión@3
 
 `python -m pytest tests/test_golden.py` → **30/30 = 1,00** (golden set de 20 memorias y 30 consultas, sin LLM).
