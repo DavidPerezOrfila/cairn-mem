@@ -69,10 +69,14 @@
 
 ### M3 — Integración (0.5–1 día)
 - [ ] `docs/AGENT_SNIPPET.md` probado en **≥ 2 arneses** (p. ej. Claude Code y OpenCode): guardar en uno, recuperar en otro
-- [ ] Instalación: `pipx install .` (Windows incluido); comprobar que `cairn` queda en PATH
+- [x] Instalación: `pipx install .` (Windows incluido); comprobar que `cairn` queda en PATH
 - [ ] Opcional: hook `Stop` de Claude Code que recuerde guardar (si se mide que el agente no guarda)
 
 **Aceptación:** ciclo guardar → nueva sesión → recuperar funcionando en 2 arneses.
+
+**Estado 2026-11-02 (parcial):**
+- `pipx install .` → `cairn-mem 0.0.1`; shim `~/.local/bin/cairn.exe` con `render`/`check` (verificado con `--help`).
+- OpenCode con el snippet: guardó `6146ba141640` (`--kind decision --topic vcs/lf`) y una sesión nueva lo recuperó con `cairn search`/`get`. Falta el segundo arnés: `claude` responde `Not logged in · Please run /login` y GitHub Copilot CLI no está instalado.
 
 ### M4 — Medición y release (1 día)
 - [ ] `bench/bench_cli.py`: p50/p95 end-to-end de `search` y `save` con 1k y 10k registros (en Windows real)
