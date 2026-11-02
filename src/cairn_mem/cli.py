@@ -1,13 +1,13 @@
 """CLI de cairn-mem (M1)."""
 
 import argparse
-import hashlib
 import json
 import os
 import sqlite3
 import sys
 from pathlib import Path
 
+from cairn_mem.anchor import file_hash, is_stale
 from cairn_mem.store import KINDS, Store
 
 GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md")
@@ -36,14 +36,13 @@ def _anchor(path: str, project_root: Path) -> tuple[str, str]:
         file = project_root / file
     if not file.is_file():
         raise FileNotFoundError(f"ancla no encontrada: {path}")
-    data = file.read_bytes().replace(b"\r\n", b"\n")
     try:
         relative = Path(
             os.path.relpath(file.resolve(), project_root.resolve())
         ).as_posix()
     except ValueError as error:
         raise ValueError(f"el ancla debe estar dentro del proyecto: {path}") from error
-    return relative, hashlib.sha1(data).hexdigest()
+    return relative, file_hash(file)
 
 
 def _cmd_init(ns) -> int:
@@ -87,7 +86,8 @@ def _cmd_search(ns) -> int:
     else:
         for r in results:
             snippet = " ".join(r["snippet"].split())
-            print(f"{r['id']}  {r['kind']}  {r['title']} — {snippet}")
+            stale = "  ⚠ revisar" if r["stale"] else ""
+            print(f"{r['id']}  {r['kind']}  {r['title']} — {snippet}{stale}")
     return 0
 
 
@@ -117,6 +117,40 @@ def _cmd_rebuild(ns) -> int:
     store = Store(str(_data_dir()))
     store.rebuild()
     print(f"reconstruida: {len(store.dump())} memorias")
+    return 0
+
+
+def _cmd_render(ns) -> int:
+    print(Store(str(_data_dir())).write_l0(), end="")
+    return 0
+
+
+def _cmd_check(ns) -> int:
+    data_dir = _data_dir()
+    root = data_dir.parent
+    stale = [
+        row
+        for row in Store(str(data_dir)).dump()
+        if row["status"] == "active"
+        and is_stale(row["anchor_path"], row["anchor_hash"], root)
+    ]
+    if ns.json:
+        _print_json(
+            [
+                {
+                    "id": row["id"],
+                    "kind": row["kind"],
+                    "title": row["title"],
+                    "anchor_path": row["anchor_path"],
+                }
+                for row in stale
+            ]
+        )
+    elif not stale:
+        print("sin memorias stale")
+    else:
+        for row in stale:
+            print(f"{row['id']}  {row['kind']}  {row['title']}  ({row['anchor_path']})")
     return 0
 
 
@@ -158,6 +192,13 @@ def _parser() -> argparse.ArgumentParser:
 
     rebuild = sub.add_parser("rebuild", help="reconstruye la DB desde events.jsonl")
     rebuild.set_defaults(handler=_cmd_rebuild)
+
+    render = sub.add_parser("render", help="regenera y muestra MEMORY.md (L0)")
+    render.set_defaults(handler=_cmd_render)
+
+    check = sub.add_parser("check", help="lista memorias con ancla stale")
+    check.add_argument("--json", action="store_true")
+    check.set_defaults(handler=_cmd_check)
     return p
 
 

@@ -5,8 +5,12 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from pathlib import Path
+
+from cairn_mem.anchor import is_stale
+from cairn_mem.render import render_l0
 
 SCHEMA_VERSION = 1
 KINDS = ("decision", "convention", "gotcha", "fact")
@@ -21,6 +25,11 @@ SECRET_PATTERNS = (
 )
 
 MAX_TS = 2**63 - 1  # SQLite INTEGER es signed 64-bit
+
+# El O_APPEND de Windows no es atómico entre hilos: este lock evita que dos
+# escrituras se pisen dentro del proceso. Entre procesos el diseño asume un
+# solo escritor por proyecto.
+_APPEND_LOCK = threading.Lock()
 
 DDL = """
 CREATE TABLE IF NOT EXISTS mem (
@@ -126,6 +135,7 @@ class Store:
             with self._conn:
                 self._apply(event)
             self._remember_fingerprint(fingerprint)
+            self.write_l0()
         return mid
 
     def archive(self, id: str) -> None:
@@ -137,6 +147,7 @@ class Store:
             with self._conn:
                 self._apply(event)
             self._remember_fingerprint(fingerprint)
+            self.write_l0()
 
     # --- lectura ---
 
@@ -149,15 +160,32 @@ class Store:
         terms = re.findall(r"\w+", query, re.UNICODE)
         if not terms:
             return []
+        rows = []
         for op in ("AND", "OR"):
             rows = self._search(self._match(terms, op), limit)
             if rows:
-                return rows
-        return []
+                break
+        root = self.root.parent
+        for row in rows:
+            row["stale"] = is_stale(row["anchor_path"], row["anchor_hash"], root)
+        return rows
 
     def dump(self) -> list[dict]:
         rows = self._conn.execute("SELECT * FROM mem ORDER BY ts, id").fetchall()
         return [dict(r) for r in rows]
+
+    def write_l0(self) -> str:
+        """Regenera MEMORY.md de forma atómica y devuelve su contenido."""
+        text = render_l0(self)
+        tmp = self.root / f".MEMORY.md.{secrets.token_hex(4)}"
+        tmp.write_text(text, encoding="utf-8", newline="\n")
+        try:
+            os.replace(tmp, self.root / "MEMORY.md")
+        except OSError:
+            # Windows: otro proceso (editor/antivirus) tiene MEMORY.md abierto.
+            # Es derivado: se regenera en el próximo save.
+            tmp.unlink(missing_ok=True)
+        return text
 
     # --- rebuild ---
 
@@ -184,6 +212,7 @@ class Store:
             self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._remember_fingerprint()
         self._known_size = int(self._fingerprint()[0])
+        self.write_l0()
 
     # --- internos ---
 
@@ -236,14 +265,15 @@ class Store:
     def _append(self, event: dict) -> tuple[tuple[str, str], bool]:
         line = json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
         data = line.encode("utf-8")
-        before = self.events.stat().st_size if self.events.exists() else 0
         flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0)
-        fd = os.open(self.events, flags, 0o644)
-        try:
-            os.write(fd, data)
-        finally:
-            os.close(fd)
-        stat = self.events.stat()
+        with _APPEND_LOCK:
+            before = self.events.stat().st_size if self.events.exists() else 0
+            fd = os.open(self.events, flags, 0o644)
+            try:
+                os.write(fd, data)
+            finally:
+                os.close(fd)
+            stat = self.events.stat()
         unseen = before != self._known_size or stat.st_size != before + len(data)
         return (str(stat.st_size), str(stat.st_mtime_ns)), unseen
 
@@ -253,7 +283,7 @@ class Store:
 
     def _search(self, match: str, limit: int) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT m.id, m.kind, m.title,
+            """SELECT m.id, m.kind, m.title, m.anchor_path, m.anchor_hash,
                       snippet(mem_fts, 1, '', '', '…', 12) AS snippet
                FROM mem_fts JOIN mem m ON m.rowid = mem_fts.rowid
                WHERE mem_fts MATCH ? AND m.status = 'active'

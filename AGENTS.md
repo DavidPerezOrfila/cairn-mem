@@ -1,10 +1,10 @@
 # AGENTS.md — reglas para construir cairn-mem
 
 ## Estado y alcance
-- **M1 cerrado.** `store.py` y `cli.py` implementados; `tests/test_cli.py` cubre la CLI.
+- **M2 cerrado.** `store.py`, `cli.py`, `anchor.py` y `render.py` implementados; `tests/` cubre la CLI, el store, L0 y anclas.
 - Implementa **un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
 - Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
-- `test_anchor.py` y `test_render.py` usan `pytest.importorskip`: **skipped** significa que `anchor.py`/`render.py` no existen (M2), no que estén bien.
+- Lo siguiente es **M3** (integración: otro arnés y `pipx install .`).
 
 ## Setup y comandos
 ```bash
@@ -18,7 +18,7 @@ python scripts/export.py <carpeta_vacia>           # export multiplataforma, sol
 - Python 3.10+, **solo stdlib** en el núcleo. `dev` solo aporta pytest y ruff.
 
 ## Arquitectura
-- `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` y `cairn-mem`, texto y `--json`) y `src/cairn_mem/store.py` (núcleo). M2 añadirá `anchor.py` y `render.py`.
+- `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` y `cairn-mem`, texto y `--json`), `store.py` (núcleo), `anchor.py` (hash/stale) y `render.py` (L0).
 - **Verdad:** `.cairn/events.jsonl` (append-only, 2 ops: `save`, `archive`). `cairn.db` y `MEMORY.md` son derivados y regenerables: no los edites a mano.
 - `Store(root)` debe crear `.cairn/` y la DB si no existen: los tests lo instancian sin `cairn init`.
 - IDs de 12 hex (`secrets.token_hex(6)`) + `ts` en `time_ns`; orden de aplicación `(ts, nº de línea)`. `save` con `topic_key` marca `superseded` el anterior **antes** de insertar.
