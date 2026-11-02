@@ -80,11 +80,11 @@
 - Copilot CLI guardó `bd4076114207` (`convention`, topic `git/commits`) → sesión nueva de OpenCode lo recuperó.
 - Hook `Stop`: no se instala; no hay evidencia de que el agente no guarde (se mide en el A/B de M4).
 
-### M4 — Medición y release (1 día)
+### M4 — Medición y release (1 día) ✅
 - [x] `bench/bench_cli.py`: p50/p95 end-to-end de `search` y `save` con 1k y 10k registros (en Windows real)
 - [x] `bench/golden.jsonl` (~30 consultas) + test de precisión@3 en CI
 - [x] **A/B pequeño pareado:** 8 tareas × 2 brazos (sin / con memoria), mismo modelo, 2 repeticiones; métricas: tokens totales, llamadas a herramientas, éxito, intervenciones humanas. Con n tan bajo es **orientativo**, no concluyente
-- [ ] Reservar/publicar `cairn-mem` en PyPI (libre el 2026-10-31; comprobar de nuevo antes) y verificar que el comando `cairn` no choca en PATH
+- [x] Reservar/publicar `cairn-mem` en PyPI (libre el 2026-10-31; comprobar de nuevo antes) y verificar que el comando `cairn` no choca en PATH
 - [x] README final, versión 0.1.0, etiqueta Git
 
 **Aceptación:** SLOs de §2 anotados en `docs/BENCHMARKS.md` y decisión explícita: ¿hay que tocar L0, ranking o reglas de guardado?
@@ -94,7 +94,7 @@
 - SLO end-to-end no cumplido con la máquina al 54 % (350–640 ms); consulta interna 1–5 ms. Decisión: **no** tocar L0, ranking ni reglas de guardado; re-medir en reposo antes de publicar.
 - A/B: sin memoria 0/16 aciertos y 26 826 tokens; con memoria 16/16 y 20 982 tokens ([`docs/AB_RESULTS.md`](docs/AB_RESULTS.md)).
 - `uv build` + instalación del wheel 0.1.0 en venv limpio: `init`, `save`, `search` y `render` funcionan.
-- PyPI: `cairn-mem` sigue libre (404), pero **falta credencial** (`UV_PUBLISH_TOKEN` o `~/.pypirc`); publicación pendiente.
+- PyPI: **publicado 2026-11-02** (`cairn_mem-0.1.0` wheel + sdist, https://pypi.org/project/cairn-mem/0.1.0/); `pip index versions cairn-mem` → 0.1.0; instalación desde PyPI en venv limpio verificada. `cairn` en PATH sin choque (shim de pipx + editable).
 
 ## 4. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
