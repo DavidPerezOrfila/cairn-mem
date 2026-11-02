@@ -4,7 +4,7 @@
 Memoria persistente para agentes de código: **eficaz, barata en latencia/coste, portable a cualquier arnés con shell**.
 
 ## Principios
-1. **CLI + archivos.** MCP/hooks son opcionales y quedan fuera de v0.1.
+1. **CLI + archivos.** MCP (v0.2) es una segunda fachada del mismo `Store`; los hooks siguen fuera.
 2. **Sin LLM ni embeddings.** FTS5 (BM25) basta hasta que una medición diga lo contrario.
 3. **Memoria corta y tipada:** `decision | convention | gotcha | fact`, cuerpo ≤ 500 car., con `why`.
 4. **Una sola fuente de verdad:** `events.jsonl`. Todo lo demás (DB, MEMORY.md) es derivado y regenerable.
@@ -58,8 +58,18 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 - En `search` y `render`, solo para los resultados devueltos: si el archivo no existe o el hash difiere → `stale=true` → se muestra `⚠ revisar`. No se oculta ni se borra.
 - `cairn check` lista todas las stale. Reanclar = `cairn save` con el mismo `--topic` (o `--id`).
 
+## MCP (v0.2)
+- Transporte **stdio con NDJSON** (JSON-RPC 2.0), stdlib pura: sin SDK, sin puerto, sin Go.
+- `cairn mcp` sirve 4 tools: `save`, `search`, `get`, `context`. El resto (mantenimiento)
+  se queda solo en CLI para no pagar sus esquemas en cada turno del modelo.
+- El proceso cachea un único `Store`: mientras vive es el único escritor y no paga
+  arranque de Python por llamada (search p95 4 ms vs 304 ms de la CLI).
+- stdout es solo protocolo; diagnóstico por stderr. Lectura bloqueante y salida limpia
+  al cerrar el pipe (sin señales, portable a Windows/macOS/Linux).
+- Errores de tool van como `isError: true` con texto; errores de protocolo como JSON-RPC.
+
 ## Comandos
-`init · save · search · get · archive · check · render · rebuild`
+`init · save · search · get · archive · check · render · rebuild · mcp`
 
 ## Fuera de v0.1 (backlog, solo con evidencia)
 hits/ranking por uso · MCP · compactación/decay · scope global · sqlite-vec · captura pasiva por git hook · LLM `--propose`.

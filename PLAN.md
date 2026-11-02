@@ -32,6 +32,7 @@
 | `cairn search` end-to-end (con arranque de Python), p95 | **< 350 ms** en reposo, 10k (antes 150 ms; ver abajo) |
 | `cairn save` end-to-end (incluye render L0), p95 | **< 500 ms** en reposo, 10k (antes 200 ms) |
 | Consulta interna `search` (10k registros) | **< 10 ms** |
+| Tool call MCP en proceso (10k registros) | **< 50 ms** |
 | L0 (`MEMORY.md`) | **≤ 3000 caracteres** (~900 tokens) |
 | Precisión@3 en golden set | **≥ 0.8** |
 | Rebuild con 10k eventos | medir (medido: 1,3 s en reposo) |
@@ -101,12 +102,24 @@
 - `uv build` + instalación del wheel 0.1.0 en venv limpio: `init`, `save`, `search` y `render` funcionan.
 - PyPI: **publicado 2026-11-02** (`cairn_mem-0.1.0` wheel + sdist, https://pypi.org/project/cairn-mem/0.1.0/); `pip index versions cairn-mem` → 0.1.0; instalación desde PyPI en venv limpio verificada. `cairn` en PATH sin choque (shim de pipx + editable).
 
+### M5 — MCP stdio y CI multiplataforma ✅
+- [x] `mcp.py`: JSON-RPC 2.0 en NDJSON sobre stdio, sin SDK ni dependencias
+- [x] 4 tools (`save`, `search`, `get`, `context`); el resto sigue solo en CLI
+- [x] `Store` cacheado: un proceso, un escritor, sin arranque de Python por llamada
+- [x] `cairn mcp` como subcomando; nada se escribe en stdout fuera del protocolo
+- [x] CI: ubuntu/macos/windows × Python 3.10 y 3.14 (tests + ruff)
+- [x] `bench/bench_mcp.py` para latencia de tool calls con 10k
+- [x] Fix: `_known_size` no se actualizaba tras `save`/`archive` → cada escritura
+      en un proceso largo disparaba un rebuild completo
+- [x] L0 acotado en SQL (`active_ordered`) en vez de ordenar todas las filas en Python
+
+**Aceptación:** tool call p95 < 50 ms (medido 2026-11-02: search 4,0 ms, save 37,4 ms,
+context 18,4 ms con 10k) · 66 tests en verde · `ruff` limpio · las 6 celdas de CI en verde.
+
 ## 4. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
-- Adaptador MCP (si aparece un arnés sin shell)
 - `compact`/decay (si el nº de memorias activas degrada la precisión)
 - `sqlite-vec` (si precisión@3 < 0.8 por sinónimos y los títulos no lo arreglan)
-- Scope global `~/.cairn-mem`
 - Captura pasiva por git hook (solo si el agente no guarda y el ruido es aceptable)
 
 ## 5. Riesgos (los que quedan)

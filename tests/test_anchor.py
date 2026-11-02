@@ -1,4 +1,5 @@
 """Tests de M2: anclas y stale calculado al leer."""
+
 import pytest
 
 anchor = pytest.importorskip("cairn_mem.anchor", reason="M2 pendiente")
@@ -24,3 +25,20 @@ def test_stale_when_changed_or_missing(tmp_path):
 
 def test_no_anchor_is_never_stale(tmp_path):
     assert anchor.is_stale(None, None, str(tmp_path)) is False
+
+
+def test_resolve_anchor_rejects_paths_outside_project(tmp_path):
+    (tmp_path / "project").mkdir()
+    outside = tmp_path / "secret.key"
+    outside.write_text("x\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="dentro del proyecto"):
+        anchor.resolve_anchor(str(outside), tmp_path / "project")
+
+
+def test_resolve_anchor_returns_posix_relative(tmp_path):
+    target = tmp_path / "src" / "a.py"
+    target.parent.mkdir()
+    target.write_text("x\n", encoding="utf-8")
+    relative, digest = anchor.resolve_anchor(str(target), tmp_path)
+    assert relative == "src/a.py"
+    assert digest == anchor.file_hash(target)

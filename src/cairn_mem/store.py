@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from cairn_mem.anchor import is_stale
-from cairn_mem.render import render_l0
+from cairn_mem.render import KIND_PRIORITY, render_l0
 
 SCHEMA_VERSION = 1
 KINDS = ("decision", "convention", "gotcha", "fact")
@@ -135,6 +135,7 @@ class Store:
             with self._conn:
                 self._apply(event)
             self._remember_fingerprint(fingerprint)
+            self._known_size = int(fingerprint[0])
             self.write_l0()
         return mid
 
@@ -147,9 +148,23 @@ class Store:
             with self._conn:
                 self._apply(event)
             self._remember_fingerprint(fingerprint)
+            self._known_size = int(fingerprint[0])
             self.write_l0()
 
     # --- lectura ---
+
+    def active_ordered(self, limit: int = 200) -> list[dict]:
+        """Activas en orden L0 (kind y ts desc). `limit` acota el trabajo de render:
+        200 líneas ya superan el presupuesto de 3000 caracteres."""
+        priority = " ".join(
+            f"WHEN '{kind}' THEN {order}" for kind, order in KIND_PRIORITY.items()
+        )
+        rows = self._conn.execute(
+            f"""SELECT * FROM mem WHERE status = 'active'
+                ORDER BY CASE kind {priority} END, ts DESC, id LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def get(self, id: str):
         row = self._conn.execute("SELECT * FROM mem WHERE id = ?", (id,)).fetchone()

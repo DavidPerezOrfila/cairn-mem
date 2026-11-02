@@ -249,6 +249,13 @@ def test_external_append_during_apply_triggers_rebuild(root, monkeypatch):
     assert Store(root).get("eeeeeeeeeeee")["title"] == "externa"
 
 
+def test_consecutive_saves_do_not_rebuild(store, monkeypatch):
+    monkeypatch.setattr(store, "rebuild", lambda: pytest.fail("rebuild inesperado"))
+    store.save(kind="fact", title="uno", body="a")
+    store.save(kind="fact", title="dos", body="b")
+    assert len(store.dump()) == 2
+
+
 def test_l0_regenerated_after_archive_and_rebuild(store, root):
     mid = store.save(kind="fact", title="visible", body="b")
     memory = Path(root) / "MEMORY.md"

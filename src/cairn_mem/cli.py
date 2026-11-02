@@ -7,42 +7,15 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from cairn_mem.anchor import file_hash, is_stale
+from cairn_mem.anchor import is_stale, resolve_anchor
+from cairn_mem.paths import data_dir
 from cairn_mem.store import KINDS, Store
 
 GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md")
 
 
-def _data_dir() -> Path:
-    env = os.environ.get("CAIRN_DIR")
-    if env:
-        return Path(env)
-    cwd = Path.cwd().resolve()
-    for folder in (cwd, *cwd.parents):
-        if (folder / ".cairn").is_dir():
-            return folder / ".cairn"
-    raise FileNotFoundError(
-        "no se encontró .cairn/ en este árbol; ejecuta 'cairn init'"
-    )
-
-
 def _print_json(value) -> None:
     print(json.dumps(value, ensure_ascii=False))
-
-
-def _anchor(path: str, project_root: Path) -> tuple[str, str]:
-    file = Path(path)
-    if not file.is_absolute():
-        file = project_root / file
-    if not file.is_file():
-        raise FileNotFoundError(f"ancla no encontrada: {path}")
-    try:
-        relative = Path(
-            os.path.relpath(file.resolve(), project_root.resolve())
-        ).as_posix()
-    except ValueError as error:
-        raise ValueError(f"el ancla debe estar dentro del proyecto: {path}") from error
-    return relative, file_hash(file)
 
 
 def _cmd_init(ns) -> int:
@@ -62,8 +35,8 @@ def _cmd_init(ns) -> int:
 def _cmd_save(ns) -> int:
     anchor_path = anchor_hash = None
     if ns.anchor:
-        anchor_path, anchor_hash = _anchor(ns.anchor, _data_dir().parent)
-    mid = Store(str(_data_dir())).save(
+        anchor_path, anchor_hash = resolve_anchor(ns.anchor, data_dir().parent)
+    mid = Store(str(data_dir())).save(
         kind=ns.kind,
         title=ns.title,
         body=ns.body,
@@ -78,7 +51,7 @@ def _cmd_save(ns) -> int:
 
 
 def _cmd_search(ns) -> int:
-    results = Store(str(_data_dir())).search(ns.query, limit=ns.limit)
+    results = Store(str(data_dir())).search(ns.query, limit=ns.limit)
     if ns.json:
         _print_json(results)
     elif not results:
@@ -92,7 +65,7 @@ def _cmd_search(ns) -> int:
 
 
 def _cmd_get(ns) -> int:
-    memory = Store(str(_data_dir())).get(ns.id)
+    memory = Store(str(data_dir())).get(ns.id)
     if memory is None:
         raise ValueError(f"no existe la memoria {ns.id}")
     if ns.json:
@@ -105,7 +78,7 @@ def _cmd_get(ns) -> int:
 
 
 def _cmd_archive(ns) -> int:
-    store = Store(str(_data_dir()))
+    store = Store(str(data_dir()))
     if store.get(ns.id) is None:
         raise ValueError(f"no existe la memoria {ns.id}")
     store.archive(ns.id)
@@ -114,25 +87,24 @@ def _cmd_archive(ns) -> int:
 
 
 def _cmd_rebuild(ns) -> int:
-    store = Store(str(_data_dir()))
+    store = Store(str(data_dir()))
     store.rebuild()
     print(f"reconstruida: {len(store.dump())} memorias")
     return 0
 
 
 def _cmd_render(ns) -> int:
-    print(Store(str(_data_dir())).write_l0(), end="")
+    print(Store(str(data_dir())).write_l0(), end="")
     return 0
 
 
 def _cmd_check(ns) -> int:
-    data_dir = _data_dir()
-    root = data_dir.parent
+    project_root = data_dir().parent
     stale = [
         row
-        for row in Store(str(data_dir)).dump()
+        for row in Store(str(data_dir())).dump()
         if row["status"] == "active"
-        and is_stale(row["anchor_path"], row["anchor_hash"], root)
+        and is_stale(row["anchor_path"], row["anchor_hash"], project_root)
     ]
     if ns.json:
         _print_json(
@@ -152,6 +124,12 @@ def _cmd_check(ns) -> int:
         for row in stale:
             print(f"{row['id']}  {row['kind']}  {row['title']}  ({row['anchor_path']})")
     return 0
+
+
+def _cmd_mcp(ns) -> int:
+    from cairn_mem.mcp import serve
+
+    return serve()
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -199,6 +177,9 @@ def _parser() -> argparse.ArgumentParser:
     check = sub.add_parser("check", help="lista memorias con ancla stale")
     check.add_argument("--json", action="store_true")
     check.set_defaults(handler=_cmd_check)
+
+    mcp = sub.add_parser("mcp", help="sirve MCP por stdio (JSON-RPC)")
+    mcp.set_defaults(handler=_cmd_mcp)
     return p
 
 

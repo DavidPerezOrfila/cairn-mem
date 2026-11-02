@@ -22,3 +22,8 @@
 | 2026-11-02 | Lock en proceso alrededor del append del JSONL | El `O_APPEND` del CRT de Windows no es atómico entre hilos: el test de concurrencia perdía líneas (19/20). Entre procesos se mantiene la regla de un escritor por proyecto |
 | 2026-11-02 | SLO end-to-end revisado a `search` < 350 ms y `save` < 500 ms | Medido el suelo: `python -c pass` 72 ms e importar `sqlite3, json, re` 138 ms; los 150/200 ms originales exigían demonio o binario nativo. No se toca L0, ranking ni guardado |
 | 2026-11-02 | Publicada la v0.1.0 en PyPI como `cairn-mem` (wheel + sdist) | Nombre libre y verificado; el comando `cairn` no choca con el shim de pipx ni con el editable |
+| 2026-11-02 | MCP por stdio con JSON-RPC a mano (stdlib), no SDK | Mantiene `dependencies = []`, funciona en los 3 SO sin Go y elimina el arranque de Python por llamada |
+| 2026-11-02 | MCP expone solo `save/search/get/context` | 4 esquemas cuestan ~500 tokens fijos por turno; el mantenimiento no necesita estar en el prompt |
+| 2026-11-02 | CI con matriz ubuntu/macos/windows × 3.10/3.14 | "Windows primero" se verificaba a mano; el framing stdio y las rutas necesitan prueba real por SO |
+| 2026-11-02 | `_known_size` se actualiza tras `save`/`archive` | Un `Store` de vida larga (MCP) reconstruía la DB en cada escritura: save p95 pasó de 3,4 s a 37 ms |
+| 2026-11-02 | Ancla confinada al proyecto con `Path.relative_to` | `os.path.relpath` no falla con `../` dentro de la misma unidad: el ancla podía salir del repo y filtrar rutas |
