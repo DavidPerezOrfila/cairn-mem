@@ -1,0 +1,50 @@
+{"op":"save","kind":"gotcha","title":"OAuth callback en Django","body":"redirect_uri debe coincidir exactamente con el registrado","why":"Django rechaza el callback si cambia un caracter"}
+{"op":"save","kind":"fact","title":"Pipeline KNIME de ventas","body":"carga nocturna a las 03:00 desde Oracle","why":"la ventana libre acaba a las 05:00"}
+{"op":"save","kind":"convention","title":"Nombres de ramas Git","body":"feat/, fix/, docs/ en minusculas","why":"el CI filtra por prefijo"}
+{"op":"save","kind":"decision","title":"Migracion Postgres 16","body":"expand-contract sin downtime","why":"hay trafico 24/7"}
+{"op":"save","kind":"decision","title":"Indice bm25 en FTS5","body":"pesos 5.0 1.0 0.5 y AND con fallback OR","why":"el titulo pesa mas que el cuerpo"}
+{"op":"save","kind":"gotcha","title":"Timeout del proxy nginx","body":"60s corta las subidas grandes","why":"el upload de 2 GB tardaba 90s"}
+{"op":"save","kind":"gotcha","title":"Cache de plantillas Jinja","body":"cache_size 400 por defecto","why":"las plantillas dinamicas se cacheaban mal"}
+{"op":"save","kind":"convention","title":"Zona horaria de los cron","body":"Europe/Madrid en el scheduler","why":"el servidor corre en UTC"}
+{"op":"save","kind":"convention","title":"Secreto en variables de entorno","body":"os.environ falla si falta la clave","why":"nunca un valor por defecto silencioso"}
+{"op":"save","kind":"fact","title":"Rebuild de la base sqlite","body":"se dispara al cambiar la huella del jsonl","why":"tras git pull la DB queda vieja"}
+{"op":"save","kind":"fact","title":"Puerto del servidor de desarrollo","body":"5173 para Vite","why":"el 3000 lo ocupa otra app"}
+{"op":"save","kind":"convention","title":"Formato de logs","body":"JSON con level y ts","why":"los recolecta el agregador sin parser"}
+{"op":"save","kind":"gotcha","title":"Dependencias circulares en modulos","body":"rompen el arranque en Python","why":"el import falla antes de definir clases"}
+{"op":"save","kind":"decision","title":"Limite de body de memoria","body":"500 caracteres y dividir en dos","why":"presupuesto de tokens y foco"}
+{"op":"save","kind":"decision","title":"IDs cortos hexadecimales","body":"12 hex para teclear rapido","why":"el agente no debe copiar ULIDs largos"}
+{"op":"save","kind":"fact","title":"Pruebas de precision del buscador","body":"golden set de 30 consultas","why":"mide precision@3 sin LLM"}
+{"op":"save","kind":"gotcha","title":"Limpieza de worktrees","body":"git worktree prune tras merge","why":"quedan directorios huerfanos"}
+{"op":"save","kind":"convention","title":"Versionado semantico","body":"semver: 0.x antes de 1.0","why":"la API aun puede cambiar"}
+{"op":"save","kind":"convention","title":"Codificacion UTF-8 en Windows","body":"encoding utf-8 en cada open","why":"cp1252 rompe acentos"}
+{"op":"save","kind":"convention","title":"Saltos de linea LF","body":"crlf a lf antes de calcular el hash","why":"evita falsos stale entre sistemas"}
+{"query":"redirect_uri oauth","expect":"OAuth callback en Django"}
+{"query":"KNIME","expect":"Pipeline KNIME de ventas"}
+{"query":"ramas git","expect":"Nombres de ramas Git"}
+{"query":"Postgres downtime","expect":"Migracion Postgres 16"}
+{"query":"bm25 pesos","expect":"Indice bm25 en FTS5"}
+{"query":"nginx timeout subidas","expect":"Timeout del proxy nginx"}
+{"query":"Jinja cache plantillas","expect":"Cache de plantillas Jinja"}
+{"query":"cron zona horaria","expect":"Zona horaria de los cron"}
+{"query":"variables entorno secreto","expect":"Secreto en variables de entorno"}
+{"query":"rebuild sqlite huella","expect":"Rebuild de la base sqlite"}
+{"query":"Vite puerto","expect":"Puerto del servidor de desarrollo"}
+{"query":"logs level ts","expect":"Formato de logs"}
+{"query":"dependencias circulares","expect":"Dependencias circulares en modulos"}
+{"query":"body 500 caracteres","expect":"Limite de body de memoria"}
+{"query":"ids hexadecimales","expect":"IDs cortos hexadecimales"}
+{"query":"golden set precision","expect":"Pruebas de precision del buscador"}
+{"query":"worktree prune","expect":"Limpieza de worktrees"}
+{"query":"semver 1.0","expect":"Versionado semantico"}
+{"query":"encoding UTF-8 Windows","expect":"Codificacion UTF-8 en Windows"}
+{"query":"saltos de linea LF","expect":"Saltos de linea LF"}
+{"query":"oauth django","expect":"OAuth callback en Django"}
+{"query":"oracle nocturna","expect":"Pipeline KNIME de ventas"}
+{"query":"expand-contract","expect":"Migracion Postgres 16"}
+{"query":"cache_size plantillas","expect":"Cache de plantillas Jinja"}
+{"query":"Madrid scheduler","expect":"Zona horaria de los cron"}
+{"query":"JSON logs","expect":"Formato de logs"}
+{"query":"arranque circular","expect":"Dependencias circulares en modulos"}
+{"query":"git worktree","expect":"Limpieza de worktrees"}
+{"query":"crlf hash","expect":"Saltos de linea LF"}
+{"query":"golden jsonl","expect":"Pruebas de precision del buscador"}
