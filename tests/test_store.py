@@ -3,6 +3,7 @@
 import json
 import os
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -246,3 +247,13 @@ def test_external_append_during_apply_triggers_rebuild(root, monkeypatch):
     monkeypatch.setattr(s, "_apply", apply_then_inject)
     s.save(kind="fact", title="local", body="a")
     assert Store(root).get("eeeeeeeeeeee")["title"] == "externa"
+
+
+def test_l0_regenerated_after_archive_and_rebuild(store, root):
+    mid = store.save(kind="fact", title="visible", body="b")
+    memory = Path(root) / "MEMORY.md"
+    assert "visible" in memory.read_text(encoding="utf-8")
+    store.archive(mid)
+    assert "visible" not in memory.read_text(encoding="utf-8")
+    store.rebuild()
+    assert "visible" not in memory.read_text(encoding="utf-8")

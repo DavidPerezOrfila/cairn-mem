@@ -160,3 +160,35 @@ def test_absolute_anchor_is_stored_relative(capsys, in_tmp):
     mid = json.loads(out)["id"]
     _, out, _ = run(capsys, "get", mid, "--json")
     assert json.loads(out)["anchor_path"] == "src/a.py"
+
+
+def test_save_regenerates_l0_and_render_matches(capsys, in_tmp):
+    run(capsys, "init")
+    run(capsys, "save", "--kind", "decision", "--title", "Usar FTS5", "--body", "bm25")
+    text = (in_tmp / ".cairn" / "MEMORY.md").read_text(encoding="utf-8")
+    assert "Usar FTS5" in text
+    code, out, _ = run(capsys, "render")
+    assert code == 0 and out == text
+
+
+def test_check_lists_stale_after_anchor_change(capsys, in_tmp):
+    run(capsys, "init")
+    (in_tmp / "a.py").write_text("v1\n", encoding="utf-8")
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "gotcha",
+        "--title",
+        "G",
+        "--body",
+        "x",
+        "--anchor",
+        "a.py",
+    )
+    assert "sin memorias stale" in run(capsys, "check")[1]
+    (in_tmp / "a.py").write_text("v2\n", encoding="utf-8")
+    code, out, _ = run(capsys, "check")
+    assert code == 0 and "G" in out
+    _, out, _ = run(capsys, "search", "x", "--json")
+    assert json.loads(out)[0]["stale"] is True

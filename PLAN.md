@@ -58,13 +58,14 @@
 **Aceptación:** `tests/test_store.py` en verde · `rebuild` idempotente · `search` interno < 10 ms con 10k sintéticos (medido 2026-11-01: rebuild 507 ms, `search` p95 3.87 ms).
 **Dogfooding:** desde aquí, guarda las decisiones del propio proyecto con `cairn`.
 
-### M2 — L0 y anclas (1 día)
-- [ ] `anchor.py`: `file_hash` (CRLF→LF), `is_stale`
-- [ ] `render.py`: `render_l0(store, max_chars=3000)` determinista, orden `convention > decision > gotcha > fact` y `ts` desc, `⚠ revisar` en stale
-- [ ] `search` devuelve `stale` por resultado; `cairn render` y `cairn check`
-- [ ] Regeneración automática de `MEMORY.md` tras `save/archive/rebuild`
+### M2 — L0 y anclas (1 día) ✅
+- [x] `anchor.py`: `file_hash` (CRLF→LF), `is_stale`
+- [x] `render.py`: `render_l0(store, max_chars=3000)` determinista, orden `convention > decision > gotcha > fact` y `ts` desc, `⚠ revisar` en stale
+- [x] `search` devuelve `stale` por resultado; `cairn render` y `cairn check`
+- [x] Regeneración automática de `MEMORY.md` tras `save/archive/rebuild`
 
 **Aceptación:** `test_anchor.py` y `test_render.py` en verde · salida de L0 byte-idéntica sin cambios (caché de prompt) · `check` sobre 1k registros < 1 s.
+(medido 2026-11-02: 53 tests verdes, L0 2944 car. con 1k registros y estable al reabrir, `check` end-to-end 181 ms, `render` 135 ms)
 
 ### M3 — Integración (0.5–1 día)
 - [ ] `docs/AGENT_SNIPPET.md` probado en **≥ 2 arneses** (p. ej. Claude Code y OpenCode): guardar en uno, recuperar en otro
