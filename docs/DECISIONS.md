@@ -19,3 +19,5 @@
 | 2026-11-01 | `rebuild` tolera JSON inválido solo en la última línea no vacía | Un crash a mitad de `os.write` dejaría el Store inutilizable en cada apertura; una línea intermedia corrupta sigue fallando en voz alta |
 | 2026-11-01 | La huella del JSONL se captura al terminar el append, no tras aplicar el evento | Evita certificar como aplicados eventos externos que llegaron entre ambas operaciones |
 | 2026-11-01 | El append usa `O_BINARY` (Windows) | `os.open` en modo texto traduce `\n` a `\r\n`; el JSONL quedaba con CRLF y el guard de tamaño lo detectaba como evento externo |
+| 2026-11-02 | Lock en proceso alrededor del append del JSONL | El `O_APPEND` del CRT de Windows no es atómico entre hilos: el test de concurrencia perdía líneas (19/20). Entre procesos se mantiene la regla de un escritor por proyecto |
+| 2026-11-02 | SLO end-to-end sin cambios pese a medir 350–640 ms con la máquina al 54 % | La consulta interna es 1–5 ms y la precisión@3 es 1,00; el coste es arranque de Python + `argparse`. No se toca L0, ranking ni reglas de guardado; re-medir en reposo antes de publicar |
