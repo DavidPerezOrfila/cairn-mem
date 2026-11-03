@@ -31,6 +31,52 @@ def test_init_local_only_by_default(capsys, in_tmp):
     assert "sessions.jsonl" in ignore
 
 
+def test_init_refuses_personal_dir(capsys, in_tmp, monkeypatch):
+    monkeypatch.setenv("CAIRN_HOME", str(in_tmp / ".cairn"))
+    code, _, err = run(capsys, "init")
+    assert code == 1 and "scope personal" in err
+    assert not (in_tmp / ".cairn").exists()
+
+
+def test_init_refuses_store_inside_personal(capsys, in_tmp, monkeypatch):
+    monkeypatch.setenv("CAIRN_HOME", str(in_tmp / "home"))
+    (in_tmp / "home" / "sub").mkdir(parents=True)
+    monkeypatch.chdir(in_tmp / "home" / "sub")
+    code, _, err = run(capsys, "init")
+    assert code == 1 and "scope personal" in err
+    assert not (in_tmp / "home" / "sub" / ".cairn").exists()
+
+
+def test_init_preserves_foreign_gitignore_lines(capsys, in_tmp):
+    (in_tmp / ".cairn").mkdir()
+    (in_tmp / ".cairn" / ".gitignore").write_text(
+        "custom.txt\nevents.jsonl\n", encoding="utf-8"
+    )
+    assert run(capsys, "init", "--share")[0] == 0
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    assert "custom.txt" in ignore and "events.jsonl" not in ignore
+    assert run(capsys, "init")[0] == 0
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    assert "custom.txt" in ignore and "events.jsonl" in ignore
+
+
+def test_init_is_idempotent_and_share_can_be_reenabled(capsys, in_tmp):
+    assert run(capsys, "init")[0] == 0
+    assert run(capsys, "init", "--share")[0] == 0
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    assert "events.jsonl" not in ignore
+
+
+def test_init_refuses_nested_store(capsys, in_tmp, monkeypatch):
+    assert run(capsys, "init")[0] == 0
+    nested = in_tmp / "sub"
+    nested.mkdir()
+    monkeypatch.chdir(nested)
+    code, _, err = run(capsys, "init")
+    assert code == 1 and "ya existe un store" in err
+    assert not (nested / ".cairn").exists()
+
+
 def test_init_share_tracks_events(capsys, in_tmp):
     run(capsys, "init", "--share")
     ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
@@ -91,6 +137,14 @@ def test_get_unknown_id_fails(capsys):
     run(capsys, "init")
     code, _, err = run(capsys, "get", "000000000000")
     assert code == 1 and "no existe" in err
+
+
+def test_corrupt_db_tells_the_user_to_delete_it(capsys, in_tmp):
+    (in_tmp / ".cairn").mkdir()
+    (in_tmp / ".cairn" / "events.jsonl").touch()
+    (in_tmp / ".cairn" / "cairn.db").write_bytes(b"no es una base de datos")
+    code, _, err = run(capsys, "search", "x")
+    assert code == 1 and "borra" in err
 
 
 def test_commands_require_init(capsys, in_tmp):
@@ -194,6 +248,28 @@ def test_check_lists_stale_after_anchor_change(capsys, in_tmp):
     assert code == 0 and "G" in out
     _, out, _ = run(capsys, "search", "x", "--json")
     assert json.loads(out)[0]["stale"] is True
+
+
+def test_check_hashes_large_anchors(capsys, in_tmp, monkeypatch):
+    import cairn_mem.anchor as anchor_module
+
+    run(capsys, "init")
+    target = in_tmp / "dump.csv"
+    target.write_text("x" * 64, encoding="utf-8")
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "fact",
+        "--title",
+        "Dump",
+        "--body",
+        "x",
+        "--anchor",
+        "dump.csv",
+    )
+    monkeypatch.setattr(anchor_module, "MAX_HASH_BYTES", 1)
+    assert "sin memorias stale" in run(capsys, "check")[1]
 
 
 def test_personal_scope_is_separate(capsys, in_tmp):

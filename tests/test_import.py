@@ -186,6 +186,7 @@ def test_import_maps_and_routes(capsys, in_tmp, legacy_db):
         "memories": 3,
         "sessions": 1,
         "skipped": 0,
+        "foreign": 1,
         "rejected": 1,
         "dry_run": False,
     }
@@ -216,6 +217,7 @@ def test_import_is_idempotent(capsys, in_tmp, legacy_db):
     report = import_legacy(str(legacy_db))
     assert report["memories"] == 0 and report["sessions"] == 0
     assert report["skipped"] == 4 and report["rejected"] == 1
+    assert report["foreign"] == 1
     assert len(Store(str(repo / ".cairn")).dump()) == 2
 
 
@@ -233,6 +235,86 @@ def test_ts_normalizes_nanoseconds_and_timezone():
     assert _ts("2026-11-01 10:00:00.1") == _ts("2026-11-01 10:00:00.100000")
     assert _ts("2026-11-01 10:00:00.123") == _ts("2026-11-01 10:00:00.123000")
     assert _ts("2026-11-01T10:00:00Z") == _ts("2026-11-01 10:00:00")
+
+
+def test_import_normalizes_long_and_empty_titles(capsys, in_tmp):
+    repo = in_tmp
+    _init(capsys, repo)
+    path = in_tmp / "otra.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(SCHEMA)
+    rows = [
+        (1, "fact", "x" * 400, "**What**: cuerpo", "repo", "project"),
+        (2, "fact", "   ", "**What**: sin título", "repo", "project"),
+    ]
+    conn.executemany(
+        "INSERT INTO observations (id, type, title, content, project, scope) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.executemany(
+        "INSERT INTO capture_project_provenance "
+        "(entity_kind, entity_id, source, directory, raw_project) "
+        "VALUES ('observation', ?, 'unknown', ?, '')",
+        [(str(row[0]), str(repo)) for row in rows],
+    )
+    conn.commit()
+    conn.close()
+    report = import_legacy(str(path))
+    assert report["memories"] == 2 and report["rejected"] == 0
+    titles = {row["title"] for row in Store(str(repo / ".cairn")).dump()}
+    assert "x" * 200 in titles
+    assert "sin título" in titles
+
+
+def _db_with(path, rows):
+    conn = sqlite3.connect(path)
+    conn.executescript(SCHEMA)
+    conn.executemany(
+        "INSERT INTO observations (id, type, title, content, project, scope) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.executemany(
+        "INSERT INTO capture_project_provenance "
+        "(entity_kind, entity_id, source, directory, raw_project) "
+        "VALUES ('observation', ?, 'unknown', ?, '')",
+        [(str(row[0]), "") for row in rows],
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_import_global_rows_outside_repo(capsys, in_tmp):
+    path = in_tmp / "global.db"
+    _db_with(path, [(1, "config", "Modelo", "What: deepseek", "repo", "global")])
+    dry = import_legacy(str(path), dry_run=True)
+    assert dry["memories"] == 1 and dry["dry_run"] is True
+    report = import_legacy(str(path))
+    assert report["memories"] == 1 and report["skipped"] == 0
+    assert Store(str(in_tmp / "personal")).search("modelo")[0]["title"] == "Modelo"
+
+
+def test_dry_run_and_real_agree_on_session_secrets(capsys, in_tmp):
+    _init(capsys, in_tmp)
+    path = in_tmp / "sesiones.db"
+    _db_with(
+        path,
+        [
+            (
+                1,
+                "session_summary",
+                "Resumen",
+                "password = hunter2",
+                in_tmp.name,
+                "project",
+            )
+        ],
+    )
+    dry = import_legacy(str(path), dry_run=True)
+    real = import_legacy(str(path))
+    assert dry["sessions"] == 0 and dry["rejected"] == 1
+    assert real["sessions"] == 0 and real["rejected"] == 1
 
 
 def test_cli_import_requires_db(capsys, in_tmp):

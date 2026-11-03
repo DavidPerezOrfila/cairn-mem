@@ -38,3 +38,8 @@
 | 2026-11-03 | `Store` reaplica el JSONL en las lecturas si la huella cambió | El `Store` del MCP vive horas: tras un `git pull` o un `save` desde la CLI, `search`/`get`/`context` servían datos viejos |
 | 2026-11-03 | El importador se llama `legacy` (módulo, subcomando y docs) | La herramienta que sustituye no debe aparecer en el repo remoto; el id conserva la sal antigua para no duplicar lo ya importado |
 | 2026-11-03 | La tool MCP de sesión se llama `save_session` | `session` colisiona con el espacio de nombres del arnés: OpenCode no la exponía y el agente no podía guardar el resumen |
+| 2026-11-03 | Rebuild captura la huella antes de leer y archive usa un `ts` posterior al save (`SCHEMA_VERSION=2`) | Un append externo a mitad del rebuild quedaba certificado sin aplicar; un save importado con `ts` futuro resucitaba al reconstruir. El bump fuerza un rebuild de las DB ya envenenadas |
+| 2026-11-03 | `title` se normaliza y se limita a 200 caracteres | Un título largo vaciaba el L0 (el render corta en la primera línea que no cabe) y un salto de línea rompía el formato |
+| 2026-11-03 | `init` rechaza el scope personal y los stores anidados; re-init en su raíz sigue permitido | En el home creaba un store invisible para `data_dir`; en un subdirectorio partía la memoria en dos |
+| 2026-11-03 | El filtro de secretos acepta `:` y comillas, y claves compuestas (`DB_PASSWORD`, `api-key`) | YAML y JSON eran los formatos más probables de fuga y pasaban el filtro |
+| 2026-11-03 | Anchors > 2 MB se marcan stale sin hashear en `search`; `cairn check` hashea siempre | Leer varios ficheros grandes por búsqueda podía recorrer cientos de MB |

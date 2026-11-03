@@ -29,15 +29,47 @@ def _print_json(value) -> None:
     print(json.dumps(value, ensure_ascii=False))
 
 
+def _write_gitignore(root: Path, share: bool) -> None:
+    """Conserva las líneas que no gestiona cairn; solo actualiza las suyas."""
+    path = root / ".gitignore"
+    managed = {"events.jsonl", *GITIGNORE}
+    kept = []
+    if path.exists():
+        kept = [
+            line
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and line not in managed
+        ]
+    lines = [*kept, *GITIGNORE]
+    if not share:
+        lines.append("events.jsonl")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _cmd_init(ns) -> int:
     env = os.environ.get("CAIRN_DIR")
-    root = Path(env) if env else Path.cwd() / ".cairn"
+    local = Path.cwd() / ".cairn"
+    if env:
+        root = Path(env)
+    else:
+        try:
+            existing = data_dir()
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and existing.resolve() != local.resolve():
+            raise ValueError(
+                f"ya existe un store en {existing}; usa esa raíz o define CAIRN_DIR"
+            )
+        root = existing or local
+    personal = personal_dir().resolve()
+    if root.resolve() == personal or root.resolve().is_relative_to(personal):
+        raise ValueError(
+            "esa carpeta está dentro del scope personal de cairn; "
+            "define CAIRN_HOME o cambia de directorio"
+        )
     root.mkdir(parents=True, exist_ok=True)
     (root / "events.jsonl").touch()
-    lines = list(GITIGNORE)
-    if not ns.share:
-        lines.append("events.jsonl")
-    (root / ".gitignore").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_gitignore(root, ns.share)
     Store(str(root))
     print(f"cairn inicializado en {root}")
     return 0
@@ -132,7 +164,9 @@ def _cmd_check(ns) -> int:
         row
         for row in Store(str(data_dir())).dump()
         if row["status"] == "active"
-        and is_stale(row["anchor_path"], row["anchor_hash"], project_root)
+        and is_stale(
+            row["anchor_path"], row["anchor_hash"], project_root, max_bytes=float("inf")
+        )
     ]
     if ns.json:
         _print_json(
@@ -155,7 +189,7 @@ def _cmd_check(ns) -> int:
 
 
 def _ignore_sessions(root) -> None:
-    """Sesiones locales: los inits antiguos no las ignoraban."""
+    """Sesiones locales: `init` las ignora, pero el scope personal no pasa por init."""
     path = Path(root) / ".gitignore"
     if not path.exists():
         return
@@ -208,7 +242,8 @@ def _cmd_import(ns) -> int:
     prefix = "se importarían" if ns.dry_run else "importadas"
     print(
         f"{prefix} {report['memories']} memorias y {report['sessions']} sesiones "
-        f"({report['skipped']} omitidas, {report['rejected']} rechazadas)"
+        f"({report['skipped']} omitidas, {report['rejected']} rechazadas, "
+        f"{report['foreign']} de otros repos)"
     )
     return 0
 
@@ -305,11 +340,21 @@ def main(argv=None) -> int:
     ns = _parser().parse_args(argv)
     try:
         return ns.handler(ns)
-    except (ValueError, FileNotFoundError) as error:
+    except (ValueError, OSError) as error:
         print(f"cairn: {error}", file=sys.stderr)
         return 1
-    except sqlite3.Error:
-        print("cairn: error de base de datos; ejecuta 'cairn rebuild'", file=sys.stderr)
+    except sqlite3.DatabaseError as error:
+        if any(
+            word in str(error).lower()
+            for word in ("not a database", "corrupt", "malformed")
+        ):
+            print(
+                "cairn: base de datos corrupta; borra .cairn/cairn.db y ejecuta "
+                "'cairn rebuild'",
+                file=sys.stderr,
+            )
+        else:
+            print(f"cairn: error de base de datos: {error}", file=sys.stderr)
         return 1
 
 

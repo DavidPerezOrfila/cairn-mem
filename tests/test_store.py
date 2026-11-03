@@ -85,6 +85,12 @@ def test_body_over_500_chars_rejected(store):
         "AKIAIOSFODNN7EXAMPLE",
         "-----BEGIN RSA PRIVATE KEY-----",
         "password = hunter2",
+        "password: hunter2",
+        '{"api_key": "abc123"}',
+        "secret: s3cr3t",
+        "DB_PASSWORD=p4ss",
+        "api-key: k123",
+        "private_key: abc",
         "postgres://user:pass@host/db",
         "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc",
     ],
@@ -290,6 +296,108 @@ def test_reads_do_not_rebuild_when_nothing_changed(store, monkeypatch):
     mid = store.save(kind="fact", title="x", body="y")
     monkeypatch.setattr(store, "rebuild", lambda: pytest.fail("rebuild inesperado"))
     assert store.get(mid) and store.search("x") and store.active_ordered()
+
+
+def test_title_is_normalized_and_bounded(store):
+    mid = store.save(kind="fact", title="uno\ndos", body="x")
+    assert store.get(mid)["title"] == "uno dos"
+    with pytest.raises(ValueError, match="title"):
+        store.save(kind="fact", title="x" * 201, body="x")
+    with pytest.raises(ValueError, match="vacío"):
+        store.save(kind="fact", title="   ", body="x")
+
+
+def test_out_of_range_topic_saves_keep_append_order(root):
+    s = Store(root)
+    old = s.save(kind="fact", topic_key="t", title="viejo", body="a", ts=2**63 - 1)
+    new = s.save(kind="fact", topic_key="t", title="nuevo", body="b", ts=2**63 + 5)
+    s.rebuild()
+    assert s.get(new)["status"] == "active"
+    assert s.get(old)["status"] == "superseded"
+
+
+def test_archive_unknown_id_is_a_noop(root):
+    s = Store(root)
+    s.archive("000000000000")
+    assert s.get("000000000000") is None
+
+
+def test_rebuild_does_not_certify_events_written_during_it(root, monkeypatch):
+    """Un append externo a mitad del rebuild no puede darse por aplicado."""
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    injected = []
+
+    def apply_then_inject(event):
+        Store._apply(s, event)
+        if not injected:
+            injected.append(True)
+            with open(f"{root}/events.jsonl", "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "op": "save",
+                            "id": "aaaaaaaaaaaa",
+                            "ts": 9_999_999_999_999_999_998,
+                            "kind": "fact",
+                            "title": "externa",
+                            "body": "b",
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+
+    monkeypatch.setattr(s, "_apply", apply_then_inject)
+    s.rebuild()
+    assert s.get("aaaaaaaaaaaa")["title"] == "externa"
+
+
+def test_short_write_rolls_back_and_keeps_jsonl_valid(root, monkeypatch):
+    s = Store(root)
+    s.save(kind="fact", title="ok", body="a")
+    path = Path(root) / "events.jsonl"
+    size = path.stat().st_size
+    monkeypatch.setattr("cairn_mem.jsonl.os.write", lambda fd, data: 1)
+    with pytest.raises(OSError, match="incompleta"):
+        s.save(kind="fact", title="falla", body="b")
+    assert path.stat().st_size == size
+    assert Store(root).search("ok")
+
+
+def test_write_error_rolls_back_and_keeps_jsonl_valid(root, monkeypatch):
+    s = Store(root)
+    s.save(kind="fact", title="ok", body="a")
+    path = Path(root) / "events.jsonl"
+    size = path.stat().st_size
+
+    def fail(fd, data):
+        raise OSError("ENOSPC")
+
+    monkeypatch.setattr("cairn_mem.jsonl.os.write", fail)
+    with pytest.raises(OSError):
+        s.save(kind="fact", title="falla", body="b")
+    assert path.stat().st_size == size
+    assert Store(root).search("ok")
+
+
+def test_archive_survives_rebuild_with_future_save(root):
+    s = Store(root)
+    mid = s.save(kind="fact", title="futuro", body="a", ts=9_999_999_999_999_999_999)
+    s.archive(mid)
+    s.rebuild()
+    assert s.get(mid)["status"] == "archived"
+    assert s.search("futuro") == []
+
+
+def test_l0_failure_warns_instead_of_silence(store, monkeypatch, capsys):
+    def locked(*args, **kwargs):
+        raise OSError("archivo bloqueado")
+
+    monkeypatch.setattr("cairn_mem.store.os.replace", locked)
+    mid = store.save(kind="fact", title="visible", body="b")
+    assert mid
+    assert "MEMORY.md" in capsys.readouterr().err
 
 
 def test_l0_regenerated_after_archive_and_rebuild(store, root):

@@ -13,7 +13,6 @@ pytest -q
 pytest tests/test_store.py::test_save_and_get -q   # un solo test
 ruff check src tests bench
 python bench/bench_mcp.py --reps 20                 # latencia de tool calls MCP (10k)
-python scripts/export.py <carpeta_vacia>           # export multiplataforma, solo stdlib
 ```
 - CI en `.github/workflows/ci.yml`: ubuntu/macos/windows × Python 3.10 y 3.14 (tests + ruff). Sin config de ruff ni pre-commit: además, verificación local (pytest + ruff + criterios de `PLAN.md`).
 - Python 3.10+, **solo stdlib** en el núcleo. `dev` solo aporta pytest y ruff.
@@ -30,9 +29,9 @@ python scripts/export.py <carpeta_vacia>           # export multiplataforma, sol
 - Raíz del proyecto: busca `.cairn/` hacia arriba desde el cwd o usa `CAIRN_DIR`, excluyendo `~/.cairn` y `CAIRN_HOME` (scope personal). Scope personal: `CAIRN_HOME` o `~/.cairn`.
 
 ## Reglas no obvias
-- **Windows primero:** todo fichero con `encoding="utf-8"` y JSON con `ensure_ascii=False`; rutas de ancla POSIX relativas a la raíz; hash sha1 con CRLF→LF (si no, falsos stale entre SO). `os.open` del JSONL necesita `O_BINARY` (si no, Windows traduce `\n` a `\r\n`). Commits en LF: el repo no tiene `.gitattributes` y `core.autocrlf=true`.
+- **Windows primero:** todo fichero con `encoding="utf-8"` y JSON con `ensure_ascii=False`; rutas de ancla POSIX relativas a la raíz; hash sha1 con CRLF→LF (si no, falsos stale entre SO). `os.open` del JSONL necesita `O_BINARY` (si no, Windows traduce `\n` a `\r\n`). Commits en LF: `.gitattributes` fija `eol=lf`; no dependas de `core.autocrlf` del clon.
 - **FTS5:** nunca pasar texto crudo a `MATCH`; sanea (`\w+` → `"t"*`, prefijo), usa AND y cae a OR si no hay resultados. Crudo falla con `-`, `:`, `"`. Ranking `bm25(mem_fts, 5.0, 1.0, 0.5)`.
-- **Seguridad:** rechaza (no redactes) secretos antes de escribir: claves cloud, `BEGIN … PRIVATE KEY`, JWT `eyJ…`, `password|secret|token|api_key = valor`, URLs `://user:pass@`. `body` > 500 caracteres → error.
+- **Seguridad:** rechaza (no redactes) secretos antes de escribir: claves cloud, `BEGIN … PRIVATE KEY`, JWT `eyJ…`, `password|secret|token|api_key` con `=` o `:` (JSON/YAML), URLs `://user:pass@`. `body` > 500 caracteres o `title` > 200 → error.
 - Imports mínimos al arranque: SLO de CLI end-to-end (p95 `search` < 350 ms, `save` < 500 ms, arranque incluido) y de tool MCP en proceso (< 50 ms).
 - **MCP:** stdout solo protocolo (NDJSON en binario, `\n`); logs a stderr; sin asyncio ni señales; el proceso cachea un `Store` por scope y es el único escritor mientras vive.
 - **Sesiones:** `.cairn/sessions.jsonl` es local y no entra en FTS ni L0; un resumen puede superar 500 caracteres.

@@ -1,8 +1,6 @@
 """Tests de M2: L0 con presupuesto, determinista y con marca de stale."""
 
-import pytest
-
-render = pytest.importorskip("cairn_mem.render", reason="M2 pendiente")
+from cairn_mem import render
 from cairn_mem.store import Store
 
 
@@ -29,6 +27,13 @@ def test_l0_orders_by_kind_priority(tmp_path):
     s.save(kind="convention", title="C", body="x")
     out = render.render_l0(s)
     assert out.index("C") < out.index("F")
+
+
+def test_l0_keeps_one_line_per_memory(tmp_path):
+    s = Store(str(tmp_path / ".cairn"))
+    s.save(kind="fact", title="uno\ndos", body="x")
+    lines = render.render_l0(s).splitlines()
+    assert len(lines) == 2 and lines[1].startswith("- [")
 
 
 def test_l0_marks_stale(tmp_path):

@@ -2,7 +2,7 @@
 
 import pytest
 
-anchor = pytest.importorskip("cairn_mem.anchor", reason="M2 pendiente")
+from cairn_mem import anchor
 
 
 def test_hash_ignores_crlf(tmp_path):
@@ -10,6 +10,16 @@ def test_hash_ignores_crlf(tmp_path):
     a.write_bytes(b"x\ny\n")
     b.write_bytes(b"x\r\ny\r\n")
     assert anchor.file_hash(str(a)) == anchor.file_hash(str(b))
+
+
+def test_large_anchor_is_stale_without_hashing(tmp_path, monkeypatch):
+    big = tmp_path / "dump.csv"
+    big.write_text("x" * 32, encoding="utf-8")
+    digest = anchor.file_hash(big)
+    monkeypatch.setattr(anchor, "MAX_HASH_BYTES", 10)
+    assert anchor.is_stale("dump.csv", digest, str(tmp_path)) is True
+    monkeypatch.setattr(anchor, "MAX_HASH_BYTES", 10_000)
+    assert anchor.is_stale("dump.csv", digest, str(tmp_path)) is False
 
 
 def test_stale_when_changed_or_missing(tmp_path):

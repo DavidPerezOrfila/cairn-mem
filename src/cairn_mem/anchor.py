@@ -3,6 +3,8 @@
 import hashlib
 from pathlib import Path
 
+MAX_HASH_BYTES = 2 * 1024 * 1024
+
 
 def resolve_anchor(path: str, project_root) -> tuple[str, str]:
     """Devuelve (ruta POSIX relativa, hash) o falla si el ancla no es válida."""
@@ -24,11 +26,16 @@ def file_hash(path) -> str:
     return hashlib.sha1(data).hexdigest()
 
 
-def is_stale(anchor_path, anchor_hash, project_root) -> bool:
+def is_stale(anchor_path, anchor_hash, project_root, *, max_bytes=None) -> bool:
     if not anchor_path or not anchor_hash:
         return False
+    path = Path(project_root) / anchor_path
+    limit = MAX_HASH_BYTES if max_bytes is None else max_bytes
     try:
-        return file_hash(Path(project_root) / anchor_path) != anchor_hash
+        # shortcut: en search, anchors > 2 MB se marcan stale sin hashear.
+        if limit is not None and path.stat().st_size > limit:
+            return True
+        return file_hash(path) != anchor_hash
     except OSError:
         # No se pudo leer (falta, es carpeta o está bloqueado): no se puede
         # confirmar el hash, así que se avisa. Nunca se oculta la memoria.
