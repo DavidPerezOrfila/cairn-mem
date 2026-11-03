@@ -164,13 +164,24 @@ desde PyPI verificada con `init`, `save`, `session`, `search` e `import --dry-ru
 **0.2.2:** la tool MCP de sesión pasa a `save_session` (OpenCode filtraba `session` por
 colisión de nombre y el agente no podía guardar el resumen).
 
-## 4. Backlog (solo con evidencia medida)
+## 4. Rondas de mejora (una por release)
+
+Cada ronda es un slice: tests primero, gate, review y release propia.
+
+| Ronda | Mejora | Release | Evidencia |
+|---|---|---|---|
+| S1 | L0 reparte el presupuesto entre kinds (round-robin) | 0.3.0 | [`docs/features/l0-fair-share.md`](docs/features/l0-fair-share.md) |
+| S2 | `topic_key` visible en L0 y `search`; FTS indexa `topic_key` y `anchor_path` | pendiente | — |
+| S3 | `search` transversal (proyecto + personal) y sesión del proyecto en `context` | pendiente | — |
+| S4 | `archive` por MCP y consulta de sesiones anteriores | pendiente | — |
+
+## 5. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
 - `compact`/decay (si el nº de memorias activas degrada la precisión)
 - `sqlite-vec` (si precisión@3 < 0.8 por sinónimos y los títulos no lo arreglan)
 - Captura pasiva por git hook (solo si el agente no guarda y el ruido es aceptable)
 
-## 5. Riesgos (los que quedan)
+## 6. Riesgos (los que quedan)
 
 | Riesgo | Mitigación |
 |---|---|
@@ -182,7 +193,7 @@ colisión de nombre y el agente no podía guardar el resumen).
 | Secretos | Rechazo en escritura + local-only por defecto |
 | FTS5 no disponible en algún Python | Comprobar al arrancar y fallar con mensaje claro |
 
-## 6. Prompt de arranque para el agente
+## 7. Prompt de arranque para el agente
 ```text
 Lee AGENTS.md, PLAN.md y docs/DESIGN.md. Implementa SOLO M1 con TDD
 (tests/test_store.py ya está en rojo). Solo stdlib. Muestra la salida real de pytest,

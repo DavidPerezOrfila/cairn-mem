@@ -43,3 +43,5 @@
 | 2026-11-03 | `init` rechaza el scope personal y los stores anidados; re-init en su raíz sigue permitido | En el home creaba un store invisible para `data_dir`; en un subdirectorio partía la memoria en dos |
 | 2026-11-03 | El filtro de secretos acepta `:` y comillas, y claves compuestas (`DB_PASSWORD`, `api-key`) | YAML y JSON eran los formatos más probables de fuga y pasaban el filtro |
 | 2026-11-03 | Anchors > 2 MB se marcan stale sin hashear en `search`; `cairn check` hashea siempre | Leer varios ficheros grandes por búsqueda podía recorrer cientos de MB |
+| 2026-11-04 | L0 reparte el presupuesto en round-robin por `kind` (una línea de cada uno por vuelta) | Con 15 `decision` en el repo, los `gotcha` y `fact` existentes nunca entraban en los 3000 caracteres |
+| 2026-11-04 | Índice parcial `(kind, ts DESC, id) WHERE status='active'` | Sin él, el reparto hacía cuatro escaneos de la tabla: `context` pasaba de 18 a 89 ms p95 con 10k |

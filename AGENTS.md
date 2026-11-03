@@ -1,8 +1,8 @@
 # AGENTS.md — reglas para construir cairn-mem
 
 ## Estado y alcance
-- **M6–M9 cerrados y 0.2.1 publicada** (2026-11-03) en PyPI y etiquetada `v0.2.1`. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` y `legacy.py` implementados; `tests/` (99) cubre la CLI, el store, L0, anclas, MCP, sesiones, importación y el golden set.
-- Implementa **un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
+- **M6–M9 cerrados y 0.2.2 publicada** (2026-11-03) en PyPI y etiquetada `v0.2.2`; **S1** (L0 reparte el presupuesto entre kinds) cerrado en `feat/l0-fair-share`. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` y `legacy.py` implementados; `tests/` (128) cubre la CLI, el store, L0, anclas, MCP, sesiones, importación y el golden set.
+- Implementa **una ronda (S#) o un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
 - Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
 - Lo siguiente sale del **backlog** y solo con una medición que lo justifique.
 
@@ -14,6 +14,9 @@ pytest tests/test_store.py::test_save_and_get -q   # un solo test
 ruff check src tests bench
 python bench/bench_mcp.py --reps 20                 # latencia de tool calls MCP (10k)
 ```
+- Antes de publicar: borra `dist/` **y** `build/`. `uv build` reutiliza `build/lib` y
+  empaqueta módulos ya borrados del árbol (un wheel llegó a incluir el importador
+  antiguo por un `build/lib/` huérfano).
 - CI en `.github/workflows/ci.yml`: ubuntu/macos/windows × Python 3.10 y 3.14 (tests + ruff). Sin config de ruff ni pre-commit: además, verificación local (pytest + ruff + criterios de `PLAN.md`).
 - Python 3.10+, **solo stdlib** en el núcleo. `dev` solo aporta pytest y ruff.
 
@@ -25,7 +28,7 @@ python bench/bench_mcp.py --reps 20                 # latencia de tool calls MCP
 - Escritura: `O_APPEND` + **una sola** `os.write` por evento; lock en proceso (`jsonl._LOCK`) porque el `O_APPEND` de Windows no es atómico entre hilos.
 - Al abrir la DB se compara `(size, mtime_ns)` del JSONL y `PRAGMA user_version`; si difieren → rebuild automático (cubre `git pull`).
 - `stale` se calcula al leer; no se persiste ni hay evento de verificación.
-- L0 (`.cairn/MEMORY.md`) ≤ 3000 caracteres; orden `convention > decision > gotcha > fact` y `ts` desc; salida determinista (caché de prompt).
+- L0 (`.cairn/MEMORY.md`) ≤ 3000 caracteres; round-robin por kind (en cada vuelta `convention > decision > gotcha > fact`) y `ts` desc dentro de cada kind; salida determinista (caché de prompt).
 - Raíz del proyecto: busca `.cairn/` hacia arriba desde el cwd o usa `CAIRN_DIR`, excluyendo `~/.cairn` y `CAIRN_HOME` (scope personal). Scope personal: `CAIRN_HOME` o `~/.cairn`.
 
 ## Reglas no obvias

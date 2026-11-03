@@ -73,7 +73,10 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 | L1 | `cairn search`: `id, kind, title, snippet, stale` | ~50 tokens/resultado |
 | L2 | `cairn get <id>`: registro completo | ≤ 500 car. de cuerpo |
 
-- **L0** se regenera tras cada `save/archive` y tras un rebuild. Orden determinista: `convention, decision, gotcha, fact`, luego `ts` desc, hasta llenar el presupuesto.
+- **L0** se regenera tras cada `save/archive` y tras un rebuild. Orden determinista:
+  round-robin por `kind` (en cada vuelta, `convention > decision > gotcha > fact`) y
+  `ts` desc dentro de cada kind, hasta llenar el presupuesto. Así un kind con muchas
+  entradas no expulsa a los demás.
 - **Búsqueda:** términos saneados (`\w+` → `"t"*`, prefijo), **AND y si no hay resultados OR**; `bm25(mem_fts, 5.0, 1.0, 0.5)` (título pesa más); filtro `status='active'`. Sin más boosts en v0.1.
 - Las consultas crudas de FTS5 **fallan** con `-`, `:`, `"` (p. ej. `oauth-callback`); por eso el saneado es obligatorio.
 

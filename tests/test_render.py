@@ -4,9 +4,9 @@ from cairn_mem import render
 from cairn_mem.store import Store
 
 
-def _fill(store, n):
+def _fill(store, n, kind="fact"):
     for i in range(n):
-        store.save(kind="fact", title=f"hecho {i}", body="detalle " * 30)
+        store.save(kind=kind, title=f"{kind} {i}", body="detalle " * 30)
 
 
 def test_l0_respects_char_budget(tmp_path):
@@ -27,6 +27,28 @@ def test_l0_orders_by_kind_priority(tmp_path):
     s.save(kind="convention", title="C", body="x")
     out = render.render_l0(s)
     assert out.index("C") < out.index("F")
+
+
+def test_l0_reserves_room_for_each_kind(tmp_path):
+    """30 decisiones nuevas no pueden expulsar del L0 el resto de kinds."""
+    s = Store(str(tmp_path / ".cairn"))
+    s.save(kind="gotcha", title="Trampa del proxy", body="60s corta las subidas")
+    s.save(kind="fact", title="Puerto de Vite", body="5173")
+    s.save(kind="convention", title="Ramas con prefijo", body="feat/ y fix/")
+    _fill(s, 30, "decision")
+    out = render.render_l0(s)
+    for title in ("Trampa del proxy", "Puerto de Vite", "Ramas con prefijo"):
+        assert title in out
+
+
+def test_l0_mixes_kinds_within_budget(tmp_path):
+    s = Store(str(tmp_path / ".cairn"))
+    for kind in ("decision", "convention", "gotcha", "fact"):
+        _fill(s, 60, kind)
+    out = render.render_l0(s, max_chars=3000)
+    assert len(out) <= 3000
+    for kind in ("decision", "convention", "gotcha", "fact"):
+        assert any(f"] {kind}: " in line for line in out.splitlines())
 
 
 def test_l0_keeps_one_line_per_memory(tmp_path):

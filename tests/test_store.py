@@ -298,6 +298,14 @@ def test_reads_do_not_rebuild_when_nothing_changed(store, monkeypatch):
     assert store.get(mid) and store.search("x") and store.active_ordered()
 
 
+def test_active_ordered_interleaves_kinds_and_respects_limit(store):
+    for index in range(4):
+        store.save(kind="decision", title=f"d{index}", body="x")
+        store.save(kind="gotcha", title=f"g{index}", body="x")
+    rows = store.active_ordered(limit=3)
+    assert [row["kind"] for row in rows] == ["decision", "gotcha", "decision"]
+
+
 def test_title_is_normalized_and_bounded(store):
     mid = store.save(kind="fact", title="uno\ndos", body="x")
     assert store.get(mid)["title"] == "uno dos"

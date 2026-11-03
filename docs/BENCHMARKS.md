@@ -57,3 +57,19 @@ El SLO original (`search` < 150 ms) está por debajo del coste de importar la st
 No se toca L0, ni el ranking, ni las reglas de guardado: la consulta interna y la precisión cumplen, y el margen está en el arranque del proceso, no en el diseño de la memoria. Optimizar el arranque (parser propio, imports perezosos) queda en backlog solo si el A/B o el uso real muestran que molesta.
 
 L0 con 1k memorias: 2 944 caracteres (≤ 3 000) y byte-idéntico al reabrir (ver `PLAN.md`, M2).
+
+## L0 round-robin (S1, 2026-11-04)
+
+`python bench/bench_mcp.py --reps 20` con 10k registros, misma máquina:
+
+| Tool | p50 | p95 |
+|---|---|---|
+| `search` | 6,7 ms | 10,6 ms |
+| `save` | 24,2 ms | 27,6 ms |
+| `context` (L0) | 18,0 ms | 23,0 ms |
+
+- `active_ordered` con 10k: 8,2 ms p50 (antes 13,3 ms p50).
+- `cairn render` end-to-end: 288–393 ms (antes 315–376 ms el mismo día).
+- L0 del repo: 2919 caracteres y 15 líneas `decision` → 2991 caracteres con
+  5 `decision`, 5 `gotcha` y 5 `fact`.
+- Detalle y criterios: [`docs/features/l0-fair-share.md`](features/l0-fair-share.md).
