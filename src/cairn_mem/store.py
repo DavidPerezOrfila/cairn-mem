@@ -12,7 +12,7 @@ from cairn_mem.anchor import is_stale
 from cairn_mem.jsonl import append_jsonl
 from cairn_mem.render import KIND_PRIORITY, render_l0
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 KINDS = ("decision", "convention", "gotcha", "fact")
 MAX_BODY = 500
 
@@ -85,7 +85,9 @@ class Store:
             or self._fingerprint() != self._stored_fingerprint()
         ):
             self.rebuild()
-        self._known_size = int(self._fingerprint()[0])
+        # La huella guardada puede ser anterior al fichero actual si otro proceso
+        # escribió durante el rebuild: la siguiente lectura lo detecta y reconstruye.
+        self._known_size = int(self._stored_fingerprint()[0])
 
     # --- escritura ---
 
@@ -137,7 +139,13 @@ class Store:
         return mid
 
     def archive(self, id: str) -> None:
-        event = {"op": "archive", "id": id, "ts": time.time_ns()}
+        # El archive debe ordenarse después del save al reconstruir: un save con
+        # `ts` futuro (importado) quedaría activo si el archive llevara su ts normal.
+        memory = self.get(id)
+        ts = time.time_ns()
+        if memory is not None:
+            ts = min(max(ts, int(memory["ts"]) + 1), MAX_TS)
+        event = {"op": "archive", "id": id, "ts": ts}
         fingerprint, unseen = self._append(event)
         if unseen:
             self.rebuild()
@@ -206,6 +214,10 @@ class Store:
     # --- rebuild ---
 
     def rebuild(self) -> None:
+        # Huella capturada antes de leer: si otro proceso escribe a mitad, esta
+        # huella queda vieja y la siguiente lectura vuelve a reconstruir. Si se
+        # guardara la huella final, se certificarían eventos que no se aplicaron.
+        fingerprint = self._fingerprint()
         events = []
         if self.events.exists():
             lines = self.events.read_text(encoding="utf-8-sig").splitlines()
@@ -219,15 +231,15 @@ class Store:
                     if number == last:
                         continue  # escritura rasgada por un crash
                     raise
-                events.append((event.get("ts", 0), number, event))
+                events.append((min(int(event.get("ts", 0)), MAX_TS), number, event))
         events.sort(key=lambda item: (item[0], item[1]))
         with self._conn:
             self._conn.execute("DELETE FROM mem")
             for _, _, event in events:
                 self._apply(event)
             self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        self._remember_fingerprint()
-        self._known_size = int(self._fingerprint()[0])
+        self._remember_fingerprint(fingerprint)
+        self._known_size = int(fingerprint[0])
         self.write_l0()
 
     # --- internos ---
@@ -292,10 +304,9 @@ class Store:
                 self._syncing = False
 
     def _append(self, event: dict) -> tuple[tuple[str, str], bool]:
-        before, written = append_jsonl(self.events, event)
-        stat = self.events.stat()
-        unseen = before != self._known_size or stat.st_size != before + written
-        return (str(stat.st_size), str(stat.st_mtime_ns)), unseen
+        before, written, fingerprint = append_jsonl(self.events, event)
+        unseen = before != self._known_size or int(fingerprint[0]) != before + written
+        return fingerprint, unseen
 
     @staticmethod
     def _match(terms, op):

@@ -9,8 +9,8 @@ from pathlib import Path
 _LOCK = threading.Lock()
 
 
-def append_jsonl(path: Path, event: dict) -> tuple[int, int]:
-    """Añade `event` y devuelve (tamaño previo, bytes escritos)."""
+def append_jsonl(path: Path, event: dict) -> tuple[int, int, tuple[str, str]]:
+    """Añade `event` y devuelve (tamaño previo, bytes escritos, huella posterior)."""
     line = json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
     data = line.encode("utf-8")
     flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0)
@@ -21,4 +21,5 @@ def append_jsonl(path: Path, event: dict) -> tuple[int, int]:
             os.write(fd, data)
         finally:
             os.close(fd)
-    return before, len(data)
+        stat = path.stat()
+    return before, len(data), (str(stat.st_size), str(stat.st_mtime_ns))

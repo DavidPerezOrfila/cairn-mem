@@ -292,6 +292,61 @@ def test_reads_do_not_rebuild_when_nothing_changed(store, monkeypatch):
     assert store.get(mid) and store.search("x") and store.active_ordered()
 
 
+def test_out_of_range_topic_saves_keep_append_order(root):
+    s = Store(root)
+    old = s.save(kind="fact", topic_key="t", title="viejo", body="a", ts=2**63 - 1)
+    new = s.save(kind="fact", topic_key="t", title="nuevo", body="b", ts=2**63 + 5)
+    s.rebuild()
+    assert s.get(new)["status"] == "active"
+    assert s.get(old)["status"] == "superseded"
+
+
+def test_archive_unknown_id_is_a_noop(root):
+    s = Store(root)
+    s.archive("000000000000")
+    assert s.get("000000000000") is None
+
+
+def test_rebuild_does_not_certify_events_written_during_it(root, monkeypatch):
+    """Un append externo a mitad del rebuild no puede darse por aplicado."""
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    injected = []
+
+    def apply_then_inject(event):
+        Store._apply(s, event)
+        if not injected:
+            injected.append(True)
+            with open(f"{root}/events.jsonl", "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "op": "save",
+                            "id": "aaaaaaaaaaaa",
+                            "ts": 9_999_999_999_999_999_998,
+                            "kind": "fact",
+                            "title": "externa",
+                            "body": "b",
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+
+    monkeypatch.setattr(s, "_apply", apply_then_inject)
+    s.rebuild()
+    assert s.get("aaaaaaaaaaaa")["title"] == "externa"
+
+
+def test_archive_survives_rebuild_with_future_save(root):
+    s = Store(root)
+    mid = s.save(kind="fact", title="futuro", body="a", ts=9_999_999_999_999_999_999)
+    s.archive(mid)
+    s.rebuild()
+    assert s.get(mid)["status"] == "archived"
+    assert s.search("futuro") == []
+
+
 def test_l0_regenerated_after_archive_and_rebuild(store, root):
     mid = store.save(kind="fact", title="visible", body="b")
     memory = Path(root) / "MEMORY.md"
