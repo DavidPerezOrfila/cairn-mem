@@ -13,7 +13,6 @@ pytest -q
 pytest tests/test_store.py::test_save_and_get -q   # un solo test
 ruff check src tests bench
 python bench/bench_mcp.py --reps 20                 # latencia de tool calls MCP (10k)
-python scripts/export.py <carpeta_vacia>           # export multiplataforma, solo stdlib
 ```
 - CI en `.github/workflows/ci.yml`: ubuntu/macos/windows × Python 3.10 y 3.14 (tests + ruff). Sin config de ruff ni pre-commit: además, verificación local (pytest + ruff + criterios de `PLAN.md`).
 - Python 3.10+, **solo stdlib** en el núcleo. `dev` solo aporta pytest y ruff.

@@ -21,7 +21,7 @@
 | 12 | Ranking BM25 × boosts, dedupe léxico, decay, promoción, LLM `--propose` | Solo `bm25()` con pesos por columna. El resto → **backlog** |
 | 13 | Captura pasiva por git hook: ruido que baja la precisión | Fuera. Regla explícita de **qué guardar / qué no** en `docs/AGENT_SNIPPET.md` |
 | 14 | MCP a mano, scope global: coste y riesgo sin necesidad probada | **Backlog**. El CLI cubre cualquier arnés con shell |
-| 15 | Windows: `export.sh` no corre sin bash; codificación cp1252; falta `init` y raíz del proyecto | `export.py` (stdlib); UTF-8 forzado + test; `cairn init`; búsqueda de `.cairn/` hacia arriba |
+| 15 | Windows: `export.sh` no corre sin bash; codificación cp1252; falta `init` y raíz del proyecto | Export multiplataforma (stdlib); UTF-8 forzado + test; `cairn init`; búsqueda de `.cairn/` hacia arriba |
 | 16 | A/B de 10–20 tareas: ruidoso y caro | **Golden set** de recuperación (sin LLM, en CI) + A/B pequeño **pareado** |
 | 17 | `get` por ID largo (ULID) propenso a error del agente | ID corto de 12 hex |
 
@@ -45,7 +45,7 @@
 ## 3. Hitos
 
 ### M0 — Bootstrap ✅
-- [x] Estructura, `pyproject.toml`, `AGENTS.md`, diseño, esquema, `AGENT_SNIPPET.md`, `export.py`
+- [x] Estructura, `pyproject.toml`, `AGENTS.md`, diseño, esquema, `AGENT_SNIPPET.md`
 - [x] Tests rojos de M1 + tests de M2 (se saltan hasta existir el módulo)
 
 **Aceptación:** `pip install -e ".[dev]" && pytest -q` → M1 en rojo, M2 *skipped*.
@@ -182,16 +182,7 @@ colisión de nombre y el agente no podía guardar el resumen).
 | Secretos | Rechazo en escritura + local-only por defecto |
 | FTS5 no disponible en algún Python | Comprobar al arrancar y fallar con mensaje claro |
 
-## 6. Cómo exportarlo
-
-```bash
-python scripts/export.py /ruta/carpeta_vacia      # multiplataforma, rechaza carpetas no vacías
-# o descomprimir el zip directamente en la carpeta vacía
-cd /ruta/carpeta_vacia && git init
-python -m venv .venv && pip install -e ".[dev]" && pytest -q   # M1 rojo, M2 skipped
-```
-
-## 7. Prompt de arranque para el agente
+## 6. Prompt de arranque para el agente
 ```text
 Lee AGENTS.md, PLAN.md y docs/DESIGN.md. Implementa SOLO M1 con TDD
 (tests/test_store.py ya está en rojo). Solo stdlib. Muestra la salida real de pytest,
