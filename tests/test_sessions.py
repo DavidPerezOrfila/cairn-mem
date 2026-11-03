@@ -36,3 +36,11 @@ def test_empty_summary_is_rejected(tmp_path):
 
 def test_unknown_session_returns_none(tmp_path):
     assert Sessions(str(tmp_path)).get("000000000000") is None
+
+
+@pytest.mark.parametrize("secret", ["password = hunter2", "AKIAIOSFODNN7EXAMPLE"])
+def test_secret_in_summary_is_rejected(tmp_path, secret):
+    sessions = Sessions(str(tmp_path))
+    with pytest.raises(ValueError, match="secreto"):
+        sessions.save(f"## Goal\nconfig {secret}")
+    assert not sessions.path.exists()

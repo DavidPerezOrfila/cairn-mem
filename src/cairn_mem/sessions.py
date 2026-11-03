@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from cairn_mem.jsonl import append_jsonl
+from cairn_mem.store import reject_secrets
 
 MAX_SUMMARY = 20000
 
@@ -21,6 +22,7 @@ class Sessions:
             raise ValueError("el resumen está vacío")
         if len(summary) > MAX_SUMMARY:
             raise ValueError(f"el resumen supera {MAX_SUMMARY} caracteres")
+        reject_secrets(summary)
         sid = id or secrets.token_hex(6)
         append_jsonl(
             self.path,
