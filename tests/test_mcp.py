@@ -50,7 +50,7 @@ def test_initialize_and_list_tools():
 
     response = server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {tool["name"] for tool in response["result"]["tools"]}
-    assert names == {"save", "search", "get", "context", "session"}
+    assert names == {"save", "search", "get", "context", "save_session"}
 
 
 def test_personal_scope_roundtrip(in_tmp):
@@ -76,7 +76,7 @@ def test_personal_scope_roundtrip(in_tmp):
 
 def test_session_tool_stores_summary(in_tmp):
     server = Server()
-    sid = text(call(server, "session", summary="## Goal\nCerrar M6"))
+    sid = text(call(server, "save_session", summary="## Goal\nCerrar M6"))
     assert len(sid) == 12
     raw = (in_tmp / ".cairn" / "sessions.jsonl").read_text(encoding="utf-8")
     assert "Cerrar M6" in raw
@@ -87,7 +87,7 @@ def test_session_tool_stores_summary(in_tmp):
 
 def test_session_tool_personal_scope(in_tmp):
     server = Server()
-    text(call(server, "session", summary="recap global", scope="personal"))
+    text(call(server, "save_session", summary="recap global", scope="personal"))
     raw = (in_tmp / "home" / "sessions.jsonl").read_text(encoding="utf-8")
     assert "recap global" in raw
 
@@ -159,7 +159,7 @@ def test_context_returns_l0():
 def test_context_includes_last_session_without_touching_l0(in_tmp):
     server = Server()
     call(server, "save", kind="decision", title="Usar FTS5", body="bm25")
-    call(server, "session", summary="## Goal\nCerrar M9")
+    call(server, "save_session", summary="## Goal\nCerrar M9")
     body = text(call(server, "context"))
     assert "Usar FTS5" in body and "Cerrar M9" in body
     memory = (in_tmp / ".cairn" / "MEMORY.md").read_text(encoding="utf-8")
@@ -169,13 +169,13 @@ def test_context_includes_last_session_without_touching_l0(in_tmp):
 def test_context_sees_personal_session():
     server = Server()
     call(server, "save", kind="decision", title="Usar FTS5", body="bm25")
-    call(server, "session", summary="recap global", scope="personal")
+    call(server, "save_session", summary="recap global", scope="personal")
     assert "recap global" in text(call(server, "context"))
 
 
 def test_context_truncates_long_session_summary():
     server = Server()
-    call(server, "session", summary="x" * 9000)
+    call(server, "save_session", summary="x" * 9000)
     body = text(call(server, "context"))
     assert "… (recortado)" in body and len(body) < 9000
 
