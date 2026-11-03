@@ -14,7 +14,7 @@ from cairn_mem.jsonl import append_jsonl
 from cairn_mem.render import KIND_PRIORITY, render_l0
 
 SCHEMA_VERSION = 2
-KINDS = ("decision", "convention", "gotcha", "fact")
+KINDS = tuple(KIND_PRIORITY)
 MAX_BODY = 500
 MAX_TITLE = 200
 

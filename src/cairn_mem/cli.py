@@ -189,7 +189,7 @@ def _cmd_check(ns) -> int:
 
 
 def _ignore_sessions(root) -> None:
-    """Sesiones locales: los inits antiguos no las ignoraban."""
+    """Sesiones locales: `init` las ignora, pero el scope personal no pasa por init."""
     path = Path(root) / ".gitignore"
     if not path.exists():
         return
