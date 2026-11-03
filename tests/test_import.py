@@ -1,4 +1,4 @@
-"""Tests del importador de Engram (M8): mapeo, routing e idempotencia."""
+"""Tests del importador legacy (M8): mapeo, routing e idempotencia."""
 
 import json
 import sqlite3
@@ -6,7 +6,7 @@ import sqlite3
 import pytest
 
 from cairn_mem.cli import main
-from cairn_mem.engram import _ts, import_engram
+from cairn_mem.legacy import _ts, import_legacy
 from cairn_mem.store import Store
 
 SCHEMA = """
@@ -42,11 +42,11 @@ def in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def engram_db(tmp_path):
+def legacy_db(tmp_path):
     repo = tmp_path
     other = tmp_path / "other"
     other.mkdir()
-    path = tmp_path / "engram.db"
+    path = tmp_path / "legacy.db"
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
     rows = [
@@ -178,10 +178,10 @@ def _init(capsys, repo):
     assert (repo / ".cairn" / "events.jsonl").exists()
 
 
-def test_import_maps_and_routes(capsys, in_tmp, engram_db):
+def test_import_maps_and_routes(capsys, in_tmp, legacy_db):
     repo = in_tmp
     _init(capsys, repo)
-    report = import_engram(str(engram_db))
+    report = import_legacy(str(legacy_db))
     assert report == {
         "memories": 3,
         "sessions": 1,
@@ -209,20 +209,20 @@ def test_import_maps_and_routes(capsys, in_tmp, engram_db):
     assert "Usar FTS5" in l0 and "Modelo global" not in l0
 
 
-def test_import_is_idempotent(capsys, in_tmp, engram_db):
+def test_import_is_idempotent(capsys, in_tmp, legacy_db):
     repo = in_tmp
     _init(capsys, repo)
-    import_engram(str(engram_db))
-    report = import_engram(str(engram_db))
+    import_legacy(str(legacy_db))
+    report = import_legacy(str(legacy_db))
     assert report["memories"] == 0 and report["sessions"] == 0
     assert report["skipped"] == 4 and report["rejected"] == 1
     assert len(Store(str(repo / ".cairn")).dump()) == 2
 
 
-def test_dry_run_writes_nothing(capsys, in_tmp, engram_db):
+def test_dry_run_writes_nothing(capsys, in_tmp, legacy_db):
     repo = in_tmp
     (repo / ".cairn").mkdir(parents=True)
-    report = import_engram(str(engram_db), dry_run=True)
+    report = import_legacy(str(legacy_db), dry_run=True)
     assert report["memories"] == 3 and report["sessions"] == 1
     assert not (repo / ".cairn" / "events.jsonl").exists()
     assert not (in_tmp / "personal").exists()
@@ -235,10 +235,15 @@ def test_ts_normalizes_nanoseconds_and_timezone():
     assert _ts("2026-11-01T10:00:00Z") == _ts("2026-11-01 10:00:00")
 
 
-def test_cli_import_json(capsys, in_tmp, engram_db):
+def test_cli_import_requires_db(capsys, in_tmp):
+    with pytest.raises(SystemExit):
+        main(["import", "legacy"])
+
+
+def test_cli_import_json(capsys, in_tmp, legacy_db):
     repo = in_tmp
     _init(capsys, repo)
     capsys.readouterr()
-    code = main(["import", "engram", "--db", str(engram_db), "--dry-run", "--json"])
+    code = main(["import", "legacy", "--db", str(legacy_db), "--dry-run", "--json"])
     report = json.loads(capsys.readouterr().out)
     assert code == 0 and report["dry_run"] is True and report["memories"] == 3

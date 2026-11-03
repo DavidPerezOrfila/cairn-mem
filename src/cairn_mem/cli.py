@@ -199,9 +199,9 @@ def _cmd_session_get(ns) -> int:
 
 
 def _cmd_import(ns) -> int:
-    from cairn_mem.engram import import_engram
+    from cairn_mem.legacy import import_legacy
 
-    report = import_engram(ns.db, dry_run=ns.dry_run)
+    report = import_legacy(ns.db, dry_run=ns.dry_run)
     if ns.json:
         _print_json(report)
         return 0
@@ -287,8 +287,8 @@ def _parser() -> argparse.ArgumentParser:
     session_get.set_defaults(handler=_cmd_session_get)
 
     importer = sub.add_parser("import", help="importa memoria de otra herramienta")
-    importer.add_argument("source", choices=["engram"])
-    importer.add_argument("--db", help="ruta a engram.db")
+    importer.add_argument("source", choices=["legacy"])
+    importer.add_argument("--db", required=True, help="ruta a la base SQLite de origen")
     importer.add_argument("--dry-run", action="store_true")
     importer.add_argument("--json", action="store_true")
     importer.set_defaults(handler=_cmd_import)
