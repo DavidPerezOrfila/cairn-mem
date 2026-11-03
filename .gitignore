@@ -1,4 +1,6 @@
 .venv/
+.env
+.env.*
 build/
 dist/
 __pycache__/
