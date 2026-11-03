@@ -164,7 +164,9 @@ def _cmd_check(ns) -> int:
         row
         for row in Store(str(data_dir())).dump()
         if row["status"] == "active"
-        and is_stale(row["anchor_path"], row["anchor_hash"], project_root)
+        and is_stale(
+            row["anchor_path"], row["anchor_hash"], project_root, max_bytes=float("inf")
+        )
     ]
     if ns.json:
         _print_json(

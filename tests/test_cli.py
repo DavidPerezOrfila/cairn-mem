@@ -250,6 +250,28 @@ def test_check_lists_stale_after_anchor_change(capsys, in_tmp):
     assert json.loads(out)[0]["stale"] is True
 
 
+def test_check_hashes_large_anchors(capsys, in_tmp, monkeypatch):
+    import cairn_mem.anchor as anchor_module
+
+    run(capsys, "init")
+    target = in_tmp / "dump.csv"
+    target.write_text("x" * 64, encoding="utf-8")
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "fact",
+        "--title",
+        "Dump",
+        "--body",
+        "x",
+        "--anchor",
+        "dump.csv",
+    )
+    monkeypatch.setattr(anchor_module, "MAX_HASH_BYTES", 1)
+    assert "sin memorias stale" in run(capsys, "check")[1]
+
+
 def test_personal_scope_is_separate(capsys, in_tmp):
     run(capsys, "init")
     _, out, _ = run(

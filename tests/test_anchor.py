@@ -12,6 +12,16 @@ def test_hash_ignores_crlf(tmp_path):
     assert anchor.file_hash(str(a)) == anchor.file_hash(str(b))
 
 
+def test_large_anchor_is_stale_without_hashing(tmp_path, monkeypatch):
+    big = tmp_path / "dump.csv"
+    big.write_text("x" * 32, encoding="utf-8")
+    digest = anchor.file_hash(big)
+    monkeypatch.setattr(anchor, "MAX_HASH_BYTES", 10)
+    assert anchor.is_stale("dump.csv", digest, str(tmp_path)) is True
+    monkeypatch.setattr(anchor, "MAX_HASH_BYTES", 10_000)
+    assert anchor.is_stale("dump.csv", digest, str(tmp_path)) is False
+
+
 def test_stale_when_changed_or_missing(tmp_path):
     f = tmp_path / "f.py"
     f.write_text("v1\n", encoding="utf-8")
