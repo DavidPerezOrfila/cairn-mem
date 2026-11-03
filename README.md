@@ -58,7 +58,7 @@ pip install -e ".[dev]"
 SQLite with FTS5 ships with CPython on Linux, macOS and Windows. The core has no
 third-party dependencies; the `dev` extra only adds pytest and ruff.
 
-MCP, session summaries, personal scope and the Engram importer ship in 0.2.0.
+MCP, session summaries, personal scope and the legacy importer ship in 0.2.0.
 `uv tool install cairn-mem` (or `pipx install cairn-mem`) gets the latest release.
 
 ## Quickstart
@@ -105,16 +105,17 @@ stdio:
 
 The server keeps the index open, so a tool call takes a few milliseconds instead of
 paying Python startup on every request. `save` and `search` accept
-`"scope": "personal"`.
+`"scope": "personal"`. `context` returns `MEMORY.md` plus the last session recap,
+so a new session starts where the previous one stopped.
 
-### Migrating from Engram
+### Migrating from another memory store
 
 ```bash
-cairn import engram --dry-run     # counts without writing
-cairn import engram               # project rows to .cairn/, global rows to ~/.cairn
+cairn import legacy --db <path> --dry-run   # counts without writing
+cairn import legacy --db <path>             # project rows to .cairn/, global rows to ~/.cairn
 ```
 
-Running it again is a no-op: ids are derived from the Engram observation id.
+Running it again is a no-op: ids are derived from the source observation id.
 
 ### Any other harness
 
@@ -188,7 +189,7 @@ consistent.
 | `cairn render` | Regenerate and print `MEMORY.md` |
 | `cairn rebuild` | Rebuild the index from `events.jsonl` |
 | `cairn session save\|list\|get [--personal]` | Session recaps, separate from curated memory |
-| `cairn import engram [--dry-run]` | Migrate observations from Engram's database |
+| `cairn import legacy --db <path> [--dry-run]` | Migrate observations from another SQLite store |
 | `cairn mcp` | Serve MCP over stdio |
 
 `--json` is available on `save`, `search`, `get`, `check`, `session` and `import` for

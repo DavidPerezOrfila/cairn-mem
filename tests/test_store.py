@@ -256,6 +256,42 @@ def test_consecutive_saves_do_not_rebuild(store, monkeypatch):
     assert len(store.dump()) == 2
 
 
+def test_long_lived_store_sees_external_append_on_read(root):
+    """El Store del MCP vive horas: una lectura no debe servir datos viejos."""
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    external = {
+        "op": "save",
+        "id": "cccccccccccc",
+        "ts": 2,
+        "kind": "fact",
+        "title": "remota",
+        "body": "b",
+    }
+    with open(f"{root}/events.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(external, ensure_ascii=False) + "\n")
+    assert s.get("cccccccccccc")["title"] == "remota"
+    assert s.search("remota")[0]["id"] == "cccccccccccc"
+
+
+def test_long_lived_store_sees_external_archive_on_read(root):
+    s = Store(root)
+    mid = s.save(kind="fact", title="local", body="a")
+    with open(f"{root}/events.jsonl", "a", encoding="utf-8") as f:
+        f.write(
+            json.dumps({"op": "archive", "id": mid, "ts": 9_999_999_999_999_999_999})
+            + "\n"
+        )
+    assert s.get(mid)["status"] == "archived"
+    assert s.search("local") == []
+
+
+def test_reads_do_not_rebuild_when_nothing_changed(store, monkeypatch):
+    mid = store.save(kind="fact", title="x", body="y")
+    monkeypatch.setattr(store, "rebuild", lambda: pytest.fail("rebuild inesperado"))
+    assert store.get(mid) and store.search("x") and store.active_ordered()
+
+
 def test_l0_regenerated_after_archive_and_rebuild(store, root):
     mid = store.save(kind="fact", title="visible", body="b")
     memory = Path(root) / "MEMORY.md"

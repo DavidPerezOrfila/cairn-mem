@@ -48,7 +48,8 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 - Evento: `{"op":"session","id":"…","ts":…,"summary":"…"}`. Sin límite de 500 caracteres.
 - No entran en `events.jsonl`, ni en FTS, ni en L0: son continuidad, no memoria curada.
 - Lectura: replay en memoria (son pocos); tolera una última línea rasgada.
-- Comandos: `cairn session save|list|get` (con `--personal` para el scope personal). MCP expone solo `session` (guardar).
+- Comandos: `cairn session save|list|get` (con `--personal` para el scope personal). MCP expone solo `session` (guardar). La tool `context` devuelve el L0 y, tras él, el último resumen (máx. 4000 caracteres) para que la sesión nueva arranque sabiendo dónde se quedó la anterior.
+- `Sessions.save` pasa por el mismo `reject_secrets` que `Store.save`.
 
 ## Scope personal (M7)
 - Directorio: `CAIRN_HOME` o `~/.cairn`; `CAIRN_DIR` sigue mandando en el proyecto.
@@ -56,14 +57,14 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 - MCP: `scope` opcional `project|personal` en `save` y `search`.
 - El L0 sigue siendo solo del proyecto: la memoria personal se recupera por búsqueda.
 
-## Importador de Engram (M8)
-- `cairn import engram [--db RUTA] [--dry-run]` lee `~/.engram/engram.db` en solo lectura.
+## Importador legacy (M8)
+- `cairn import legacy --db RUTA [--dry-run]` lee una base SQLite ajena en solo lectura.
 - `type` → `kind`: decision/architecture/config → decision; pattern → convention;
   discovery/bugfix → gotcha; el resto → fact. `session_summary` → `sessions.jsonl`.
 - Contenido: `What` → `body` (máx. 500), `Why/Where/Learned` → `why`.
 - `project` → `.cairn/` del repo que marca `capture_project_provenance`;
   `global/personal` → scope personal. Borradas y superseded se omiten.
-- Id determinista `sha1("engram:<id>")[:12]`: reimportar no duplica.
+- Id determinista a partir del id de origen y una sal fija: reimportar no duplica.
 
 ## Lectura
 | Nivel | Qué | Tamaño |
@@ -84,10 +85,12 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 
 ## MCP (v0.2)
 - Transporte **stdio con NDJSON** (JSON-RPC 2.0), stdlib pura: sin SDK, sin puerto, sin Go.
-- `cairn mcp` sirve 4 tools: `save`, `search`, `get`, `context`. El resto (mantenimiento)
-  se queda solo en CLI para no pagar sus esquemas en cada turno del modelo.
+- `cairn mcp` sirve 5 tools: `save`, `search`, `get`, `context`, `session`. El resto
+  (mantenimiento) se queda solo en CLI para no pagar sus esquemas en cada turno del modelo.
+  `context` inyecta como máximo ~7000 caracteres: L0 (≤ 3000) + último resumen (≤ 4000).
 - El proceso cachea un único `Store`: mientras vive es el único escritor y no paga
-  arranque de Python por llamada (search p95 4 ms vs 304 ms de la CLI).
+  arranque de Python por llamada (search p95 4 ms vs 304 ms de la CLI). Cada lectura
+  compara la huella del JSONL y reaplica si cambió por fuera (`git pull`, `cairn` CLI).
 - stdout es solo protocolo; diagnóstico por stderr. Lectura bloqueante y salida limpia
   al cerrar el pipe (sin señales, portable a Windows/macOS/Linux).
 - Errores de tool van como `isError: true` con texto; errores de protocolo como JSON-RPC.

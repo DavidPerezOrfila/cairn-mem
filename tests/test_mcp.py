@@ -156,6 +156,30 @@ def test_context_returns_l0():
     assert "Usar FTS5" in body
 
 
+def test_context_includes_last_session_without_touching_l0(in_tmp):
+    server = Server()
+    call(server, "save", kind="decision", title="Usar FTS5", body="bm25")
+    call(server, "session", summary="## Goal\nCerrar M9")
+    body = text(call(server, "context"))
+    assert "Usar FTS5" in body and "Cerrar M9" in body
+    memory = (in_tmp / ".cairn" / "MEMORY.md").read_text(encoding="utf-8")
+    assert "Cerrar M9" not in memory
+
+
+def test_context_sees_personal_session():
+    server = Server()
+    call(server, "save", kind="decision", title="Usar FTS5", body="bm25")
+    call(server, "session", summary="recap global", scope="personal")
+    assert "recap global" in text(call(server, "context"))
+
+
+def test_context_truncates_long_session_summary():
+    server = Server()
+    call(server, "session", summary="x" * 9000)
+    body = text(call(server, "context"))
+    assert "… (recortado)" in body and len(body) < 9000
+
+
 def test_tool_errors_are_structured():
     server = Server()
     response = call(server, "save", kind="fact", title="t", body="password = hunter2")

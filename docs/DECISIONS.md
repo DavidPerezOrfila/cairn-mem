@@ -28,8 +28,12 @@
 | 2026-11-02 | `_known_size` se actualiza tras `save`/`archive` | Un `Store` de vida larga (MCP) reconstruía la DB en cada escritura: save p95 pasó de 3,4 s a 37 ms |
 | 2026-11-02 | Ancla confinada al proyecto con `Path.relative_to` | `os.path.relpath` no falla con `../` dentro de la misma unidad: el ancla podía salir del repo y filtrar rutas |
 | 2026-11-03 | Sesiones en `sessions.jsonl`, no en `events.jsonl` | Un resumen de sesión es continuidad (2–5k car.), no memoria curada; si entrara, rompería el límite de 500 y el L0 |
-| 2026-11-03 | Scope personal en `CAIRN_HOME` o `~/.cairn` | Engram guarda conocimiento transversal ahí; el L0 del proyecto no lo mezcla y `search --personal` lo consulta aparte |
-| 2026-11-03 | Import de Engram con id `sha1("engram:<id>")[:12]` | Reimportar no duplica y el orden se conserva con el `ts` original de Engram |
+| 2026-11-03 | Scope personal en `CAIRN_HOME` o `~/.cairn` | Hay conocimiento transversal que vale en cualquier repo; el L0 del proyecto no lo mezcla y `search --personal` lo consulta aparte |
+| 2026-11-03 | Import legacy con id derivado del id de origen y sal fija | Reimportar no duplica y el orden se conserva con el `ts` original |
 | 2026-11-03 | Import: `What` → `body`, resto → `why`; `global/personal` → scope personal | Respeta el límite de 500 sin partir memorias; el detalle queda buscable y la ubicación no mezcla repos |
 | 2026-11-03 | `append_jsonl` compartido por Store y Sessions | El lock de Windows y el `O_BINARY` deben ser los mismos en ambos JSONL; duplicarlo invitaba a divergir |
 | 2026-11-03 | `data_dir` excluye `~/.cairn` y `CAIRN_HOME` de la búsqueda hacia arriba | Con el scope personal en `~/.cairn`, cualquier cwd bajo el home lo encontraba como raíz de proyecto y `cairn search` leía la memoria personal sin avisar |
+| 2026-11-03 | Las sesiones pasan por `reject_secrets` | `events.jsonl` ya rechazaba secretos, pero `sessions.jsonl` los aceptaba: un resumen con un token acababa en disco sin aviso |
+| 2026-11-03 | La tool MCP `context` añade el último resumen de sesión (recortado a 4000 car.) | `session` era write-only por MCP: el agente guardaba al cerrar y no recuperaba nada al empezar. `MEMORY.md` sigue siendo solo memoria curada |
+| 2026-11-03 | `Store` reaplica el JSONL en las lecturas si la huella cambió | El `Store` del MCP vive horas: tras un `git pull` o un `save` desde la CLI, `search`/`get`/`context` servían datos viejos |
+| 2026-11-03 | El importador se llama `legacy` (módulo, subcomando y docs) | La herramienta que sustituye no debe aparecer en el repo remoto; el id conserva la sal antigua para no duplicar lo ya importado |

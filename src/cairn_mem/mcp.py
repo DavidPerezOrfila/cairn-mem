@@ -21,6 +21,7 @@ INVALID_REQUEST = -32600
 METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
+LAST_SESSION_CHARS = 4000
 
 TOOLS = [
     {
@@ -69,7 +70,9 @@ TOOLS = [
     },
     {
         "name": "context",
-        "description": "Memoria del proyecto (L0) para cargar al empezar.",
+        "description": (
+            "Memoria del proyecto (L0) y el último resumen de sesión, para cargar al empezar."
+        ),
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
@@ -233,8 +236,24 @@ def _get(server, args):
     return json.dumps(memory, ensure_ascii=False)
 
 
+def _latest_session():
+    """La sesión más reciente del proyecto o del scope personal (la que marque ts)."""
+    records = []
+    for root in (data_dir(), personal_dir()):
+        if root.exists():
+            records.extend(Sessions(str(root)).all(limit=1))
+    return max(records, key=lambda record: record.get("ts", 0)) if records else None
+
+
 def _context(server, args):
-    return render_l0(server.store())
+    text = render_l0(server.store())
+    record = _latest_session()
+    if record is None:
+        return text
+    summary = record.get("summary", "")
+    if len(summary) > LAST_SESSION_CHARS:
+        summary = summary[:LAST_SESSION_CHARS] + "\n… (recortado)"
+    return f"{text}\n## Última sesión ({record['id']})\n{summary}\n"
 
 
 def _session(server, args):

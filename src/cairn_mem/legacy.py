@@ -1,4 +1,4 @@
-"""Importador de Engram: SQLite de Engram -> events.jsonl / sessions.jsonl."""
+"""Importador de otra herramienta: SQLite ajena -> events.jsonl / sessions.jsonl."""
 
 import hashlib
 import os
@@ -28,11 +28,14 @@ SECTION = re.compile(
     r"(?m)^\*{0,2}(What|Why|Where|Learned)\*{0,2}\s*:\s*", re.IGNORECASE
 )
 
+# Sal fija: cambiarla duplicaría todo lo importado con 0.2.0.
+ID_SALT = "engram"
 
-def import_engram(db_path=None, dry_run=False) -> dict:
-    db = Path(db_path) if db_path else Path.home() / ".engram" / "engram.db"
+
+def import_legacy(db_path, dry_run=False) -> dict:
+    db = Path(db_path)
     if not db.is_file():
-        raise FileNotFoundError(f"no existe la base de Engram: {db}")
+        raise FileNotFoundError(f"no existe la base de datos: {db}")
     report = {
         "memories": 0,
         "sessions": 0,
@@ -130,7 +133,7 @@ def _belongs(row, root: Path) -> bool:
 
 
 def _id(value) -> str:
-    return hashlib.sha1(f"engram:{value}".encode()).hexdigest()[:12]
+    return hashlib.sha1(f"{ID_SALT}:{value}".encode()).hexdigest()[:12]
 
 
 def _ts(value):
