@@ -78,6 +78,7 @@ class Store:
         except sqlite3.OperationalError:
             pass  # otro Store ya la configuró o lock transitorio
         self._conn.executescript(DDL)
+        self._syncing = False
         version = self._conn.execute("PRAGMA user_version").fetchone()[0]
         if (
             version != SCHEMA_VERSION
@@ -152,6 +153,7 @@ class Store:
     def active_ordered(self, limit: int = 200) -> list[dict]:
         """Activas en orden L0 (kind y ts desc). `limit` acota el trabajo de render:
         200 líneas ya superan el presupuesto de 3000 caracteres."""
+        self._sync()
         priority = " ".join(
             f"WHEN '{kind}' THEN {order}" for kind, order in KIND_PRIORITY.items()
         )
@@ -163,10 +165,12 @@ class Store:
         return [dict(row) for row in rows]
 
     def get(self, id: str):
+        self._sync()
         row = self._conn.execute("SELECT * FROM mem WHERE id = ?", (id,)).fetchone()
         return dict(row) if row else None
 
     def search(self, query: str, limit: int = 5) -> list[dict]:
+        self._sync()
         limit = max(0, limit)
         terms = re.findall(r"\w+", query, re.UNICODE)
         if not terms:
@@ -182,6 +186,7 @@ class Store:
         return rows
 
     def dump(self) -> list[dict]:
+        self._sync()
         rows = self._conn.execute("SELECT * FROM mem ORDER BY ts, id").fetchall()
         return [dict(r) for r in rows]
 
@@ -272,6 +277,19 @@ class Store:
             self._conn.execute(
                 "UPDATE mem SET status = 'archived' WHERE id = ?", (event["id"],)
             )
+
+    def _sync(self) -> None:
+        """El MCP mantiene el Store abierto: reaplica si el JSONL cambió por fuera
+        (git pull, CLI). Sin esto, una lectura serviría datos viejos.
+        `_syncing` corta un rebuild anidado si otro proceso escribe a mitad."""
+        if self._syncing:
+            return
+        if self._fingerprint() != self._stored_fingerprint():
+            self._syncing = True
+            try:
+                self.rebuild()
+            finally:
+                self._syncing = False
 
     def _append(self, event: dict) -> tuple[tuple[str, str], bool]:
         before, written = append_jsonl(self.events, event)
