@@ -25,7 +25,7 @@ python bench/bench_mcp.py --reps 20                 # latencia de tool calls MCP
 - Escritura: `O_APPEND` + **una sola** `os.write` por evento; lock en proceso (`jsonl._LOCK`) porque el `O_APPEND` de Windows no es atómico entre hilos.
 - Al abrir la DB se compara `(size, mtime_ns)` del JSONL y `PRAGMA user_version`; si difieren → rebuild automático (cubre `git pull`).
 - `stale` se calcula al leer; no se persiste ni hay evento de verificación.
-- L0 (`.cairn/MEMORY.md`) ≤ 3000 caracteres; orden `convention > decision > gotcha > fact` y `ts` desc; salida determinista (caché de prompt).
+- L0 (`.cairn/MEMORY.md`) ≤ 3000 caracteres; round-robin por kind (en cada vuelta `convention > decision > gotcha > fact`) y `ts` desc dentro de cada kind; salida determinista (caché de prompt).
 - Raíz del proyecto: busca `.cairn/` hacia arriba desde el cwd o usa `CAIRN_DIR`, excluyendo `~/.cairn` y `CAIRN_HOME` (scope personal). Scope personal: `CAIRN_HOME` o `~/.cairn`.
 
 ## Reglas no obvias

@@ -7,6 +7,7 @@ import secrets
 import sqlite3
 import sys
 import time
+from itertools import zip_longest
 from pathlib import Path
 
 from cairn_mem.anchor import is_stale
@@ -48,6 +49,8 @@ CREATE TABLE IF NOT EXISTS mem (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_mem_topic_active
   ON mem(topic_key) WHERE status = 'active' AND topic_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_mem_active_kind_ts
+  ON mem(kind, ts DESC, id) WHERE status = 'active';
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(
   title, body, why, content='mem', content_rowid='rowid',
@@ -171,18 +174,26 @@ class Store:
     # --- lectura ---
 
     def active_ordered(self, limit: int = 200) -> list[dict]:
-        """Activas en orden L0 (kind y ts desc). `limit` acota el trabajo de render:
-        200 líneas ya superan el presupuesto de 3000 caracteres."""
+        """Activas en round-robin por kind (prioridad dentro de cada vuelta) y
+        ts desc dentro de cada kind. Así un kind con muchas entradas no expulsa
+        a los demás del L0. `limit` acota las filas devueltas: 200 líneas ya
+        superan el presupuesto de 3000 caracteres."""
         self._sync()
-        priority = " ".join(
-            f"WHEN '{kind}' THEN {order}" for kind, order in KIND_PRIORITY.items()
-        )
-        rows = self._conn.execute(
-            f"""SELECT * FROM mem WHERE status = 'active'
-                ORDER BY CASE kind {priority} END, ts DESC, id LIMIT ?""",
-            (limit,),
-        ).fetchall()
-        return [dict(row) for row in rows]
+        queues = [
+            self._conn.execute(
+                "SELECT * FROM mem WHERE status = 'active' AND kind = ? "
+                "ORDER BY ts DESC, id LIMIT ?",
+                (kind, limit),
+            ).fetchall()
+            for kind in KIND_PRIORITY
+        ]
+        rows = [
+            dict(row)
+            for group in zip_longest(*queues)
+            for row in group
+            if row is not None
+        ]
+        return rows[:limit]
 
     def get(self, id: str):
         self._sync()
