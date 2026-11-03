@@ -159,7 +159,7 @@ desde PyPI verificada con `init`, `save`, `session`, `search` e `import --dry-ru
 `save, search, get, context, session` con `context` describiendo el resumen de sesión.
 (medido 2026-11-03: 94 passed; lectura sin cambios no dispara rebuild)
 
-**Publicación 0.2.1:** pendiente (versión subida en `pyproject.toml`; falta tag y PyPI).
+**Publicación 0.2.1:** 2026-11-03 en PyPI (wheel + sdist, `uv build` + `uv publish`).
 
 ## 4. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
