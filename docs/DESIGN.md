@@ -14,13 +14,15 @@ Memoria persistente para agentes de código: **eficaz, barata en latencia/coste,
 ## Layout
 ```
 .cairn/
-  events.jsonl   # VERDAD. Append-only. UTF-8 sin BOM.
-  cairn.db       # derivado (gitignored)
-  MEMORY.md      # L0 derivado (gitignored), generado por `cairn render`
-  .gitignore     # lo crea `cairn init`
+  events.jsonl    # VERDAD. Append-only. UTF-8 sin BOM.
+  sessions.jsonl  # resúmenes de sesión (append-only, local)
+  cairn.db        # derivado (gitignored)
+  MEMORY.md       # L0 derivado (gitignored), generado por `cairn render`
+  .gitignore      # lo crea `cairn init`
 ```
 - `cairn init` → local-only por defecto (también ignora `events.jsonl`). `cairn init --share` versiona `events.jsonl`.
-- Raíz del proyecto: se busca `.cairn/` hacia arriba desde el cwd (como git) o `CAIRN_DIR`.
+- Raíz del proyecto: se busca `.cairn/` hacia arriba desde el cwd (como git) o `CAIRN_DIR`. `~/.cairn` y `CAIRN_HOME` se excluyen de esa búsqueda: son el scope personal.
+- Scope personal: `CAIRN_HOME` o `~/.cairn`, con el mismo layout; su `MEMORY.md` no se mezcla con el L0 del proyecto.
 
 ## Eventos (solo 2 operaciones)
 ```json
@@ -40,6 +42,28 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 - **Rechazar** (no redactar) si el texto parece contener un secreto: claves cloud (`AKIA…`), `-----BEGIN … PRIVATE KEY-----`, JWT (`eyJ…`), `password|secret|token|api_key = valor`, URLs con `://user:pass@`. Mensaje claro: "reescribe sin el secreto".
 - `body` > 500 caracteres → error pidiendo dividir en dos memorias.
 - Scrubbing desde M1, **antes** de que nada llegue al JSONL.
+
+## Sesiones (M6)
+- Resúmenes de sesión en `.cairn/sessions.jsonl`, append-only y local (gitignored).
+- Evento: `{"op":"session","id":"…","ts":…,"summary":"…"}`. Sin límite de 500 caracteres.
+- No entran en `events.jsonl`, ni en FTS, ni en L0: son continuidad, no memoria curada.
+- Lectura: replay en memoria (son pocos); tolera una última línea rasgada.
+- Comandos: `cairn session save|list|get` (con `--personal` para el scope personal). MCP expone solo `session` (guardar).
+
+## Scope personal (M7)
+- Directorio: `CAIRN_HOME` o `~/.cairn`; `CAIRN_DIR` sigue mandando en el proyecto.
+- `save/search --personal` usan ese `Store`; `get` busca en proyecto y luego en personal.
+- MCP: `scope` opcional `project|personal` en `save` y `search`.
+- El L0 sigue siendo solo del proyecto: la memoria personal se recupera por búsqueda.
+
+## Importador de Engram (M8)
+- `cairn import engram [--db RUTA] [--dry-run]` lee `~/.engram/engram.db` en solo lectura.
+- `type` → `kind`: decision/architecture/config → decision; pattern → convention;
+  discovery/bugfix → gotcha; el resto → fact. `session_summary` → `sessions.jsonl`.
+- Contenido: `What` → `body` (máx. 500), `Why/Where/Learned` → `why`.
+- `project` → `.cairn/` del repo que marca `capture_project_provenance`;
+  `global/personal` → scope personal. Borradas y superseded se omiten.
+- Id determinista `sha1("engram:<id>")[:12]`: reimportar no duplica.
 
 ## Lectura
 | Nivel | Qué | Tamaño |
@@ -69,7 +93,7 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 - Errores de tool van como `isError: true` con texto; errores de protocolo como JSON-RPC.
 
 ## Comandos
-`init · save · search · get · archive · check · render · rebuild · mcp`
+`init · save · search · get · archive · check · render · rebuild · session · import · mcp`
 
 ## Fuera de v0.1 (backlog, solo con evidencia)
-hits/ranking por uso · MCP · compactación/decay · scope global · sqlite-vec · captura pasiva por git hook · LLM `--propose`.
+hits/ranking por uso · compactación/decay · sqlite-vec · captura pasiva por git hook · LLM `--propose`.

@@ -12,7 +12,9 @@ the auth flow works that way and which migration is risky.
 
 Cairn keeps that context in `.cairn/events.jsonl`, inside the repository. Each entry
 is a short decision, convention, gotcha or fact, with the reason behind it. A new
-session loads a compact summary and searches the rest when it needs it.
+session loads a compact summary and searches the rest when it needs it. Long session
+summaries live in `.cairn/sessions.jsonl`; knowledge that applies to every repo can go
+to a personal store in `~/.cairn`.
 
 ```console
 $ cairn save --kind decision --topic storage/fts5 \
@@ -56,8 +58,9 @@ pip install -e ".[dev]"
 SQLite with FTS5 ships with CPython on Linux, macOS and Windows. The core has no
 third-party dependencies; the `dev` extra only adds pytest and ruff.
 
-MCP support lands in 0.2.0. The latest PyPI release is 0.1.0, which provides the CLI,
-so install from `main` if you want the MCP server now.
+MCP, session summaries, personal scope and the Engram importer ship in 0.2.0. The
+latest PyPI release is 0.1.0, which provides the CLI; install from `main` to use the
+new features now.
 
 ## Quickstart
 
@@ -84,11 +87,14 @@ Find it again:
 cairn search "oauth redirect"     # id, kind, title, snippet, stale flag
 cairn get a1b2c3d4e5f6            # full memory
 cairn check                       # memories whose anchor file changed
+cairn session save --summary "## Goal ..."   # long recap, kept out of MEMORY.md
+cairn search "commit style" --personal       # knowledge shared by every repo
 ```
 
 ### MCP
 
-One process, four tools (`save`, `search`, `get`, `context`), JSON-RPC over stdio:
+One process, five tools (`save`, `search`, `get`, `context`, `session`), JSON-RPC over
+stdio:
 
 ```json
 {
@@ -99,7 +105,17 @@ One process, four tools (`save`, `search`, `get`, `context`), JSON-RPC over stdi
 ```
 
 The server keeps the index open, so a tool call takes a few milliseconds instead of
-paying Python startup on every request.
+paying Python startup on every request. `save` and `search` accept
+`"scope": "personal"`.
+
+### Migrating from Engram
+
+```bash
+cairn import engram --dry-run     # counts without writing
+cairn import engram               # project rows to .cairn/, global rows to ~/.cairn
+```
+
+Running it again is a no-op: ids are derived from the Engram observation id.
 
 ### Any other harness
 
@@ -111,6 +127,7 @@ searches before writing, and saves only what is worth keeping.
 
 ```text
 agent ── MCP or shell ──> cairn ──> .cairn/events.jsonl   (truth, append-only)
+                                    ├── .cairn/sessions.jsonl (long recaps)
                                     ├── cairn.db          (derived, FTS5)
                                     └── MEMORY.md         (L0, <= 3000 chars)
 ```
@@ -124,7 +141,8 @@ is hidden. Saving with the same `topic` replaces the previous entry, so the list
 current.
 
 Only `events.jsonl` is the source of truth. The database and `MEMORY.md` are derived;
-delete either one and the next command rebuilds it.
+delete either one and the next command rebuilds it. `sessions.jsonl` is append-only
+and local: session recaps are continuity, not curated memory.
 
 ## What it stores
 
@@ -170,9 +188,13 @@ consistent.
 | `cairn check` | List memories whose anchor changed |
 | `cairn render` | Regenerate and print `MEMORY.md` |
 | `cairn rebuild` | Rebuild the index from `events.jsonl` |
+| `cairn session save\|list\|get [--personal]` | Session recaps, separate from curated memory |
+| `cairn import engram [--dry-run]` | Migrate observations from Engram's database |
 | `cairn mcp` | Serve MCP over stdio |
 
-`--json` is available on `save`, `search`, `get` and `check` for agent consumption.
+`--json` is available on `save`, `search`, `get`, `check`, `session` and `import` for
+agent consumption. `save`, `search` and `archive` accept `--personal`; `get` checks
+both stores.
 
 ## Design choices
 

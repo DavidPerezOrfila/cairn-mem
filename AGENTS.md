@@ -1,7 +1,7 @@
 # AGENTS.md — reglas para construir cairn-mem
 
 ## Estado y alcance
-- **M5 cerrado.** v0.1.0 publicada en PyPI; MCP y CI entran en la 0.2.0. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py` y `mcp.py` implementados; `tests/` cubre la CLI, el store, L0, anclas, MCP y el golden set.
+- **M6–M8 cerrados.** v0.1.0 publicada en PyPI; 0.2.0 (MCP, sesiones, scope personal e importador) pendiente de publicar. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` y `engram.py` implementados; `tests/` cubre la CLI, el store, L0, anclas, MCP, sesiones, importación y el golden set.
 - Implementa **un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
 - Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
 - Lo siguiente sale del **backlog** y solo con una medición que lo justifique.
@@ -19,22 +19,24 @@ python scripts/export.py <carpeta_vacia>           # export multiplataforma, sol
 - Python 3.10+, **solo stdlib** en el núcleo. `dev` solo aporta pytest y ruff.
 
 ## Arquitectura
-- `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` y `cairn-mem`, texto y `--json`), `store.py` (núcleo), `anchor.py` (hash/stale), `render.py` (L0), `paths.py` (raíz `.cairn/`) y `mcp.py` (stdio JSON-RPC).
-- **Verdad:** `.cairn/events.jsonl` (append-only, 2 ops: `save`, `archive`). `cairn.db` y `MEMORY.md` son derivados y regenerables: no los edites a mano.
+- `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` y `cairn-mem`, texto y `--json`), `store.py` (núcleo), `anchor.py` (hash/stale), `render.py` (L0), `paths.py` (raíz `.cairn/` y scope personal), `mcp.py` (stdio JSON-RPC), `sessions.py` (resúmenes), `jsonl.py` (append compartido) y `engram.py` (importador).
+- **Verdad:** `.cairn/events.jsonl` (append-only, 2 ops: `save`, `archive`). `cairn.db` y `MEMORY.md` son derivados y regenerables: no los edites a mano. `sessions.jsonl` es append-only aparte y no es memoria curada.
 - `Store(root)` debe crear `.cairn/` y la DB si no existen: los tests lo instancian sin `cairn init`.
 - IDs de 12 hex (`secrets.token_hex(6)`) + `ts` en `time_ns`; orden de aplicación `(ts, nº de línea)`. `save` con `topic_key` marca `superseded` el anterior **antes** de insertar.
-- Escritura: `O_APPEND` + **una sola** `os.write` por evento, sin locks.
+- Escritura: `O_APPEND` + **una sola** `os.write` por evento; lock en proceso (`jsonl._LOCK`) porque el `O_APPEND` de Windows no es atómico entre hilos.
 - Al abrir la DB se compara `(size, mtime_ns)` del JSONL y `PRAGMA user_version`; si difieren → rebuild automático (cubre `git pull`).
 - `stale` se calcula al leer; no se persiste ni hay evento de verificación.
 - L0 (`.cairn/MEMORY.md`) ≤ 3000 caracteres; orden `convention > decision > gotcha > fact` y `ts` desc; salida determinista (caché de prompt).
-- Raíz del proyecto: busca `.cairn/` hacia arriba desde el cwd o usa `CAIRN_DIR`.
+- Raíz del proyecto: busca `.cairn/` hacia arriba desde el cwd o usa `CAIRN_DIR`, excluyendo `~/.cairn` y `CAIRN_HOME` (scope personal). Scope personal: `CAIRN_HOME` o `~/.cairn`.
 
 ## Reglas no obvias
 - **Windows primero:** todo fichero con `encoding="utf-8"` y JSON con `ensure_ascii=False`; rutas de ancla POSIX relativas a la raíz; hash sha1 con CRLF→LF (si no, falsos stale entre SO). `os.open` del JSONL necesita `O_BINARY` (si no, Windows traduce `\n` a `\r\n`). Commits en LF: el repo no tiene `.gitattributes` y `core.autocrlf=true`.
 - **FTS5:** nunca pasar texto crudo a `MATCH`; sanea (`\w+` → `"t"*`, prefijo), usa AND y cae a OR si no hay resultados. Crudo falla con `-`, `:`, `"`. Ranking `bm25(mem_fts, 5.0, 1.0, 0.5)`.
 - **Seguridad:** rechaza (no redactes) secretos antes de escribir: claves cloud, `BEGIN … PRIVATE KEY`, JWT `eyJ…`, `password|secret|token|api_key = valor`, URLs `://user:pass@`. `body` > 500 caracteres → error.
 - Imports mínimos al arranque: SLO de CLI end-to-end (p95 `search` < 350 ms, `save` < 500 ms, arranque incluido) y de tool MCP en proceso (< 50 ms).
-- **MCP:** stdout solo protocolo (NDJSON en binario, `\n`); logs a stderr; sin asyncio ni señales; el proceso cachea un `Store` y es el único escritor mientras vive.
+- **MCP:** stdout solo protocolo (NDJSON en binario, `\n`); logs a stderr; sin asyncio ni señales; el proceso cachea un `Store` por scope y es el único escritor mientras vive.
+- **Sesiones:** `.cairn/sessions.jsonl` es local y no entra en FTS ni L0; un resumen puede superar 500 caracteres.
+- **Importador:** idempotente por `sha1("engram:<id>")[:12]`; `What` → `body` (≤500) y el resto → `why`; `global/personal` va al scope personal y no al repo actual.
 - Sin LLM en ninguna ruta. Nada del backlog (`hits`, decay, sqlite-vec, git hook pasivo) sin una medición que lo justifique.
 - Cambio de diseño → una fila en `docs/DECISIONS.md` (fecha + decisión + motivo).
 - Dogfooding: en cuanto M1 funcione, guarda las decisiones del proyecto con `cairn`.

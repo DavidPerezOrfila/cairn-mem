@@ -27,3 +27,9 @@
 | 2026-11-02 | CI con matriz ubuntu/macos/windows × 3.10/3.14 | "Windows primero" se verificaba a mano; el framing stdio y las rutas necesitan prueba real por SO |
 | 2026-11-02 | `_known_size` se actualiza tras `save`/`archive` | Un `Store` de vida larga (MCP) reconstruía la DB en cada escritura: save p95 pasó de 3,4 s a 37 ms |
 | 2026-11-02 | Ancla confinada al proyecto con `Path.relative_to` | `os.path.relpath` no falla con `../` dentro de la misma unidad: el ancla podía salir del repo y filtrar rutas |
+| 2026-11-03 | Sesiones en `sessions.jsonl`, no en `events.jsonl` | Un resumen de sesión es continuidad (2–5k car.), no memoria curada; si entrara, rompería el límite de 500 y el L0 |
+| 2026-11-03 | Scope personal en `CAIRN_HOME` o `~/.cairn` | Engram guarda conocimiento transversal ahí; el L0 del proyecto no lo mezcla y `search --personal` lo consulta aparte |
+| 2026-11-03 | Import de Engram con id `sha1("engram:<id>")[:12]` | Reimportar no duplica y el orden se conserva con el `ts` original de Engram |
+| 2026-11-03 | Import: `What` → `body`, resto → `why`; `global/personal` → scope personal | Respeta el límite de 500 sin partir memorias; el detalle queda buscable y la ubicación no mezcla repos |
+| 2026-11-03 | `append_jsonl` compartido por Store y Sessions | El lock de Windows y el `O_BINARY` deben ser los mismos en ambos JSONL; duplicarlo invitaba a divergir |
+| 2026-11-03 | `data_dir` excluye `~/.cairn` y `CAIRN_HOME` de la búsqueda hacia arriba | Con el scope personal en `~/.cairn`, cualquier cwd bajo el home lo encontraba como raíz de proyecto y `cairn search` leía la memoria personal sin avisar |
