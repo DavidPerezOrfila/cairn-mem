@@ -5,11 +5,11 @@ import os
 import re
 import secrets
 import sqlite3
-import threading
 import time
 from pathlib import Path
 
 from cairn_mem.anchor import is_stale
+from cairn_mem.jsonl import append_jsonl
 from cairn_mem.render import KIND_PRIORITY, render_l0
 
 SCHEMA_VERSION = 1
@@ -25,11 +25,6 @@ SECRET_PATTERNS = (
 )
 
 MAX_TS = 2**63 - 1  # SQLite INTEGER es signed 64-bit
-
-# El O_APPEND de Windows no es atómico entre hilos: este lock evita que dos
-# escrituras se pisen dentro del proceso. Entre procesos el diseño asume un
-# solo escritor por proyecto.
-_APPEND_LOCK = threading.Lock()
 
 DDL = """
 CREATE TABLE IF NOT EXISTS mem (
@@ -103,6 +98,7 @@ class Store:
         anchor_path=None,
         anchor_hash=None,
         id=None,
+        ts=None,
     ) -> str:
         if kind not in KINDS:
             raise ValueError(f"kind inválido: {kind}")
@@ -115,7 +111,7 @@ class Store:
         event = {
             "op": "save",
             "id": mid,
-            "ts": time.time_ns(),
+            "ts": time.time_ns() if ts is None else int(ts),
             "kind": kind,
             "title": title,
             "body": body,
@@ -278,18 +274,9 @@ class Store:
             )
 
     def _append(self, event: dict) -> tuple[tuple[str, str], bool]:
-        line = json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
-        data = line.encode("utf-8")
-        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0)
-        with _APPEND_LOCK:
-            before = self.events.stat().st_size if self.events.exists() else 0
-            fd = os.open(self.events, flags, 0o644)
-            try:
-                os.write(fd, data)
-            finally:
-                os.close(fd)
-            stat = self.events.stat()
-        unseen = before != self._known_size or stat.st_size != before + len(data)
+        before, written = append_jsonl(self.events, event)
+        stat = self.events.stat()
+        unseen = before != self._known_size or stat.st_size != before + written
         return (str(stat.st_size), str(stat.st_mtime_ns)), unseen
 
     @staticmethod

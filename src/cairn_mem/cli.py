@@ -5,13 +5,24 @@ import json
 import os
 import sqlite3
 import sys
+import time
 from pathlib import Path
 
 from cairn_mem.anchor import is_stale, resolve_anchor
-from cairn_mem.paths import data_dir
+from cairn_mem.paths import data_dir, personal_dir
+from cairn_mem.sessions import Sessions
 from cairn_mem.store import KINDS, Store
 
-GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md")
+GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", "sessions.jsonl")
+
+
+def _store(ns) -> Store:
+    root = personal_dir() if getattr(ns, "personal", False) else data_dir()
+    return Store(str(root))
+
+
+def _date(ts) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(int(ts) / 1e9))
 
 
 def _print_json(value) -> None:
@@ -35,8 +46,9 @@ def _cmd_init(ns) -> int:
 def _cmd_save(ns) -> int:
     anchor_path = anchor_hash = None
     if ns.anchor:
-        anchor_path, anchor_hash = resolve_anchor(ns.anchor, data_dir().parent)
-    mid = Store(str(data_dir())).save(
+        root = personal_dir() if ns.personal else data_dir()
+        anchor_path, anchor_hash = resolve_anchor(ns.anchor, root.parent)
+    mid = _store(ns).save(
         kind=ns.kind,
         title=ns.title,
         body=ns.body,
@@ -51,7 +63,7 @@ def _cmd_save(ns) -> int:
 
 
 def _cmd_search(ns) -> int:
-    results = Store(str(data_dir())).search(ns.query, limit=ns.limit)
+    results = _store(ns).search(ns.query, limit=ns.limit)
     if ns.json:
         _print_json(results)
     elif not results:
@@ -65,8 +77,24 @@ def _cmd_search(ns) -> int:
 
 
 def _cmd_get(ns) -> int:
-    memory = Store(str(data_dir())).get(ns.id)
+    stores = []
+    try:
+        stores.append(Store(str(data_dir())))
+    except FileNotFoundError:
+        pass
+    home = personal_dir()
+    if home.exists():
+        stores.append(Store(str(home)))
+    memory = None
+    for store in stores:
+        memory = store.get(ns.id)
+        if memory is not None:
+            break
     if memory is None:
+        if not stores:
+            raise FileNotFoundError(
+                "no se encontró .cairn/ en este árbol; ejecuta 'cairn init'"
+            )
         raise ValueError(f"no existe la memoria {ns.id}")
     if ns.json:
         _print_json(memory)
@@ -78,7 +106,7 @@ def _cmd_get(ns) -> int:
 
 
 def _cmd_archive(ns) -> int:
-    store = Store(str(data_dir()))
+    store = _store(ns)
     if store.get(ns.id) is None:
         raise ValueError(f"no existe la memoria {ns.id}")
     store.archive(ns.id)
@@ -126,6 +154,65 @@ def _cmd_check(ns) -> int:
     return 0
 
 
+def _ignore_sessions(root) -> None:
+    """Sesiones locales: los inits antiguos no las ignoraban."""
+    path = Path(root) / ".gitignore"
+    if not path.exists():
+        return
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if "sessions.jsonl" not in lines:
+        path.write_text("\n".join([*lines, "sessions.jsonl"]) + "\n", encoding="utf-8")
+
+
+def _cmd_session_save(ns) -> int:
+    root = personal_dir() if ns.personal else data_dir()
+    _ignore_sessions(root)
+    sid = Sessions(str(root)).save(ns.summary)
+    _print_json({"id": sid}) if ns.json else print(sid)
+    return 0
+
+
+def _cmd_session_list(ns) -> int:
+    root = personal_dir() if ns.personal else data_dir()
+    records = Sessions(str(root)).all(limit=ns.limit)
+    if ns.json:
+        _print_json(records)
+    elif not records:
+        print("sin sesiones")
+    else:
+        for record in records:
+            first = " ".join(record["summary"].split())[:80]
+            print(f"{record['id']}  {_date(record.get('ts', 0))}  {first}")
+    return 0
+
+
+def _cmd_session_get(ns) -> int:
+    root = personal_dir() if ns.personal else data_dir()
+    record = Sessions(str(root)).get(ns.id)
+    if record is None:
+        raise ValueError(f"no existe la sesión {ns.id}")
+    if ns.json:
+        _print_json(record)
+    else:
+        print(record["summary"])
+    return 0
+
+
+def _cmd_import(ns) -> int:
+    from cairn_mem.engram import import_engram
+
+    report = import_engram(ns.db, dry_run=ns.dry_run)
+    if ns.json:
+        _print_json(report)
+        return 0
+    prefix = "se importarían" if ns.dry_run else "importadas"
+    print(
+        f"{prefix} {report['memories']} memorias y {report['sessions']} sesiones "
+        f"({report['skipped']} omitidas, {report['rejected']} rechazadas)"
+    )
+    return 0
+
+
 def _cmd_mcp(ns) -> int:
     from cairn_mem.mcp import serve
 
@@ -150,12 +237,14 @@ def _parser() -> argparse.ArgumentParser:
     save.add_argument("--topic", dest="topic")
     save.add_argument("--anchor")
     save.add_argument("--id")
+    save.add_argument("--personal", action="store_true", help="scope personal")
     save.add_argument("--json", action="store_true")
     save.set_defaults(handler=_cmd_save)
 
     search = sub.add_parser("search", help="busca memorias activas")
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=5)
+    search.add_argument("--personal", action="store_true", help="scope personal")
     search.add_argument("--json", action="store_true")
     search.set_defaults(handler=_cmd_search)
 
@@ -166,6 +255,7 @@ def _parser() -> argparse.ArgumentParser:
 
     archive = sub.add_parser("archive", help="archiva una memoria")
     archive.add_argument("id")
+    archive.add_argument("--personal", action="store_true", help="scope personal")
     archive.set_defaults(handler=_cmd_archive)
 
     rebuild = sub.add_parser("rebuild", help="reconstruye la DB desde events.jsonl")
@@ -177,6 +267,31 @@ def _parser() -> argparse.ArgumentParser:
     check = sub.add_parser("check", help="lista memorias con ancla stale")
     check.add_argument("--json", action="store_true")
     check.set_defaults(handler=_cmd_check)
+
+    session = sub.add_parser("session", help="resúmenes de sesión")
+    session_sub = session.add_subparsers(dest="session_command", required=True)
+    session_save = session_sub.add_parser("save", help="guarda un resumen")
+    session_save.add_argument("--summary", required=True)
+    session_save.add_argument("--personal", action="store_true", help="scope personal")
+    session_save.add_argument("--json", action="store_true")
+    session_save.set_defaults(handler=_cmd_session_save)
+    session_list = session_sub.add_parser("list", help="lista sesiones recientes")
+    session_list.add_argument("--limit", type=int, default=20)
+    session_list.add_argument("--personal", action="store_true", help="scope personal")
+    session_list.add_argument("--json", action="store_true")
+    session_list.set_defaults(handler=_cmd_session_list)
+    session_get = session_sub.add_parser("get", help="muestra un resumen completo")
+    session_get.add_argument("id")
+    session_get.add_argument("--personal", action="store_true", help="scope personal")
+    session_get.add_argument("--json", action="store_true")
+    session_get.set_defaults(handler=_cmd_session_get)
+
+    importer = sub.add_parser("import", help="importa memoria de otra herramienta")
+    importer.add_argument("source", choices=["engram"])
+    importer.add_argument("--db", help="ruta a engram.db")
+    importer.add_argument("--dry-run", action="store_true")
+    importer.add_argument("--json", action="store_true")
+    importer.set_defaults(handler=_cmd_import)
 
     mcp = sub.add_parser("mcp", help="sirve MCP por stdio (JSON-RPC)")
     mcp.set_defaults(handler=_cmd_mcp)
