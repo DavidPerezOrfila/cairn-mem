@@ -116,6 +116,35 @@
 **Aceptación:** tool call p95 < 50 ms (medido 2026-11-02: search 4,0 ms, save 37,4 ms,
 context 18,4 ms con 10k) · 66 tests en verde · `ruff` limpio · las 6 celdas de CI en verde.
 
+### M6 — Sesiones (0.5 día) ✅
+- [x] `sessions.jsonl` append-only en `.cairn/`, separado de la memoria curada
+- [x] `Sessions`: `save/list/get`; reabrir el proceso y recuperar el resumen
+- [x] CLI `cairn session save|list|get` y tool MCP `session`
+- [x] Resumen largo (sin límite de 500 caracteres) sin tocar L0
+
+**Aceptación:** un resumen de ~2k caracteres se guarda y recupera; `MEMORY.md` no cambia ·
+el JSONL tolera una última línea rasgada como `events.jsonl`.
+(medido 2026-11-03: resumen de 5k guardado y recuperado, 84 tests en verde)
+
+### M7 — Scope personal (0.5 día) ✅
+- [x] `paths.personal_dir()`: `CAIRN_HOME` o `~/.cairn`
+- [x] `save/search --personal`; `get` busca en proyecto y personal
+- [x] MCP: `scope` (`project|personal`) en `save` y `search`
+
+**Aceptación:** una memoria personal se recupera desde otro repo y no aparece en el L0 del
+proyecto · el proyecto sigue funcionando sin `CAIRN_HOME`.
+(medido 2026-11-03: `--personal` con `CAIRN_HOME` temporal; el L0 del proyecto no la incluye)
+
+### M8 — Importador de Engram (1 día) ✅
+- [x] `cairn import engram [--db RUTA] [--dry-run]`
+- [x] Mapeo: `What`→`body`, `Why/Where/Learned`→`why`; tipo→`kind`; `session_summary`→sesión
+- [x] `project` → `.cairn/` del repo (por provenance); `global/personal` → `~/.cairn`
+- [x] Idempotente: id derivado de `engram:<id>`; omite borradas y superseded
+
+**Aceptación:** importa las 64 observaciones reales sin duplicados al reejecutar ·
+los secretos se rechazan por fila y se reportan, no abortan el lote.
+(medido 2026-11-03: 23 memorias + 10 sesiones; segunda pasada 0 + 0 con 33 omitidas)
+
 ## 4. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
 - `compact`/decay (si el nº de memorias activas degrada la precisión)

@@ -14,6 +14,7 @@ from cairn_mem.mcp import Server, serve
 def in_tmp(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CAIRN_DIR", raising=False)
+    monkeypatch.setenv("CAIRN_HOME", str(tmp_path / "home"))
     (tmp_path / ".cairn").mkdir()
     (tmp_path / ".cairn" / "events.jsonl").touch()
     return tmp_path
@@ -49,7 +50,59 @@ def test_initialize_and_list_tools():
 
     response = server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {tool["name"] for tool in response["result"]["tools"]}
-    assert names == {"save", "search", "get", "context"}
+    assert names == {"save", "search", "get", "context", "session"}
+
+
+def test_personal_scope_roundtrip(in_tmp):
+    server = Server()
+    memory_id = text(
+        call(
+            server,
+            "save",
+            kind="convention",
+            title="Commits en LF",
+            body="todos los repos",
+            scope="personal",
+        )
+    )
+    assert (in_tmp / "home" / "events.jsonl").exists()
+    assert json.loads(text(call(server, "search", query="commits"))) == []
+    found = json.loads(text(call(server, "search", query="commits", scope="personal")))
+    assert found[0]["id"] == memory_id
+    assert (
+        json.loads(text(call(server, "get", id=memory_id)))["title"] == "Commits en LF"
+    )
+
+
+def test_session_tool_stores_summary(in_tmp):
+    server = Server()
+    sid = text(call(server, "session", summary="## Goal\nCerrar M6"))
+    assert len(sid) == 12
+    raw = (in_tmp / ".cairn" / "sessions.jsonl").read_text(encoding="utf-8")
+    assert "Cerrar M6" in raw
+    assert "Cerrar M6" not in (in_tmp / ".cairn" / "events.jsonl").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_session_tool_personal_scope(in_tmp):
+    server = Server()
+    text(call(server, "session", summary="recap global", scope="personal"))
+    raw = (in_tmp / "home" / "sessions.jsonl").read_text(encoding="utf-8")
+    assert "recap global" in raw
+
+
+def test_get_personal_without_project_init(in_tmp):
+    server = Server()
+    memory_id = text(
+        call(
+            server, "save", kind="fact", title="Compartida", body="x", scope="personal"
+        )
+    )
+    (in_tmp / ".cairn" / "events.jsonl").unlink()
+    (in_tmp / ".cairn").rmdir()
+    memory = json.loads(text(call(server, "get", id=memory_id)))
+    assert memory["title"] == "Compartida"
 
 
 def test_notification_has_no_response():

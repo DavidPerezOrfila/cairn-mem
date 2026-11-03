@@ -9,8 +9,9 @@ import sys
 
 from cairn_mem import __version__
 from cairn_mem.anchor import resolve_anchor
-from cairn_mem.paths import data_dir
+from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.render import render_l0
+from cairn_mem.sessions import Sessions
 from cairn_mem.store import KINDS, Store
 
 PROTOCOL_VERSION = "2025-06-18"
@@ -36,6 +37,7 @@ TOOLS = [
                 "why": {"type": "string"},
                 "topic": {"type": "string"},
                 "anchor": {"type": "string"},
+                "scope": {"type": "string", "enum": ["project", "personal"]},
             },
             "required": ["kind", "title", "body"],
             "additionalProperties": False,
@@ -49,6 +51,7 @@ TOOLS = [
             "properties": {
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                "scope": {"type": "string", "enum": ["project", "personal"]},
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -69,22 +72,42 @@ TOOLS = [
         "description": "Memoria del proyecto (L0) para cargar al empezar.",
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "session",
+        "description": "Guarda el resumen de la sesión actual (continuidad, no memoria).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "scope": {"type": "string", "enum": ["project", "personal"]},
+            },
+            "required": ["summary"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 INSTRUCTIONS = (
     "Memoria del proyecto. Busca antes de guardar; guarda solo decisiones, "
-    "convenciones y gotchas con motivo. Mismo topic reemplaza la memoria anterior."
+    "convenciones y gotchas con motivo. Mismo topic reemplaza la memoria anterior. "
+    "Usa scope=personal para conocimiento que vale en cualquier repo."
 )
 
 
 class Server:
     def __init__(self):
         self._store = None
+        self._personal = None
 
     def store(self) -> Store:
         if self._store is None:
             self._store = Store(str(data_dir()))
         return self._store
+
+    def personal(self) -> Store:
+        if self._personal is None:
+            self._personal = Store(str(personal_dir()))
+        return self._personal
 
     def handle(self, request):
         if not isinstance(request, dict) or request.get("jsonrpc") != "2.0":
@@ -147,6 +170,13 @@ class Server:
         return _result(request_id, {"content": [{"type": "text", "text": text}]})
 
 
+def _scope(args) -> str:
+    scope = args.get("scope", "project")
+    if scope not in ("project", "personal"):
+        raise ValueError("scope debe ser project o personal")
+    return scope
+
+
 def _save(server, args):
     kind = args.get("kind")
     title = args.get("title")
@@ -158,10 +188,13 @@ def _save(server, args):
     ]
     if missing:
         raise ValueError(f"faltan argumentos: {', '.join(missing)}")
+    scope = _scope(args)
     anchor_path = anchor_hash = None
     if args.get("anchor"):
-        anchor_path, anchor_hash = resolve_anchor(args["anchor"], data_dir().parent)
-    memory_id = server.store().save(
+        root = personal_dir().parent if scope == "personal" else data_dir().parent
+        anchor_path, anchor_hash = resolve_anchor(args["anchor"], root)
+    store = server.personal() if scope == "personal" else server.store()
+    memory_id = store.save(
         kind=kind,
         title=title,
         body=body,
@@ -181,14 +214,20 @@ def _search(server, args):
     if not isinstance(limit, int) or isinstance(limit, bool):
         raise TypeError("limit debe ser entero")
     limit = max(1, min(limit, 20))
-    return json.dumps(server.store().search(query, limit=limit), ensure_ascii=False)
+    store = server.personal() if _scope(args) == "personal" else server.store()
+    return json.dumps(store.search(query, limit=limit), ensure_ascii=False)
 
 
 def _get(server, args):
     memory_id = args.get("id")
     if not isinstance(memory_id, str) or not memory_id:
         raise ValueError("falta el argumento: id")
-    memory = server.store().get(memory_id)
+    try:
+        memory = server.store().get(memory_id)
+    except FileNotFoundError:
+        memory = None
+    if memory is None and personal_dir().exists():
+        memory = server.personal().get(memory_id)
     if memory is None:
         raise ValueError(f"no existe la memoria {memory_id}")
     return json.dumps(memory, ensure_ascii=False)
@@ -198,7 +237,21 @@ def _context(server, args):
     return render_l0(server.store())
 
 
-_TOOL_HANDLERS = {"save": _save, "search": _search, "get": _get, "context": _context}
+def _session(server, args):
+    summary = args.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        raise ValueError("falta el argumento: summary")
+    root = personal_dir() if _scope(args) == "personal" else data_dir()
+    return Sessions(str(root)).save(summary)
+
+
+_TOOL_HANDLERS = {
+    "save": _save,
+    "search": _search,
+    "get": _get,
+    "context": _context,
+    "session": _session,
+}
 
 
 def _result(request_id, value):

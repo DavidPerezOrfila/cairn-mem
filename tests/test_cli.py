@@ -12,6 +12,7 @@ from cairn_mem.cli import main
 def in_tmp(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CAIRN_DIR", raising=False)
+    monkeypatch.setenv("CAIRN_HOME", str(tmp_path / "home"))
     return tmp_path
 
 
@@ -27,6 +28,7 @@ def test_init_local_only_by_default(capsys, in_tmp):
     assert (in_tmp / ".cairn" / "events.jsonl").exists()
     ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
     assert "events.jsonl" in ignore
+    assert "sessions.jsonl" in ignore
 
 
 def test_init_share_tracks_events(capsys, in_tmp):
@@ -192,3 +194,94 @@ def test_check_lists_stale_after_anchor_change(capsys, in_tmp):
     assert code == 0 and "G" in out
     _, out, _ = run(capsys, "search", "x", "--json")
     assert json.loads(out)[0]["stale"] is True
+
+
+def test_personal_scope_is_separate(capsys, in_tmp):
+    run(capsys, "init")
+    _, out, _ = run(
+        capsys,
+        "save",
+        "--kind",
+        "convention",
+        "--title",
+        "Commits en LF",
+        "--body",
+        "todos los repos",
+        "--personal",
+        "--json",
+    )
+    mid = json.loads(out)["id"]
+    assert (in_tmp / "home" / "events.jsonl").exists()
+    assert "sin resultados" in run(capsys, "search", "commits")[1]
+    assert "Commits en LF" in run(capsys, "search", "commits", "--personal")[1]
+    _, out, _ = run(capsys, "get", mid, "--json")
+    assert json.loads(out)["title"] == "Commits en LF"
+
+
+def test_cairn_home_override(capsys, in_tmp, monkeypatch, tmp_path_factory):
+    other = tmp_path_factory.mktemp("personal")
+    monkeypatch.setenv("CAIRN_HOME", str(other))
+    run(capsys, "init")
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "fact",
+        "--title",
+        "t",
+        "--body",
+        "b",
+        "--personal",
+    )
+    assert (other / "events.jsonl").exists()
+    assert "t" in run(capsys, "search", "t", "--personal")[1]
+
+
+def test_session_commands(capsys, in_tmp):
+    run(capsys, "init")
+    (in_tmp / ".cairn" / ".gitignore").write_text("events.jsonl\n", encoding="utf-8")
+    summary = "## Goal\nCerrar M6\n\n" + "detalle " * 500
+    _, out, _ = run(capsys, "session", "save", "--summary", summary, "--json")
+    sid = json.loads(out)["id"]
+    assert "sessions.jsonl" in (in_tmp / ".cairn" / ".gitignore").read_text(
+        encoding="utf-8"
+    )
+    code, out, _ = run(capsys, "session", "get", sid)
+    assert code == 0 and "Cerrar M6" in out
+    assert "Cerrar M6" in run(capsys, "session", "list")[1]
+    assert "Cerrar M6" not in (in_tmp / ".cairn" / "events.jsonl").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_personal_dir_is_not_a_project_root(tmp_path, monkeypatch):
+    from cairn_mem.paths import data_dir
+
+    personal = tmp_path / ".cairn"
+    personal.mkdir()
+    (personal / "events.jsonl").touch()
+    nested = tmp_path / "repo"
+    nested.mkdir()
+    monkeypatch.setenv("CAIRN_HOME", str(personal))
+    monkeypatch.delenv("CAIRN_DIR", raising=False)
+    monkeypatch.chdir(nested)
+    with pytest.raises(FileNotFoundError):
+        data_dir()
+
+
+def test_personal_session_scope(capsys, in_tmp):
+    run(capsys, "init")
+    _, out, _ = run(
+        capsys,
+        "session",
+        "save",
+        "--summary",
+        "resumen personal",
+        "--personal",
+        "--json",
+    )
+    sid = json.loads(out)["id"]
+    assert (in_tmp / "home" / "sessions.jsonl").exists()
+    assert "sin sesiones" in run(capsys, "session", "list")[1]
+    assert "resumen personal" in run(capsys, "session", "list", "--personal")[1]
+    assert "resumen personal" in run(capsys, "session", "get", sid, "--personal")[1]
