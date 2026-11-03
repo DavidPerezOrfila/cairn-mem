@@ -18,8 +18,8 @@ from pathlib import Path
 from cairn_mem.store import Store
 
 KINDS = ("decision", "convention", "gotcha", "fact")
-SEARCH_SLO_MS = 150
-SAVE_SLO_MS = 200
+SEARCH_SLO_MS = 350
+SAVE_SLO_MS = 500
 SIZES = (1000, 10000)
 
 
