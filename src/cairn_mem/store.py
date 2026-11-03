@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import sqlite3
+import sys
 import time
 from pathlib import Path
 
@@ -216,10 +217,11 @@ class Store:
         tmp.write_text(text, encoding="utf-8", newline="\n")
         try:
             os.replace(tmp, self.root / "MEMORY.md")
-        except OSError:
+        except OSError as error:
             # Windows: otro proceso (editor/antivirus) tiene MEMORY.md abierto.
-            # Es derivado: se regenera en el próximo save.
+            # Es derivado: se regenera en el próximo save, pero el usuario debe saberlo.
             tmp.unlink(missing_ok=True)
+            print(f"cairn: no se pudo actualizar MEMORY.md: {error}", file=sys.stderr)
         return text
 
     # --- rebuild ---

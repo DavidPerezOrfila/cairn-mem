@@ -390,6 +390,16 @@ def test_archive_survives_rebuild_with_future_save(root):
     assert s.search("futuro") == []
 
 
+def test_l0_failure_warns_instead_of_silence(store, monkeypatch, capsys):
+    def locked(*args, **kwargs):
+        raise OSError("archivo bloqueado")
+
+    monkeypatch.setattr("cairn_mem.store.os.replace", locked)
+    mid = store.save(kind="fact", title="visible", body="b")
+    assert mid
+    assert "MEMORY.md" in capsys.readouterr().err
+
+
 def test_l0_regenerated_after_archive_and_rebuild(store, root):
     mid = store.save(kind="fact", title="visible", body="b")
     memory = Path(root) / "MEMORY.md"
