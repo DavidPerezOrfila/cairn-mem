@@ -126,6 +126,14 @@ def test_get_unknown_id_fails(capsys):
     assert code == 1 and "no existe" in err
 
 
+def test_corrupt_db_tells_the_user_to_delete_it(capsys, in_tmp):
+    (in_tmp / ".cairn").mkdir()
+    (in_tmp / ".cairn" / "events.jsonl").touch()
+    (in_tmp / ".cairn" / "cairn.db").write_bytes(b"no es una base de datos")
+    code, _, err = run(capsys, "search", "x")
+    assert code == 1 and "borra" in err
+
+
 def test_commands_require_init(capsys, in_tmp):
     code, _, err = run(capsys, "search", "x")
     assert code == 1 and "cairn init" in err

@@ -327,8 +327,18 @@ def main(argv=None) -> int:
     except (ValueError, FileNotFoundError) as error:
         print(f"cairn: {error}", file=sys.stderr)
         return 1
-    except sqlite3.Error:
-        print("cairn: error de base de datos; ejecuta 'cairn rebuild'", file=sys.stderr)
+    except sqlite3.DatabaseError as error:
+        if any(
+            word in str(error).lower()
+            for word in ("not a database", "corrupt", "malformed")
+        ):
+            print(
+                "cairn: base de datos corrupta; borra .cairn/cairn.db y ejecuta "
+                "'cairn rebuild'",
+                file=sys.stderr,
+            )
+        else:
+            print(f"cairn: error de base de datos: {error}", file=sys.stderr)
         return 1
 
 
