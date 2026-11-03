@@ -161,6 +161,9 @@ desde PyPI verificada con `init`, `save`, `session`, `search` e `import --dry-ru
 
 **Publicación 0.2.1:** 2026-11-03 en PyPI (wheel + sdist, `uv build` + `uv publish`).
 
+**0.2.2:** la tool MCP de sesión pasa a `save_session` (OpenCode filtraba `session` por
+colisión de nombre y el agente no podía guardar el resumen).
+
 ## 4. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
 - `compact`/decay (si el nº de memorias activas degrada la precisión)

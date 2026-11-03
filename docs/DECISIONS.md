@@ -37,3 +37,4 @@
 | 2026-11-03 | La tool MCP `context` añade el último resumen de sesión (recortado a 4000 car.) | `session` era write-only por MCP: el agente guardaba al cerrar y no recuperaba nada al empezar. `MEMORY.md` sigue siendo solo memoria curada |
 | 2026-11-03 | `Store` reaplica el JSONL en las lecturas si la huella cambió | El `Store` del MCP vive horas: tras un `git pull` o un `save` desde la CLI, `search`/`get`/`context` servían datos viejos |
 | 2026-11-03 | El importador se llama `legacy` (módulo, subcomando y docs) | La herramienta que sustituye no debe aparecer en el repo remoto; el id conserva la sal antigua para no duplicar lo ya importado |
+| 2026-11-03 | La tool MCP de sesión se llama `save_session` | `session` colisiona con el espacio de nombres del arnés: OpenCode no la exponía y el agente no podía guardar el resumen |
