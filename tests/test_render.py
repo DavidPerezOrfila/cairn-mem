@@ -31,6 +31,13 @@ def test_l0_orders_by_kind_priority(tmp_path):
     assert out.index("C") < out.index("F")
 
 
+def test_l0_keeps_one_line_per_memory(tmp_path):
+    s = Store(str(tmp_path / ".cairn"))
+    s.save(kind="fact", title="uno\ndos", body="x")
+    lines = render.render_l0(s).splitlines()
+    assert len(lines) == 2 and lines[1].startswith("- [")
+
+
 def test_l0_marks_stale(tmp_path):
     root = tmp_path
     (root / "a.py").write_text("v1\n", encoding="utf-8")

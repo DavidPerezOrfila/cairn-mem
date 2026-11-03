@@ -292,6 +292,15 @@ def test_reads_do_not_rebuild_when_nothing_changed(store, monkeypatch):
     assert store.get(mid) and store.search("x") and store.active_ordered()
 
 
+def test_title_is_normalized_and_bounded(store):
+    mid = store.save(kind="fact", title="uno\ndos", body="x")
+    assert store.get(mid)["title"] == "uno dos"
+    with pytest.raises(ValueError, match="title"):
+        store.save(kind="fact", title="x" * 201, body="x")
+    with pytest.raises(ValueError, match="vacío"):
+        store.save(kind="fact", title="   ", body="x")
+
+
 def test_out_of_range_topic_saves_keep_append_order(root):
     s = Store(root)
     old = s.save(kind="fact", topic_key="t", title="viejo", body="a", ts=2**63 - 1)

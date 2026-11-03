@@ -15,6 +15,7 @@ from cairn_mem.render import KIND_PRIORITY, render_l0
 SCHEMA_VERSION = 2
 KINDS = ("decision", "convention", "gotcha", "fact")
 MAX_BODY = 500
+MAX_TITLE = 200
 
 SECRET_PATTERNS = (
     re.compile(r"AKIA[0-9A-Z]{16}"),
@@ -105,6 +106,11 @@ class Store:
     ) -> str:
         if kind not in KINDS:
             raise ValueError(f"kind inválido: {kind}")
+        title = " ".join(str(title).split())
+        if not title:
+            raise ValueError("el título está vacío")
+        if len(title) > MAX_TITLE:
+            raise ValueError(f"title supera {MAX_TITLE} caracteres")
         if len(body) > MAX_BODY:
             raise ValueError(
                 f"body supera {MAX_BODY} caracteres; divídelo en dos memorias"

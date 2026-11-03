@@ -235,6 +235,36 @@ def test_ts_normalizes_nanoseconds_and_timezone():
     assert _ts("2026-11-01T10:00:00Z") == _ts("2026-11-01 10:00:00")
 
 
+def test_import_normalizes_long_and_empty_titles(capsys, in_tmp):
+    repo = in_tmp
+    _init(capsys, repo)
+    path = in_tmp / "otra.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(SCHEMA)
+    rows = [
+        (1, "fact", "x" * 400, "**What**: cuerpo", "repo", "project"),
+        (2, "fact", "   ", "**What**: sin título", "repo", "project"),
+    ]
+    conn.executemany(
+        "INSERT INTO observations (id, type, title, content, project, scope) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.executemany(
+        "INSERT INTO capture_project_provenance "
+        "(entity_kind, entity_id, source, directory, raw_project) "
+        "VALUES ('observation', ?, 'unknown', ?, '')",
+        [(str(row[0]), str(repo)) for row in rows],
+    )
+    conn.commit()
+    conn.close()
+    report = import_legacy(str(path))
+    assert report["memories"] == 2 and report["rejected"] == 0
+    titles = {row["title"] for row in Store(str(repo / ".cairn")).dump()}
+    assert "x" * 200 in titles
+    assert "sin título" in titles
+
+
 def test_cli_import_requires_db(capsys, in_tmp):
     with pytest.raises(SystemExit):
         main(["import", "legacy"])

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.sessions import Sessions
-from cairn_mem.store import Store, reject_secrets
+from cairn_mem.store import MAX_TITLE, Store, reject_secrets
 
 KIND_BY_TYPE = {
     "decision": "decision",
@@ -98,9 +98,12 @@ def import_legacy(db_path, dry_run=False) -> dict:
             report["skipped"] += 1
             continue
         body, why = _split(row["content"])
+        # Título vacío o larguísimo no debe perder la memoria migrada.
+        title = (row["title"] or "").strip() or body[:MAX_TITLE] or "sin título"
+        title = title[:MAX_TITLE]
         if dry_run:
             try:
-                reject_secrets(row["title"], body, why, topic)
+                reject_secrets(title, body, why, topic)
             except ValueError:
                 report["rejected"] += 1
                 continue
@@ -108,7 +111,7 @@ def import_legacy(db_path, dry_run=False) -> dict:
             try:
                 store.save(
                     kind=KIND_BY_TYPE.get(row["type"], "fact"),
-                    title=row["title"],
+                    title=title,
                     body=body,
                     why=why,
                     topic_key=topic,
