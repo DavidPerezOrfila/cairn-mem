@@ -1,8 +1,8 @@
 # AGENTS.md — reglas para construir cairn-mem
 
 ## Estado y alcance
-- **M6–M9 cerrados y 0.2.1 publicada** (2026-11-03) en PyPI y etiquetada `v0.2.1`. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` y `legacy.py` implementados; `tests/` (99) cubre la CLI, el store, L0, anclas, MCP, sesiones, importación y el golden set.
-- Implementa **un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
+- **M6–M9 cerrados y 0.2.2 publicada** (2026-11-03) en PyPI y etiquetada `v0.2.2`; **S1** (L0 reparte el presupuesto entre kinds) cerrado en `feat/l0-fair-share`. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` y `legacy.py` implementados; `tests/` (128) cubre la CLI, el store, L0, anclas, MCP, sesiones, importación y el golden set.
+- Implementa **una ronda (S#) o un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
 - Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
 - Lo siguiente sale del **backlog** y solo con una medición que lo justifique.
 
