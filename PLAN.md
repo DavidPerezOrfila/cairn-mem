@@ -135,11 +135,11 @@ el JSONL tolera una última línea rasgada como `events.jsonl`.
 proyecto · el proyecto sigue funcionando sin `CAIRN_HOME`.
 (medido 2026-11-03: `--personal` con `CAIRN_HOME` temporal; el L0 del proyecto no la incluye)
 
-### M8 — Importador de Engram (1 día) ✅
-- [x] `cairn import engram [--db RUTA] [--dry-run]`
+### M8 — Importador legacy (1 día) ✅
+- [x] `cairn import legacy --db RUTA [--dry-run]`
 - [x] Mapeo: `What`→`body`, `Why/Where/Learned`→`why`; tipo→`kind`; `session_summary`→sesión
 - [x] `project` → `.cairn/` del repo (por provenance); `global/personal` → `~/.cairn`
-- [x] Idempotente: id derivado de `engram:<id>`; omite borradas y superseded
+- [x] Idempotente: id derivado del id de origen con sal fija; omite borradas y superseded
 
 **Aceptación:** importa las 64 observaciones reales sin duplicados al reejecutar ·
 los secretos se rechazan por fila y se reportan, no abortan el lote.
@@ -147,6 +147,19 @@ los secretos se rechazan por fila y se reportan, no abortan el lote.
 
 **Publicación 0.2.0:** 2026-11-03 en PyPI (wheel + sdist) y tag `v0.2.0`; instalación limpia
 desde PyPI verificada con `init`, `save`, `session`, `search` e `import --dry-run`.
+
+### M9 — Cierre de huecos de paridad ✅
+- [x] `Sessions.save` rechaza secretos (antes `sessions.jsonl` los aceptaba)
+- [x] MCP `context` devuelve L0 + último resumen de sesión (≤ 4000 car.), sin tocar `MEMORY.md`
+- [x] `Store` reaplica el JSONL en lecturas si la huella cambió (MCP de vida larga tras `git pull`/CLI)
+- [x] Reinstalado el binario global: `pipx install . --force` sirve las 5 tools
+- [x] Importador renombrado a `legacy` (módulo, subcomando y docs): el repo remoto no nombra la herramienta que sustituye
+
+**Aceptación:** 94 tests en verde · `ruff` limpio · `tools/list` por `cairn mcp` muestra
+`save, search, get, context, session` con `context` describiendo el resumen de sesión.
+(medido 2026-11-03: 94 passed; lectura sin cambios no dispara rebuild)
+
+**Publicación 0.2.1:** pendiente (versión subida en `pyproject.toml`; falta tag y PyPI).
 
 ## 4. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
