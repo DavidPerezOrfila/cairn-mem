@@ -21,7 +21,12 @@ SECRET_PATTERNS = (
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),
-    re.compile(r"(?i)\b(password|secret|token|api_key)\s*=\s*\S+"),
+    re.compile(
+        r"(?i)(?<![a-z0-9])"
+        r"(password|passwd|secret|token|api[-_]?key|access[-_]?key|private_key"
+        r"|secret[-_]?key|auth[-_]?token)"
+        r"(?![a-z0-9])[\"']?\s*[:=]\s*[\"']?\S+"
+    ),
     re.compile(r"[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]+@"),
 )
 
