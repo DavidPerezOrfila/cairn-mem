@@ -1,8 +1,6 @@
 """Tests de M2: L0 con presupuesto, determinista y con marca de stale."""
 
-import pytest
-
-render = pytest.importorskip("cairn_mem.render", reason="M2 pendiente")
+from cairn_mem import render
 from cairn_mem.store import Store
 
 

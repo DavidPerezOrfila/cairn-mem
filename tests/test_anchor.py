@@ -2,7 +2,7 @@
 
 import pytest
 
-anchor = pytest.importorskip("cairn_mem.anchor", reason="M2 pendiente")
+from cairn_mem import anchor
 
 
 def test_hash_ignores_crlf(tmp_path):
