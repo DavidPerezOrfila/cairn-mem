@@ -47,6 +47,19 @@ def test_init_refuses_store_inside_personal(capsys, in_tmp, monkeypatch):
     assert not (in_tmp / "home" / "sub" / ".cairn").exists()
 
 
+def test_init_preserves_foreign_gitignore_lines(capsys, in_tmp):
+    (in_tmp / ".cairn").mkdir()
+    (in_tmp / ".cairn" / ".gitignore").write_text(
+        "custom.txt\nevents.jsonl\n", encoding="utf-8"
+    )
+    assert run(capsys, "init", "--share")[0] == 0
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    assert "custom.txt" in ignore and "events.jsonl" not in ignore
+    assert run(capsys, "init")[0] == 0
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    assert "custom.txt" in ignore and "events.jsonl" in ignore
+
+
 def test_init_is_idempotent_and_share_can_be_reenabled(capsys, in_tmp):
     assert run(capsys, "init")[0] == 0
     assert run(capsys, "init", "--share")[0] == 0

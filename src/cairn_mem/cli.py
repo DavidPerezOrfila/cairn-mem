@@ -29,6 +29,23 @@ def _print_json(value) -> None:
     print(json.dumps(value, ensure_ascii=False))
 
 
+def _write_gitignore(root: Path, share: bool) -> None:
+    """Conserva las líneas que no gestiona cairn; solo actualiza las suyas."""
+    path = root / ".gitignore"
+    managed = {"events.jsonl", *GITIGNORE}
+    kept = []
+    if path.exists():
+        kept = [
+            line
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and line not in managed
+        ]
+    lines = [*kept, *GITIGNORE]
+    if not share:
+        lines.append("events.jsonl")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _cmd_init(ns) -> int:
     env = os.environ.get("CAIRN_DIR")
     local = Path.cwd() / ".cairn"
@@ -52,10 +69,7 @@ def _cmd_init(ns) -> int:
         )
     root.mkdir(parents=True, exist_ok=True)
     (root / "events.jsonl").touch()
-    lines = list(GITIGNORE)
-    if not ns.share:
-        lines.append("events.jsonl")
-    (root / ".gitignore").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_gitignore(root, ns.share)
     Store(str(root))
     print(f"cairn inicializado en {root}")
     return 0
