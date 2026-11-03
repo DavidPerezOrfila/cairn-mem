@@ -226,7 +226,8 @@ def _cmd_import(ns) -> int:
     prefix = "se importarían" if ns.dry_run else "importadas"
     print(
         f"{prefix} {report['memories']} memorias y {report['sessions']} sesiones "
-        f"({report['skipped']} omitidas, {report['rejected']} rechazadas)"
+        f"({report['skipped']} omitidas, {report['rejected']} rechazadas, "
+        f"{report['foreign']} de otros repos)"
     )
     return 0
 

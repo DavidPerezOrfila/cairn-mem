@@ -17,12 +17,7 @@ class Sessions:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def save(self, summary: str, id=None, ts=None) -> str:
-        summary = summary.strip()
-        if not summary:
-            raise ValueError("el resumen está vacío")
-        if len(summary) > MAX_SUMMARY:
-            raise ValueError(f"el resumen supera {MAX_SUMMARY} caracteres")
-        reject_secrets(summary)
+        summary = self.validate(summary)
         sid = id or secrets.token_hex(6)
         append_jsonl(
             self.path,
@@ -34,6 +29,16 @@ class Sessions:
             },
         )
         return sid
+
+    @staticmethod
+    def validate(summary: str) -> str:
+        summary = summary.strip()
+        if not summary:
+            raise ValueError("el resumen está vacío")
+        if len(summary) > MAX_SUMMARY:
+            raise ValueError(f"el resumen supera {MAX_SUMMARY} caracteres")
+        reject_secrets(summary)
+        return summary
 
     def get(self, id: str):
         return self._records().get(id)

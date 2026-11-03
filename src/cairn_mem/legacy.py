@@ -40,13 +40,34 @@ def import_legacy(db_path, dry_run=False) -> dict:
         "memories": 0,
         "sessions": 0,
         "skipped": 0,
+        "foreign": 0,
         "rejected": 0,
         "dry_run": dry_run,
     }
-    root = data_dir().parent
-    project = None if dry_run else Store(str(data_dir()))
+    project = {"resolved": False, "root": None, "store": None, "sessions": None}
+
+    def project_root():
+        """Raíz del repo actual o None si no hay `.cairn/`: el import puede ser
+        solo de filas globales desde una carpeta sin proyecto."""
+        if not project["resolved"]:
+            project["resolved"] = True
+            try:
+                project["root"] = data_dir().parent
+            except FileNotFoundError:
+                project["root"] = None
+        return project["root"]
+
+    def project_store():
+        if project["store"] is None:
+            project["store"] = Store(str(data_dir()))
+        return project["store"]
+
+    def project_sessions():
+        if project["sessions"] is None:
+            project["sessions"] = Sessions(str(data_dir()))
+        return project["sessions"]
+
     personal = None if dry_run else Store(str(personal_dir()))
-    sessions = None if dry_run else Sessions(str(data_dir()))
     personal_sessions = None if dry_run else Sessions(str(personal_dir()))
 
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -67,17 +88,25 @@ def import_legacy(db_path, dry_run=False) -> dict:
         if row["type"] == "session_summary":
             if row["scope"] in ("global", "personal"):
                 target = personal_sessions
-            elif _belongs(row, root):
-                target = sessions
+            elif _belongs(row, project_root()):
+                target = None if dry_run else project_sessions()
             else:
+                report["foreign"] += 1
                 continue
+            summary = row["content"] or ""
+            if dry_run:
+                try:
+                    Sessions.validate(summary)
+                except ValueError:
+                    report["rejected"] += 1
+                    continue
             sid = _id(row["id"])
             if not dry_run and target.get(sid):
                 report["skipped"] += 1
                 continue
             if not dry_run:
                 try:
-                    target.save(row["content"] or "", id=sid, ts=_ts(row["created_at"]))
+                    target.save(summary, id=sid, ts=_ts(row["created_at"]))
                 except ValueError:
                     report["rejected"] += 1
                     continue
@@ -87,10 +116,11 @@ def import_legacy(db_path, dry_run=False) -> dict:
         if row["scope"] in ("global", "personal"):
             store = personal
             topic = f"{row['project']}/{row['topic_key']}" if row["topic_key"] else None
-        elif _belongs(row, root):
-            store = project
+        elif _belongs(row, project_root()):
+            store = None if dry_run else project_store()
             topic = row["topic_key"]
         else:
+            report["foreign"] += 1
             continue
 
         mid = _id(row["id"])
@@ -125,8 +155,10 @@ def import_legacy(db_path, dry_run=False) -> dict:
     return report
 
 
-def _belongs(row, root: Path) -> bool:
+def _belongs(row, root) -> bool:
     """La observación es del repo actual: por provenance o por nombre de proyecto."""
+    if root is None:
+        return False
     directory = row["directory"]
     if directory:
         return os.path.normcase(os.path.abspath(directory)) == os.path.normcase(
