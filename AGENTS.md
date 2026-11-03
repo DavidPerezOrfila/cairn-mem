@@ -1,7 +1,7 @@
 # AGENTS.md — reglas para construir cairn-mem
 
 ## Estado y alcance
-- **M6–M8 cerrados.** v0.1.0 publicada en PyPI; 0.2.0 (MCP, sesiones, scope personal e importador) pendiente de publicar. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` y `engram.py` implementados; `tests/` cubre la CLI, el store, L0, anclas, MCP, sesiones, importación y el golden set.
+- **M6–M8 cerrados y 0.2.0 publicada** (2026-11-03) en PyPI y etiquetada `v0.2.0`. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` y `engram.py` implementados; `tests/` cubre la CLI, el store, L0, anclas, MCP, sesiones, importación y el golden set.
 - Implementa **un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
 - Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
 - Lo siguiente sale del **backlog** y solo con una medición que lo justifique.

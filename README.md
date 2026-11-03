@@ -58,9 +58,8 @@ pip install -e ".[dev]"
 SQLite with FTS5 ships with CPython on Linux, macOS and Windows. The core has no
 third-party dependencies; the `dev` extra only adds pytest and ruff.
 
-MCP, session summaries, personal scope and the Engram importer ship in 0.2.0. The
-latest PyPI release is 0.1.0, which provides the CLI; install from `main` to use the
-new features now.
+MCP, session summaries, personal scope and the Engram importer ship in 0.2.0.
+`uv tool install cairn-mem` (or `pipx install cairn-mem`) gets the latest release.
 
 ## Quickstart
 

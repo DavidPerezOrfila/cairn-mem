@@ -145,6 +145,9 @@ proyecto · el proyecto sigue funcionando sin `CAIRN_HOME`.
 los secretos se rechazan por fila y se reportan, no abortan el lote.
 (medido 2026-11-03: 23 memorias + 10 sesiones; segunda pasada 0 + 0 con 33 omitidas)
 
+**Publicación 0.2.0:** 2026-11-03 en PyPI (wheel + sdist) y tag `v0.2.0`; instalación limpia
+desde PyPI verificada con `init`, `save`, `session`, `search` e `import --dry-run`.
+
 ## 4. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
 - `compact`/decay (si el nº de memorias activas degrada la precisión)
