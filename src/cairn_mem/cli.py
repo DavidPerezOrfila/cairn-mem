@@ -31,7 +31,25 @@ def _print_json(value) -> None:
 
 def _cmd_init(ns) -> int:
     env = os.environ.get("CAIRN_DIR")
-    root = Path(env) if env else Path.cwd() / ".cairn"
+    local = Path.cwd() / ".cairn"
+    if env:
+        root = Path(env)
+    else:
+        try:
+            existing = data_dir()
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and existing.resolve() != local.resolve():
+            raise ValueError(
+                f"ya existe un store en {existing}; usa esa raíz o define CAIRN_DIR"
+            )
+        root = existing or local
+    personal = personal_dir().resolve()
+    if root.resolve() == personal or root.resolve().is_relative_to(personal):
+        raise ValueError(
+            "esa carpeta está dentro del scope personal de cairn; "
+            "define CAIRN_HOME o cambia de directorio"
+        )
     root.mkdir(parents=True, exist_ok=True)
     (root / "events.jsonl").touch()
     lines = list(GITIGNORE)

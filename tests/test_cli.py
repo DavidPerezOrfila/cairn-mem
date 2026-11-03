@@ -31,6 +31,39 @@ def test_init_local_only_by_default(capsys, in_tmp):
     assert "sessions.jsonl" in ignore
 
 
+def test_init_refuses_personal_dir(capsys, in_tmp, monkeypatch):
+    monkeypatch.setenv("CAIRN_HOME", str(in_tmp / ".cairn"))
+    code, _, err = run(capsys, "init")
+    assert code == 1 and "scope personal" in err
+    assert not (in_tmp / ".cairn").exists()
+
+
+def test_init_refuses_store_inside_personal(capsys, in_tmp, monkeypatch):
+    monkeypatch.setenv("CAIRN_HOME", str(in_tmp / "home"))
+    (in_tmp / "home" / "sub").mkdir(parents=True)
+    monkeypatch.chdir(in_tmp / "home" / "sub")
+    code, _, err = run(capsys, "init")
+    assert code == 1 and "scope personal" in err
+    assert not (in_tmp / "home" / "sub" / ".cairn").exists()
+
+
+def test_init_is_idempotent_and_share_can_be_reenabled(capsys, in_tmp):
+    assert run(capsys, "init")[0] == 0
+    assert run(capsys, "init", "--share")[0] == 0
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    assert "events.jsonl" not in ignore
+
+
+def test_init_refuses_nested_store(capsys, in_tmp, monkeypatch):
+    assert run(capsys, "init")[0] == 0
+    nested = in_tmp / "sub"
+    nested.mkdir()
+    monkeypatch.chdir(nested)
+    code, _, err = run(capsys, "init")
+    assert code == 1 and "ya existe un store" in err
+    assert not (nested / ".cairn").exists()
+
+
 def test_init_share_tracks_events(capsys, in_tmp):
     run(capsys, "init", "--share")
     ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
