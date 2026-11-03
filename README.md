@@ -92,7 +92,7 @@ cairn search "commit style" --personal       # knowledge shared by every repo
 
 ### MCP
 
-One process, five tools (`save`, `search`, `get`, `context`, `session`), JSON-RPC over
+One process, five tools (`save`, `search`, `get`, `context`, `save_session`), JSON-RPC over
 stdio:
 
 ```json

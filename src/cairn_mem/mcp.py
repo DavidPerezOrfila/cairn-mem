@@ -76,7 +76,7 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
-        "name": "session",
+        "name": "save_session",
         "description": "Guarda el resumen de la sesión actual (continuidad, no memoria).",
         "inputSchema": {
             "type": "object",
@@ -256,7 +256,7 @@ def _context(server, args):
     return f"{text}\n## Última sesión ({record['id']})\n{summary}\n"
 
 
-def _session(server, args):
+def _save_session(server, args):
     summary = args.get("summary")
     if not isinstance(summary, str) or not summary.strip():
         raise ValueError("falta el argumento: summary")
@@ -269,7 +269,7 @@ _TOOL_HANDLERS = {
     "search": _search,
     "get": _get,
     "context": _context,
-    "session": _session,
+    "save_session": _save_session,
 }
 
 

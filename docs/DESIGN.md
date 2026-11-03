@@ -85,9 +85,11 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 
 ## MCP (v0.2)
 - Transporte **stdio con NDJSON** (JSON-RPC 2.0), stdlib pura: sin SDK, sin puerto, sin Go.
-- `cairn mcp` sirve 5 tools: `save`, `search`, `get`, `context`, `session`. El resto
+- `cairn mcp` sirve 5 tools: `save`, `search`, `get`, `context`, `save_session`. El resto
   (mantenimiento) se queda solo en CLI para no pagar sus esquemas en cada turno del modelo.
   `context` inyecta como máximo ~7000 caracteres: L0 (≤ 3000) + último resumen (≤ 4000).
+  La tool de sesión se llama `save_session` porque `session` colisiona con el espacio de
+  nombres del arnés y OpenCode no la expone.
 - El proceso cachea un único `Store`: mientras vive es el único escritor y no paga
   arranque de Python por llamada (search p95 4 ms vs 304 ms de la CLI). Cada lectura
   compara la huella del JSONL y reaplica si cambió por fuera (`git pull`, `cairn` CLI).

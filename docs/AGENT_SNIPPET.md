@@ -5,7 +5,7 @@
 @.cairn/MEMORY.md
 <!-- Si tu arnés no soporta @imports: al empezar ejecuta `cairn render` y lee .cairn/MEMORY.md -->
 
-- Si el arnés soporta MCP: arranca `cairn mcp` y usa `search`, `save`, `get`, `context`, `session`.
+- Si el arnés soporta MCP: arranca `cairn mcp` y usa `search`, `save`, `get`, `context`, `save_session`.
   `context` ya incluye el último resumen de sesión: no hace falta leerlo aparte.
 - Si no: al empezar una tarea, `cairn search "<términos>"` (máx. 2–3 búsquedas). Detalle: `cairn get <id>`.
 - Guarda SOLO cuando: tomas una decisión con motivo, descubres un gotcha, o confirmas una convención.
