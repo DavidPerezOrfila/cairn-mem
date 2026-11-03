@@ -338,7 +338,7 @@ def main(argv=None) -> int:
     ns = _parser().parse_args(argv)
     try:
         return ns.handler(ns)
-    except (ValueError, FileNotFoundError) as error:
+    except (ValueError, OSError) as error:
         print(f"cairn: {error}", file=sys.stderr)
         return 1
     except sqlite3.DatabaseError as error:

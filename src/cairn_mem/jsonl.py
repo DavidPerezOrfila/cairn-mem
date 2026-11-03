@@ -18,7 +18,17 @@ def append_jsonl(path: Path, event: dict) -> tuple[int, int, tuple[str, str]]:
         before = path.stat().st_size if path.exists() else 0
         fd = os.open(path, flags, 0o644)
         try:
-            os.write(fd, data)
+            try:
+                written = os.write(fd, data)
+            except OSError:
+                # Disco lleno: el write puede fallar a medias.
+                os.ftruncate(fd, before)
+                raise
+            if written != len(data):
+                # Un solo escritor por proyecto (diseño): el truncado no pisa
+                # líneas ajenas. Deshace la línea a medias.
+                os.ftruncate(fd, before)
+                raise OSError(f"escritura incompleta: {written}/{len(data)} bytes")
         finally:
             os.close(fd)
         stat = path.stat()

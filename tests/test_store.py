@@ -353,6 +353,34 @@ def test_rebuild_does_not_certify_events_written_during_it(root, monkeypatch):
     assert s.get("aaaaaaaaaaaa")["title"] == "externa"
 
 
+def test_short_write_rolls_back_and_keeps_jsonl_valid(root, monkeypatch):
+    s = Store(root)
+    s.save(kind="fact", title="ok", body="a")
+    path = Path(root) / "events.jsonl"
+    size = path.stat().st_size
+    monkeypatch.setattr("cairn_mem.jsonl.os.write", lambda fd, data: 1)
+    with pytest.raises(OSError, match="incompleta"):
+        s.save(kind="fact", title="falla", body="b")
+    assert path.stat().st_size == size
+    assert Store(root).search("ok")
+
+
+def test_write_error_rolls_back_and_keeps_jsonl_valid(root, monkeypatch):
+    s = Store(root)
+    s.save(kind="fact", title="ok", body="a")
+    path = Path(root) / "events.jsonl"
+    size = path.stat().st_size
+
+    def fail(fd, data):
+        raise OSError("ENOSPC")
+
+    monkeypatch.setattr("cairn_mem.jsonl.os.write", fail)
+    with pytest.raises(OSError):
+        s.save(kind="fact", title="falla", body="b")
+    assert path.stat().st_size == size
+    assert Store(root).search("ok")
+
+
 def test_archive_survives_rebuild_with_future_save(root):
     s = Store(root)
     mid = s.save(kind="fact", title="futuro", body="a", ts=9_999_999_999_999_999_999)
