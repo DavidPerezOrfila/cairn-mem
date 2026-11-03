@@ -1,0 +1,2 @@
+# LF en el repo independientemente de core.autocrlf del clon.
+* text=auto eol=lf
