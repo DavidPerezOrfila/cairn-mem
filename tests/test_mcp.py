@@ -284,3 +284,20 @@ def test_mcp_without_init_returns_tool_error(in_tmp):
     response = call(server, "search", query="x")
     assert response["result"]["isError"] is True
     assert "cairn init" in text(response)
+
+
+def test_search_by_topic_returns_topic_key():
+    server = Server()
+    memory_id = text(
+        call(
+            server,
+            "save",
+            kind="decision",
+            topic="storage/fts5",
+            title="Usar FTS5",
+            body="bm25",
+        )
+    )
+    rows = json.loads(text(call(server, "search", query="storage/fts5")))
+    assert rows[0]["id"] == memory_id
+    assert rows[0]["topic_key"] == "storage/fts5"

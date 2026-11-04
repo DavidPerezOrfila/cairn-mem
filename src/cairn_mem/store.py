@@ -14,7 +14,7 @@ from cairn_mem.anchor import is_stale
 from cairn_mem.jsonl import append_jsonl
 from cairn_mem.render import KIND_PRIORITY, render_l0
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 KINDS = tuple(KIND_PRIORITY)
 MAX_BODY = 500
 MAX_TITLE = 200
@@ -53,18 +53,22 @@ CREATE INDEX IF NOT EXISTS ix_mem_active_kind_ts
   ON mem(kind, ts DESC, id) WHERE status = 'active';
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(
-  title, body, why, content='mem', content_rowid='rowid',
+  title, body, why, topic_key, anchor_path, content='mem', content_rowid='rowid',
   tokenize='unicode61 remove_diacritics 2'
 );
 CREATE TRIGGER IF NOT EXISTS mem_ai AFTER INSERT ON mem BEGIN
-  INSERT INTO mem_fts(rowid, title, body, why) VALUES (new.rowid, new.title, new.body, new.why);
+  INSERT INTO mem_fts(rowid, title, body, why, topic_key, anchor_path)
+  VALUES (new.rowid, new.title, new.body, new.why, new.topic_key, new.anchor_path);
 END;
 CREATE TRIGGER IF NOT EXISTS mem_ad AFTER DELETE ON mem BEGIN
-  INSERT INTO mem_fts(mem_fts, rowid, title, body, why) VALUES ('delete', old.rowid, old.title, old.body, old.why);
+  INSERT INTO mem_fts(mem_fts, rowid, title, body, why, topic_key, anchor_path)
+  VALUES ('delete', old.rowid, old.title, old.body, old.why, old.topic_key, old.anchor_path);
 END;
 CREATE TRIGGER IF NOT EXISTS mem_au AFTER UPDATE ON mem BEGIN
-  INSERT INTO mem_fts(mem_fts, rowid, title, body, why) VALUES ('delete', old.rowid, old.title, old.body, old.why);
-  INSERT INTO mem_fts(rowid, title, body, why) VALUES (new.rowid, new.title, new.body, new.why);
+  INSERT INTO mem_fts(mem_fts, rowid, title, body, why, topic_key, anchor_path)
+  VALUES ('delete', old.rowid, old.title, old.body, old.why, old.topic_key, old.anchor_path);
+  INSERT INTO mem_fts(rowid, title, body, why, topic_key, anchor_path)
+  VALUES (new.rowid, new.title, new.body, new.why, new.topic_key, new.anchor_path);
 END;
 """
 
@@ -87,9 +91,16 @@ class Store:
             self._conn.execute("PRAGMA journal_mode = WAL")
         except sqlite3.OperationalError:
             pass  # otro Store ya la configuró o lock transitorio
+        version = self._conn.execute("PRAGMA user_version").fetchone()[0]
+        if version != SCHEMA_VERSION:
+            # El esquema es derivado: se tira y el rebuild lo repone desde el JSONL.
+            self._conn.executescript(
+                "DROP TABLE IF EXISTS mem_fts;"
+                "DROP TABLE IF EXISTS mem;"
+                "DROP TABLE IF EXISTS meta;"
+            )
         self._conn.executescript(DDL)
         self._syncing = False
-        version = self._conn.execute("PRAGMA user_version").fetchone()[0]
         if (
             version != SCHEMA_VERSION
             or self._fingerprint() != self._stored_fingerprint()
@@ -338,11 +349,11 @@ class Store:
 
     def _search(self, match: str, limit: int) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT m.id, m.kind, m.title, m.anchor_path, m.anchor_hash,
+            """SELECT m.id, m.kind, m.topic_key, m.title, m.anchor_path, m.anchor_hash,
                       snippet(mem_fts, 1, '', '', '…', 12) AS snippet
                FROM mem_fts JOIN mem m ON m.rowid = mem_fts.rowid
                WHERE mem_fts MATCH ? AND m.status = 'active'
-               ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5) LIMIT ?""",
+               ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0) LIMIT ?""",
             (match, limit),
         ).fetchall()
         return [dict(r) for r in rows]

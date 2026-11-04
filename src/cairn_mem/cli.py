@@ -103,8 +103,9 @@ def _cmd_search(ns) -> int:
     else:
         for r in results:
             snippet = " ".join(r["snippet"].split())
+            topic = f"  [{r['topic_key']}]" if r.get("topic_key") else ""
             stale = "  ⚠ revisar" if r["stale"] else ""
-            print(f"{r['id']}  {r['kind']}  {r['title']} — {snippet}{stale}")
+            print(f"{r['id']}  {r['kind']}{topic}  {r['title']} — {snippet}{stale}")
     return 0
 
 
