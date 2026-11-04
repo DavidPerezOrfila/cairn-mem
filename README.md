@@ -93,8 +93,12 @@ cairn search "oauth redirect"                # id, kind, topic, title, snippet, 
 cairn get a1b2c3d4e5f6                       # full memory, including the reason
 cairn check                                  # memories whose anchor file changed
 cairn session save --summary "## Goal ..."   # long recap, kept out of MEMORY.md
-cairn search "commit style" --personal       # knowledge shared by every repo
+cairn save --kind convention --title "Commits in LF" --body "every repo" --personal
+                                             # knowledge shared by every repo
 ```
+
+`search` covers the project and your personal scope at once and tags each result
+with `scope` (`[personal]` in text); add `--personal` to search only that scope.
 
 Anything you would otherwise repeat in the next session belongs here. Task state,
 logs and chat transcripts do not.
@@ -115,8 +119,9 @@ JSON-RPC over stdio:
 ```
 
 The server keeps the SQLite index open, so a tool call costs a few milliseconds
-instead of paying Python startup every time. `save`, `search` and `save_session`
-accept `"scope": "personal"`. `context` returns `MEMORY.md` plus the last session
+instead of paying Python startup every time. `save` and `save_session` accept
+`"scope": "personal"`; `search` takes `"scope": "project" | "personal" | "all"`
+(default `all`). `context` returns `MEMORY.md` plus the project's last session
 recap, so a new session starts where the previous one stopped.
 
 ### Any other harness
@@ -193,7 +198,7 @@ explain why the agent believes something.
 |---|---|
 | `cairn init [--share]` | Create `.cairn/`; `--share` versions `events.jsonl` |
 | `cairn save` | Store a decision, convention, gotcha or fact |
-| `cairn search "terms"` | Ranked active memories |
+| `cairn search "terms"` | Ranked active memories from project and personal scope |
 | `cairn get <id>` | Full memory |
 | `cairn archive <id>` | Stop returning a memory |
 | `cairn check` | List memories whose anchor changed |
@@ -204,8 +209,8 @@ explain why the agent believes something.
 | `cairn mcp` | Serve MCP over stdio |
 
 `--json` is available on `save`, `search`, `get`, `check`, `session` and `import` for
-agent consumption. `save`, `search` and `archive` accept `--personal`; `get` checks
-both stores.
+agent consumption. `save`, `search` and `archive` accept `--personal`; `search` spans
+both scopes by default and `get` checks both stores.
 
 ## Benchmarks
 
@@ -214,12 +219,12 @@ MCP numbers are in-process tool calls ([all measurements](docs/BENCHMARKS.md)):
 
 | Operation | p95 |
 |---|---|
-| `cairn search` via CLI | 150.6 ms |
-| `cairn save` via CLI, summary render included | 137.8 ms |
-| `search` via MCP tool call | 2.3 ms |
-| `save` via MCP tool call | 9.4 ms |
-| `context` via MCP tool call | 5.8 ms |
-| Internal FTS5 query | 2.2 ms |
+| `cairn search` via CLI (project + personal) | 309.3 ms |
+| `cairn save` via CLI, summary render included | 329.6 ms |
+| `search` via MCP tool call | 6.6 ms |
+| `save` via MCP tool call | 17.9 ms |
+| `context` via MCP tool call | 12.4 ms |
+| Internal FTS5 query | 4.5 ms |
 
 Retrieval precision@3 on the bundled golden set is 30/30. A small paired test, 8 tasks
 run twice, went from 0/16 correct answers and 26,826 tokens without memory to 16/16

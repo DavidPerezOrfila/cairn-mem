@@ -355,7 +355,7 @@ class Store:
                       snippet(mem_fts, 1, '', '', '…', 12) AS snippet
                FROM mem_fts JOIN mem m ON m.rowid = mem_fts.rowid
                WHERE mem_fts MATCH ? AND m.status = 'active'
-               ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0) LIMIT ?""",
+               ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0), m.rowid LIMIT ?""",
             (match, limit),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -379,3 +379,16 @@ class Store:
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (("jsonl_size", size), ("jsonl_mtime_ns", mtime)),
             )
+
+
+def search_scopes(project, personal, query: str, limit: int = 5) -> list[dict]:
+    """Busca en proyecto y scope personal. Un BM25 de otra base no es comparable:
+    se entrelazan por posición de ranking, empezando por el proyecto."""
+    groups = []
+    for scope, store in (("project", project), ("personal", personal)):
+        if store is None:
+            continue
+        rows = store.search(query, limit=limit)
+        groups.append([{**row, "scope": scope} for row in rows])
+    merged = [row for group in zip_longest(*groups) for row in group if row]
+    return merged[: max(0, limit)]

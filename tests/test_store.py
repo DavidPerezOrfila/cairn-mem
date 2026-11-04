@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cairn_mem.store import Store
+from cairn_mem.store import Store, search_scopes
 
 
 @pytest.fixture
@@ -446,6 +446,47 @@ def test_search_result_exposes_topic_key(store):
     rows = {row["id"]: row for row in store.search("bm25")}
     assert rows[mid]["topic_key"] == "storage/fts5"
     assert rows[without]["topic_key"] is None
+
+
+def test_search_scopes_interleaves_scopes_by_rank(tmp_path):
+    project = Store(str(tmp_path / "project"))
+    personal = Store(str(tmp_path / "personal"))
+    for title in ("uno", "dos", "tres"):
+        project.save(kind="fact", title=f"fts5 {title}", body="bm25")
+    for title in ("alfa", "beta"):
+        personal.save(kind="fact", title=f"fts5 {title}", body="bm25")
+
+    rows = search_scopes(project, personal, "fts5", limit=5)
+    assert [row["scope"] for row in rows] == [
+        "project",
+        "personal",
+        "project",
+        "personal",
+        "project",
+    ]
+    assert [row["title"] for row in rows if row["scope"] == "personal"] == [
+        "fts5 alfa",
+        "fts5 beta",
+    ]
+
+
+def test_search_scopes_applies_limit_to_merged(tmp_path):
+    project = Store(str(tmp_path / "project"))
+    personal = Store(str(tmp_path / "personal"))
+    project.save(kind="fact", title="fts5 proyecto", body="bm25")
+    personal.save(kind="fact", title="fts5 personal", body="bm25")
+
+    rows = search_scopes(project, personal, "fts5", limit=1)
+    assert [(row["scope"], row["title"]) for row in rows] == [
+        ("project", "fts5 proyecto")
+    ]
+
+
+def test_search_scopes_without_personal(tmp_path):
+    project = Store(str(tmp_path / "project"))
+    project.save(kind="fact", title="fts5 solo", body="bm25")
+    rows = search_scopes(project, None, "fts5")
+    assert [(row["scope"], row["title"]) for row in rows] == [("project", "fts5 solo")]
 
 
 def test_schema_2_is_rebuilt_and_topic_becomes_searchable(root):

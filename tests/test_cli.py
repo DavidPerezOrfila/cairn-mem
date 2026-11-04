@@ -272,7 +272,7 @@ def test_check_hashes_large_anchors(capsys, in_tmp, monkeypatch):
     assert "sin memorias stale" in run(capsys, "check")[1]
 
 
-def test_personal_scope_is_separate(capsys, in_tmp):
+def test_personal_scope_is_reachable_from_the_project(capsys, in_tmp):
     run(capsys, "init")
     _, out, _ = run(
         capsys,
@@ -288,10 +288,75 @@ def test_personal_scope_is_separate(capsys, in_tmp):
     )
     mid = json.loads(out)["id"]
     assert (in_tmp / "home" / "events.jsonl").exists()
-    assert "sin resultados" in run(capsys, "search", "commits")[1]
+    all_rows = json.loads(run(capsys, "search", "commits", "--json")[1])
+    assert [(row["id"], row["scope"]) for row in all_rows] == [(mid, "personal")]
+    assert "[personal]" in run(capsys, "search", "commits")[1]
     assert "Commits en LF" in run(capsys, "search", "commits", "--personal")[1]
     _, out, _ = run(capsys, "get", mid, "--json")
     assert json.loads(out)["title"] == "Commits en LF"
+    assert "Commits en LF" not in run(capsys, "render")[1]
+
+
+def test_search_transversal_merges_both_scopes(capsys, in_tmp):
+    run(capsys, "init")
+    _, out, _ = run(
+        capsys,
+        "save",
+        "--kind",
+        "decision",
+        "--title",
+        "Pipeline de commits",
+        "--body",
+        "validar en CI",
+        "--json",
+    )
+    project_id = json.loads(out)["id"]
+    _, out, _ = run(
+        capsys,
+        "save",
+        "--kind",
+        "convention",
+        "--title",
+        "Commits en LF",
+        "--body",
+        "todos los repos",
+        "--personal",
+        "--json",
+    )
+    personal_id = json.loads(out)["id"]
+
+    rows = json.loads(run(capsys, "search", "commits", "--json")[1])
+    assert [(row["id"], row["scope"]) for row in rows] == [
+        (project_id, "project"),
+        (personal_id, "personal"),
+    ]
+
+    only_personal = json.loads(
+        run(capsys, "search", "commits", "--personal", "--json")[1]
+    )
+    assert [row["id"] for row in only_personal] == [personal_id]
+
+
+def test_search_does_not_create_personal_dir(capsys, in_tmp):
+    run(capsys, "init")
+    run(capsys, "save", "--kind", "fact", "--title", "t", "--body", "b")
+    run(capsys, "search", "t")
+    assert not (in_tmp / "home").exists()
+
+
+def test_search_personal_without_project_init(capsys, in_tmp):
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "convention",
+        "--title",
+        "Commits en LF",
+        "--body",
+        "todos los repos",
+        "--personal",
+    )
+    assert "Commits en LF" in run(capsys, "search", "commits")[1]
 
 
 def test_cairn_home_override(capsys, in_tmp, monkeypatch, tmp_path_factory):

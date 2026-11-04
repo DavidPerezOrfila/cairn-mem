@@ -100,3 +100,35 @@ M4 se hizo con el agente ocupando CPU, de ahí la diferencia):
 - Baseline de topics (store real): 39 activas, 39 con `topic_key`, 4 claves repetidas
   contando superseded (5 superseded).
 - Detalle y criterios: [`docs/features/topic-visibility.md`](features/topic-visibility.md).
+
+## S3 — search transversal y sesión del proyecto (2026-11-04)
+
+`cairn search` consulta proyecto y scope personal y entrelaza por posición de
+ranking; `context` solo inyecta sesiones del proyecto. Medido en la misma máquina,
+con el scope personal real (18 memorias) y el agente cargando CPU, así que las
+cifras absolutas no son comparables con la pasada en reposo de S2:
+
+`python bench/bench_cli.py --reps 40`:
+
+| Registros | rebuild | search p95 | save p95 | search interno p95 |
+|---|---|---|---|---|
+| 1 000 | 219 ms | 336,9 ms | 391,4 ms | 3,0 ms |
+| 10 000 | 2 989 ms | 309,3 ms | 329,6 ms | 4,5 ms |
+
+`python bench/bench_mcp.py --reps 40` con 10k y personal real:
+
+| Tool | p50 | p95 |
+|---|---|---|
+| `search` | 4,3 ms | 6,6 ms |
+| `save` | 15,3 ms | 17,9 ms |
+| `context` (L0 + sesión del proyecto) | 9,0 ms | 12,4 ms |
+
+- Coste de la segunda base: con 20 repeticiones, `search` MCP p95 7,4 ms con
+  personal real frente a 4,7 ms sin `~/.cairn`; la consulta interna no cambia.
+- Una repetición posterior de `bench_mcp` con el agente cargando la CPU dio
+  search 13,5 / save 29,9 / context 31,0 ms p95; el SLO de 50 ms se mantiene.
+- Con 20 repeticiones en la misma máquina cargada salió algún `p95` de 624–683 ms
+  en `search` e2e por un arranque de proceso lento (el p50 seguía en ~300 ms);
+  con 40 repeticiones ambos tamaños cumplen.
+- Precisión@3: 30/30. Detalle y criterios:
+  [`docs/features/transversal-search.md`](features/transversal-search.md).

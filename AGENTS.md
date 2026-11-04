@@ -37,7 +37,7 @@ python bench/bench_mcp.py --reps 20                 # latencia de tool calls MCP
 - **Seguridad:** rechaza (no redactes) secretos antes de escribir: claves cloud, `BEGIN … PRIVATE KEY`, JWT `eyJ…`, `password|secret|token|api_key` con `=` o `:` (JSON/YAML), URLs `://user:pass@`. `body` > 500 caracteres o `title` > 200 → error.
 - Imports mínimos al arranque: SLO de CLI end-to-end (p95 `search` < 350 ms, `save` < 500 ms, arranque incluido) y de tool MCP en proceso (< 50 ms).
 - **MCP:** stdout solo protocolo (NDJSON en binario, `\n`); logs a stderr; sin asyncio ni señales; el proceso cachea un `Store` por scope y es el único escritor mientras vive.
-- **Sesiones:** `.cairn/sessions.jsonl` es local y no entra en FTS ni L0; un resumen puede superar 500 caracteres.
+- **Sesiones:** `.cairn/sessions.jsonl` es local y no entra en FTS ni L0; un resumen puede superar 500 caracteres. `context` solo inyecta el último resumen **del proyecto**: uno personal es de otro repo.
 - **Importador:** idempotente por `sha1("<sal fija>:<id de origen>")[:12]`; `What` → `body` (≤500) y el resto → `why`; `global/personal` va al scope personal y no al repo actual.
 - Sin LLM en ninguna ruta. Nada del backlog (`hits`, decay, sqlite-vec, git hook pasivo) sin una medición que lo justifique.
 - Cambio de diseño → una fila en `docs/DECISIONS.md` (fecha + decisión + motivo).

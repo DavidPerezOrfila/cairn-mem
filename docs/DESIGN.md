@@ -48,14 +48,20 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medido: 5
 - Evento: `{"op":"session","id":"…","ts":…,"summary":"…"}`. Sin límite de 500 caracteres.
 - No entran en `events.jsonl`, ni en FTS, ni en L0: son continuidad, no memoria curada.
 - Lectura: replay en memoria (son pocos); tolera una última línea rasgada.
-- Comandos: `cairn session save|list|get` (con `--personal` para el scope personal). MCP expone solo `session` (guardar). La tool `context` devuelve el L0 y, tras él, el último resumen (máx. 4000 caracteres) para que la sesión nueva arranque sabiendo dónde se quedó la anterior.
+- Comandos: `cairn session save|list|get` (con `--personal` para el scope personal). MCP expone solo `save_session` (guardar). La tool `context` devuelve el L0 y, tras él, el último resumen **del proyecto** (máx. 4000 caracteres) para que la sesión nueva arranque sabiendo dónde se quedó la anterior; un resumen personal de otro repo no se mezcla.
 - `Sessions.save` pasa por el mismo `reject_secrets` que `Store.save`.
 
 ## Scope personal (M7)
 - Directorio: `CAIRN_HOME` o `~/.cairn`; `CAIRN_DIR` sigue mandando en el proyecto.
-- `save/search --personal` usan ese `Store`; `get` busca en proyecto y luego en personal.
-- MCP: `scope` opcional `project|personal` en `save` y `search`.
-- El L0 sigue siendo solo del proyecto: la memoria personal se recupera por búsqueda.
+- `save --personal` usa ese `Store`; `get` busca en proyecto y luego en personal.
+- `search` es **transversal**: consulta proyecto y personal y entrelaza los resultados
+  por posición de ranking (los BM25 de bases distintas no son comparables), empezando
+  por el proyecto. Cada resultado lleva `scope`; en texto, el personal va con `[personal]`.
+  `--personal` / `scope=personal` restringe a solo personal. Sin `.cairn/` de
+  proyecto pero con scope personal, la búsqueda devuelve solo la personal.
+- MCP: `scope` en `save` (`project|personal`) y en `search` (`project|personal|all`,
+  por defecto `all`).
+- El L0 sigue siendo solo del proyecto: la memoria personal no se mezcla en él.
 
 ## Importador legacy (M8)
 - `cairn import legacy --db RUTA [--dry-run]` lee una base SQLite ajena en solo lectura.
@@ -70,7 +76,7 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medido: 5
 | Nivel | Qué | Tamaño |
 |---|---|---|
 | L0 | `.cairn/MEMORY.md`: `- [id] kind: [topic] título — 120 car. de cuerpo` | **≤ 3000 caracteres** (≈ 900 tokens) |
-| L1 | `cairn search`: `id, kind, topic_key, title, snippet, stale` | ~50 tokens/resultado |
+| L1 | `cairn search`: `id, kind, topic_key, title, snippet, stale, scope` | ~50 tokens/resultado |
 | L2 | `cairn get <id>`: registro completo | ≤ 500 car. de cuerpo |
 
 - **L0** se regenera tras cada `save/archive` y tras un rebuild. Orden determinista:
