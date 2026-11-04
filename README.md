@@ -4,8 +4,8 @@
 
 <p><strong>Project memory for coding agents, stored as plain files you can review.</strong></p>
 
-[![PyPI](https://img.shields.io/pypi/v/cairn-mem.svg)](https://pypi.org/project/cairn-mem/)
-[![Python](https://img.shields.io/pypi/pyversions/cairn-mem.svg)](https://pypi.org/project/cairn-mem/)
+[![PyPI](https://img.shields.io/pypi/v/cairn-mem)](https://pypi.org/project/cairn-mem/)
+[![Python](https://img.shields.io/pypi/pyversions/cairn-mem)](https://pypi.org/project/cairn-mem/)
 [![CI](https://github.com/DavidPerezOrfila/cairn-mem/actions/workflows/ci.yml/badge.svg)](https://github.com/DavidPerezOrfila/cairn-mem/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Dependencies: 0](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen.svg)](pyproject.toml)
