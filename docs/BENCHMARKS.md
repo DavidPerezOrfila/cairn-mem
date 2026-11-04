@@ -73,3 +73,30 @@ L0 con 1k memorias: 2 944 caracteres (≤ 3 000) y byte-idéntico al reabrir (ve
 - L0 del repo: 2919 caracteres y 15 líneas `decision` → 2991 caracteres con
   5 `decision`, 5 `gotcha` y 5 `fact`.
 - Detalle y criterios: [`docs/features/l0-fair-share.md`](features/l0-fair-share.md).
+
+## S2 — topic y ancla en FTS (2026-11-04)
+
+`SCHEMA_VERSION=3`: `mem_fts` indexa `title, body, why, topic_key, anchor_path` con
+pesos `5.0, 1.0, 0.5, 3.0, 2.0`. Medido en la misma máquina, en reposo (la pasada de
+M4 se hizo con el agente ocupando CPU, de ahí la diferencia):
+
+`python bench/bench_cli.py --reps 20`:
+
+| Registros | rebuild | search p95 | save p95 | search interno p95 |
+|---|---|---|---|---|
+| 1 000 | 92 ms | 156,4 ms | 147,2 ms | 0,3 ms |
+| 10 000 | 570 ms | 150,6 ms | 137,8 ms | 2,2 ms |
+
+`python bench/bench_mcp.py --reps 20` con 10k:
+
+| Tool | p50 | p95 |
+|---|---|---|
+| `search` | 1,8 ms | 2,3 ms |
+| `save` | 8,1 ms | 9,4 ms |
+| `context` (L0) | 4,6 ms | 5,8 ms |
+
+- Precisión@3: 30/30 (`pytest -q tests/test_golden.py`).
+- L0 del repo: 2927 caracteres, 14 líneas, todas con `[topic]`.
+- Baseline de topics (store real): 39 activas, 39 con `topic_key`, 4 claves repetidas
+  contando superseded (5 superseded).
+- Detalle y criterios: [`docs/features/topic-visibility.md`](features/topic-visibility.md).

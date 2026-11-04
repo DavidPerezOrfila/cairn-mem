@@ -45,3 +45,5 @@
 | 2026-11-03 | Anchors > 2 MB se marcan stale sin hashear en `search`; `cairn check` hashea siempre | Leer varios ficheros grandes por búsqueda podía recorrer cientos de MB |
 | 2026-11-04 | L0 reparte el presupuesto en round-robin por `kind` (una línea de cada uno por vuelta) | Con 15 `decision` en el repo, los `gotcha` y `fact` existentes nunca entraban en los 3000 caracteres |
 | 2026-11-04 | Índice parcial `(kind, ts DESC, id) WHERE status='active'` | Sin él, el reparto hacía cuatro escaneos de la tabla: `context` pasaba de 18 a 89 ms p95 con 10k |
+| 2026-11-04 | FTS5 indexa `topic_key` y `anchor_path` (`SCHEMA_VERSION=3`) | El topic es el asa estable que el agente recuerda y la ruta del ancla es lo que ve en el editor: buscar `storage/fts5` o `src/auth.py` no debe depender del título. Pesos 5/1/0.5/3/2 (título/topic/ancla/body/why). El esquema es derivado: si la versión no coincide se tira y se reconstruye |
+| 2026-11-04 | El L0 muestra `[topic]` entre el `kind` y el título, y `search` lo añade al resultado | Sin él, dos memorias del mismo tema eran indistinguibles; solo ocupa caracteres en las entradas que tienen topic |

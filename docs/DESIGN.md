@@ -35,8 +35,8 @@ Memoria persistente para agentes de código: **eficaz, barata en latencia/coste,
 - JSON con `ensure_ascii=False`; ficheros abiertos siempre con `encoding="utf-8"` (Windows).
 
 ## Sincronización DB ↔ JSONL
-Al abrir el `Store` se compara `(size, mtime_ns)` del JSONL con `meta`. Si difieren (p. ej. tras `git pull`) → `rebuild()` completo (ordenado por `(ts, nº de línea)`) y `render()`. Las escrituras propias actualizan la huella en la misma transacción. `PRAGMA user_version` distinto → rebuild.
-Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en M4).
+Al abrir el `Store` se compara `(size, mtime_ns)` del JSONL con `meta`. Si difieren (p. ej. tras `git pull`) → `rebuild()` completo (ordenado por `(ts, nº de línea)`) y `render()`. Las escrituras propias actualizan la huella en la misma transacción. `PRAGMA user_version` distinto → se tira el esquema derivado (`mem`, `mem_fts`, `meta`) y se reconstruye.
+Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medido: 570 ms en reposo, S2).
 
 ## Escritura y seguridad
 - **Rechazar** (no redactar) si el texto parece contener un secreto: claves cloud (`AKIA…`), `-----BEGIN … PRIVATE KEY-----`, JWT (`eyJ…`), `password|secret|token|api_key = valor`, URLs con `://user:pass@`. Mensaje claro: "reescribe sin el secreto".
@@ -69,15 +69,17 @@ Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medir en 
 ## Lectura
 | Nivel | Qué | Tamaño |
 |---|---|---|
-| L0 | `.cairn/MEMORY.md`: `- [id] kind: título — 120 car. de cuerpo` | **≤ 3000 caracteres** (≈ 900 tokens) |
-| L1 | `cairn search`: `id, kind, title, snippet, stale` | ~50 tokens/resultado |
+| L0 | `.cairn/MEMORY.md`: `- [id] kind: [topic] título — 120 car. de cuerpo` | **≤ 3000 caracteres** (≈ 900 tokens) |
+| L1 | `cairn search`: `id, kind, topic_key, title, snippet, stale` | ~50 tokens/resultado |
 | L2 | `cairn get <id>`: registro completo | ≤ 500 car. de cuerpo |
 
 - **L0** se regenera tras cada `save/archive` y tras un rebuild. Orden determinista:
   round-robin por `kind` (en cada vuelta, `convention > decision > gotcha > fact`) y
   `ts` desc dentro de cada kind, hasta llenar el presupuesto. Así un kind con muchas
-  entradas no expulsa a los demás.
-- **Búsqueda:** términos saneados (`\w+` → `"t"*`, prefijo), **AND y si no hay resultados OR**; `bm25(mem_fts, 5.0, 1.0, 0.5)` (título pesa más); filtro `status='active'`. Sin más boosts en v0.1.
+  entradas no expulsa a los demás. El `[topic]` solo aparece si la memoria lo tiene.
+- **Búsqueda:** términos saneados (`\w+` → `"t"*`, prefijo), **AND y si no hay resultados OR**;
+  `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)` sobre `title, body, why, topic_key, anchor_path`
+  (título > topic > ancla > body > why); filtro `status='active'`. Sin más boosts en v0.1.
 - Las consultas crudas de FTS5 **fallan** con `-`, `:`, `"` (p. ej. `oauth-callback`); por eso el saneado es obligatorio.
 
 ## Anclas / stale (se calcula, no se guarda)

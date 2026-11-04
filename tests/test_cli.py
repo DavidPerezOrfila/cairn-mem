@@ -361,3 +361,23 @@ def test_personal_session_scope(capsys, in_tmp):
     assert "sin sesiones" in run(capsys, "session", "list")[1]
     assert "resumen personal" in run(capsys, "session", "list", "--personal")[1]
     assert "resumen personal" in run(capsys, "session", "get", sid, "--personal")[1]
+
+
+def test_search_by_topic_shows_it_in_text_and_json(capsys):
+    run(capsys, "init")
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "decision",
+        "--topic",
+        "storage/fts5",
+        "--title",
+        "Usar FTS5",
+        "--body",
+        "bm25",
+    )
+    code, out, _ = run(capsys, "search", "storage/fts5")
+    assert code == 0 and "[storage/fts5]" in out
+    code, out, _ = run(capsys, "search", "storage/fts5", "--json")
+    assert code == 0 and json.loads(out)[0]["topic_key"] == "storage/fts5"

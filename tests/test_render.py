@@ -73,3 +73,29 @@ def test_l0_marks_stale(tmp_path):
     )
     (root / "a.py").write_text("v2\n", encoding="utf-8")
     assert "⚠" in render.render_l0(s, project_root=str(root))
+
+
+def test_l0_shows_topic_key_when_present(tmp_path):
+    s = Store(str(tmp_path / ".cairn"))
+    mid = s.save(
+        kind="decision", topic_key="storage/fts5", title="Usar FTS5", body="bm25"
+    )
+    assert f"- [{mid}] decision: [storage/fts5] Usar FTS5" in render.render_l0(s)
+
+
+def test_l0_without_topic_keeps_the_existing_format(tmp_path):
+    s = Store(str(tmp_path / ".cairn"))
+    mid = s.save(kind="fact", title="Sin topic", body="x")
+    assert f"- [{mid}] fact: Sin topic — x" in render.render_l0(s)
+
+
+def test_l0_budget_holds_with_topic_keys(tmp_path):
+    s = Store(str(tmp_path / ".cairn"))
+    for i in range(200):
+        s.save(
+            kind="fact",
+            topic_key=f"area/{i}",
+            title=f"memoria {i}",
+            body="detalle " * 30,
+        )
+    assert len(render.render_l0(s, max_chars=3000)) <= 3000

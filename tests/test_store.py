@@ -416,3 +416,74 @@ def test_l0_regenerated_after_archive_and_rebuild(store, root):
     assert "visible" not in memory.read_text(encoding="utf-8")
     store.rebuild()
     assert "visible" not in memory.read_text(encoding="utf-8")
+
+
+def test_search_by_topic_key(store):
+    mid = store.save(
+        kind="decision",
+        topic_key="infra/deploy",
+        title="Pipeline ETL",
+        body="carga nocturna de ventas",
+    )
+    assert [row["id"] for row in store.search("infra deploy")] == [mid]
+
+
+def test_search_by_anchor_path(store):
+    mid = store.save(
+        kind="gotcha",
+        title="OAuth callback",
+        body="redirect_uri exacto",
+        anchor_path="src/auth.py",
+    )
+    assert [row["id"] for row in store.search("src/auth")] == [mid]
+
+
+def test_search_result_exposes_topic_key(store):
+    mid = store.save(
+        kind="decision", topic_key="storage/fts5", title="Usar FTS5", body="bm25"
+    )
+    without = store.save(kind="fact", title="Sin topic", body="bm25")
+    rows = {row["id"]: row for row in store.search("bm25")}
+    assert rows[mid]["topic_key"] == "storage/fts5"
+    assert rows[without]["topic_key"] is None
+
+
+def test_schema_2_is_rebuilt_and_topic_becomes_searchable(root):
+    """Una DB de 0.3.x (schema 2) se reconstruye sola al abrirla."""
+    import sqlite3
+
+    Path(root).mkdir(parents=True, exist_ok=True)
+    (Path(root) / "events.jsonl").write_text(
+        json.dumps(
+            {
+                "op": "save",
+                "id": "aaaaaaaabbbb",
+                "ts": 1,
+                "kind": "decision",
+                "topic_key": "storage/fts5",
+                "title": "Usar FTS5",
+                "body": "bm25",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    conn = sqlite3.connect(str(Path(root) / "cairn.db"))
+    conn.executescript(
+        """
+        CREATE TABLE mem (
+          id TEXT PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL,
+          topic_key TEXT, title TEXT NOT NULL, body TEXT NOT NULL, why TEXT,
+          anchor_path TEXT, anchor_hash TEXT, status TEXT NOT NULL
+        );
+        CREATE VIRTUAL TABLE mem_fts USING fts5(
+          title, body, why, content='mem', content_rowid='rowid'
+        );
+        PRAGMA user_version = 2;
+        """
+    )
+    conn.close()
+
+    store = Store(root)
+    assert [row["id"] for row in store.search("storage")] == ["aaaaaaaabbbb"]

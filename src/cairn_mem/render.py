@@ -24,7 +24,8 @@ def render_l0(store, max_chars: int = 3000, project_root=None) -> str:
 
 def _line(row: dict, root: Path) -> str:
     body = " ".join(row["body"].split())[:EXCERPT]
-    text = f"- [{row['id']}] {row['kind']}: {row['title']} — {body}"
+    topic = f"[{row['topic_key']}] " if row.get("topic_key") else ""
+    text = f"- [{row['id']}] {row['kind']}: {topic}{row['title']} — {body}"
     if is_stale(row["anchor_path"], row["anchor_hash"], root):
         text += " ⚠ revisar"
     return text
