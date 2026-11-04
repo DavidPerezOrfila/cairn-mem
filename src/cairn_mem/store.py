@@ -92,8 +92,10 @@ class Store:
         except sqlite3.OperationalError:
             pass  # otro Store ya la configuró o lock transitorio
         version = self._conn.execute("PRAGMA user_version").fetchone()[0]
-        if version != SCHEMA_VERSION:
+        if version not in (0, SCHEMA_VERSION):
             # El esquema es derivado: se tira y el rebuild lo repone desde el JSONL.
+            # La versión 0 es una DB nueva: otro Store puede estar creándola ahora
+            # mismo y tirar sus tablas rompería el save concurrente.
             self._conn.executescript(
                 "DROP TABLE IF EXISTS mem_fts;"
                 "DROP TABLE IF EXISTS mem;"
