@@ -66,12 +66,50 @@ def test_personal_scope_roundtrip(in_tmp):
         )
     )
     assert (in_tmp / "home" / "events.jsonl").exists()
-    assert json.loads(text(call(server, "search", query="commits"))) == []
+    found = json.loads(text(call(server, "search", query="commits")))
+    assert [(row["id"], row["scope"]) for row in found] == [(memory_id, "personal")]
     found = json.loads(text(call(server, "search", query="commits", scope="personal")))
     assert found[0]["id"] == memory_id
     assert (
         json.loads(text(call(server, "get", id=memory_id)))["title"] == "Commits en LF"
     )
+
+
+def test_search_without_personal_dir_does_not_create_it(in_tmp):
+    server = Server()
+    call(server, "save", kind="fact", title="t", body="b")
+    call(server, "search", query="t")
+    assert not (in_tmp / "home").exists()
+
+
+def test_search_transversal_merges_both_scopes():
+    server = Server()
+    project_id = text(
+        call(server, "save", kind="decision", title="Pipeline de commits", body="CI")
+    )
+    personal_id = text(
+        call(
+            server,
+            "save",
+            kind="convention",
+            title="Commits en LF",
+            body="todos los repos",
+            scope="personal",
+        )
+    )
+    rows = json.loads(text(call(server, "search", query="commits")))
+    assert [(row["id"], row["scope"]) for row in rows] == [
+        (project_id, "project"),
+        (personal_id, "personal"),
+    ]
+    only_personal = json.loads(
+        text(call(server, "search", query="commits", scope="personal"))
+    )
+    assert [row["id"] for row in only_personal] == [personal_id]
+    only_project = json.loads(
+        text(call(server, "search", query="commits", scope="project"))
+    )
+    assert [row["id"] for row in only_project] == [project_id]
 
 
 def test_session_tool_stores_summary(in_tmp):
@@ -103,6 +141,8 @@ def test_get_personal_without_project_init(in_tmp):
     (in_tmp / ".cairn").rmdir()
     memory = json.loads(text(call(server, "get", id=memory_id)))
     assert memory["title"] == "Compartida"
+    found = json.loads(text(call(server, "search", query="compartida")))
+    assert [(row["id"], row["scope"]) for row in found] == [(memory_id, "personal")]
 
 
 def test_notification_has_no_response():
@@ -166,11 +206,11 @@ def test_context_includes_last_session_without_touching_l0(in_tmp):
     assert "Cerrar M9" not in memory
 
 
-def test_context_sees_personal_session():
+def test_context_ignores_personal_session():
     server = Server()
     call(server, "save", kind="decision", title="Usar FTS5", body="bm25")
     call(server, "save_session", summary="recap global", scope="personal")
-    assert "recap global" in text(call(server, "context"))
+    assert "recap global" not in text(call(server, "context"))
 
 
 def test_context_truncates_long_session_summary():

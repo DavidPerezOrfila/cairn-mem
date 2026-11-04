@@ -12,7 +12,7 @@ from cairn_mem.anchor import resolve_anchor
 from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.render import render_l0
 from cairn_mem.sessions import Sessions
-from cairn_mem.store import KINDS, Store
+from cairn_mem.store import KINDS, Store, search_scopes
 
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOLS = (PROTOCOL_VERSION, "2025-03-26", "2024-11-05")
@@ -22,6 +22,7 @@ METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 LAST_SESSION_CHARS = 4000
+SCOPES = ("project", "personal", "all")
 
 TOOLS = [
     {
@@ -46,13 +47,13 @@ TOOLS = [
     },
     {
         "name": "search",
-        "description": "Busca memorias activas por texto (BM25).",
+        "description": "Busca memorias activas por texto (BM25) en proyecto y scope personal.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20},
-                "scope": {"type": "string", "enum": ["project", "personal"]},
+                "scope": {"type": "string", "enum": list(SCOPES)},
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -71,7 +72,8 @@ TOOLS = [
     {
         "name": "context",
         "description": (
-            "Memoria del proyecto (L0) y el último resumen de sesión, para cargar al empezar."
+            "Memoria del proyecto (L0) y el último resumen de sesión del proyecto, "
+            "para cargar al empezar."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -173,10 +175,10 @@ class Server:
         return _result(request_id, {"content": [{"type": "text", "text": text}]})
 
 
-def _scope(args) -> str:
-    scope = args.get("scope", "project")
-    if scope not in ("project", "personal"):
-        raise ValueError("scope debe ser project o personal")
+def _scope(args, options=("project", "personal"), default="project") -> str:
+    scope = args.get("scope", default)
+    if scope not in options:
+        raise ValueError(f"scope debe ser {' o '.join(options)}")
     return scope
 
 
@@ -217,8 +219,20 @@ def _search(server, args):
     if not isinstance(limit, int) or isinstance(limit, bool):
         raise TypeError("limit debe ser entero")
     limit = max(1, min(limit, 20))
-    store = server.personal() if _scope(args) == "personal" else server.store()
-    return json.dumps(store.search(query, limit=limit), ensure_ascii=False)
+    scope = _scope(args, SCOPES, "all")
+    personal = None
+    if scope != "project" and (scope == "personal" or personal_dir().exists()):
+        personal = server.personal()
+    project = None
+    if scope != "personal":
+        try:
+            project = server.store()
+        except FileNotFoundError:
+            if personal is None:
+                raise  # sin proyecto ni scope personal no hay nada que buscar
+    return json.dumps(
+        search_scopes(project, personal, query, limit=limit), ensure_ascii=False
+    )
 
 
 def _get(server, args):
@@ -236,20 +250,12 @@ def _get(server, args):
     return json.dumps(memory, ensure_ascii=False)
 
 
-def _latest_session():
-    """La sesión más reciente del proyecto o del scope personal (la que marque ts)."""
-    records = []
-    for root in (data_dir(), personal_dir()):
-        if root.exists():
-            records.extend(Sessions(str(root)).all(limit=1))
-    return max(records, key=lambda record: record.get("ts", 0)) if records else None
-
-
 def _context(server, args):
     text = render_l0(server.store())
-    record = _latest_session()
-    if record is None:
+    records = Sessions(str(server.store().root)).all(limit=1)
+    if not records:
         return text
+    record = records[0]
     summary = record.get("summary", "")
     if len(summary) > LAST_SESSION_CHARS:
         summary = summary[:LAST_SESSION_CHARS] + "\n… (recortado)"

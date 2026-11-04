@@ -11,7 +11,7 @@ from pathlib import Path
 from cairn_mem.anchor import is_stale, resolve_anchor
 from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.sessions import Sessions
-from cairn_mem.store import KINDS, Store
+from cairn_mem.store import KINDS, Store, search_scopes
 
 GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", "sessions.jsonl")
 
@@ -95,7 +95,16 @@ def _cmd_save(ns) -> int:
 
 
 def _cmd_search(ns) -> int:
-    results = _store(ns).search(ns.query, limit=ns.limit)
+    home = personal_dir()
+    personal = Store(str(home)) if ns.personal or home.exists() else None
+    project = None
+    if not ns.personal:
+        try:
+            project = Store(str(data_dir()))
+        except FileNotFoundError:
+            if personal is None:
+                raise  # sin proyecto ni scope personal no hay nada que buscar
+    results = search_scopes(project, personal, ns.query, limit=ns.limit)
     if ns.json:
         _print_json(results)
     elif not results:
@@ -104,8 +113,11 @@ def _cmd_search(ns) -> int:
         for r in results:
             snippet = " ".join(r["snippet"].split())
             topic = f"  [{r['topic_key']}]" if r.get("topic_key") else ""
+            scope = "  [personal]" if r["scope"] == "personal" else ""
             stale = "  ⚠ revisar" if r["stale"] else ""
-            print(f"{r['id']}  {r['kind']}{topic}  {r['title']} — {snippet}{stale}")
+            print(
+                f"{r['id']}  {r['kind']}{topic}{scope}  {r['title']} — {snippet}{stale}"
+            )
     return 0
 
 
