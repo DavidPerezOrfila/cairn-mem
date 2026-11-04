@@ -171,7 +171,7 @@ Cada ronda es un slice: tests primero, gate, review y release propia.
 | Ronda | Mejora | Release | Evidencia |
 |---|---|---|---|
 | S1 | L0 reparte el presupuesto entre kinds (round-robin) | 0.3.0 | [`docs/features/l0-fair-share.md`](docs/features/l0-fair-share.md) |
-| S2 | `topic_key` visible en L0 y `search`; FTS indexa `topic_key` y `anchor_path` | 0.4.0 (implementado, release pendiente) | [`docs/features/topic-visibility.md`](docs/features/topic-visibility.md) |
+| S2 | `topic_key` visible en L0 y `search`; FTS indexa `topic_key` y `anchor_path` | 0.4.0 | [`docs/features/topic-visibility.md`](docs/features/topic-visibility.md) |
 | S3 | `search` transversal (proyecto + personal) y sesión del proyecto en `context` | pendiente | — |
 | S4 | `archive` por MCP y consulta de sesiones anteriores | pendiente | — |
 
