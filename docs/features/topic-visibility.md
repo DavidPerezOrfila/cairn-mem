@@ -25,8 +25,12 @@ Fuera de alcance: cuotas de L0, ranking nuevo, `hits`, cambios en `archive` o MC
 
 ## Evidencia (2026-11-04)
 
-- `pytest -q`: **137 passed** (9 tests nuevos: store, render, CLI y MCP).
+- `pytest -q`: **138 passed** (10 tests nuevos: store, render, CLI y MCP).
 - `ruff check src tests bench`: limpio.
+- CI macOS 3.14 detectó una carrera: con `user_version=0` el drop del esquema tumbaba
+  las tablas que otro `Store` estaba usando (`no such table: mem`). El drop ahora solo
+  actúa sobre esquemas 1/2; hay test de regresión y 5 pasadas seguidas del test de
+  concurrencia en verde.
 - Precisión@3: 30/30 (`pytest -q tests/test_golden.py`).
 - Migración real: el store del repo pasó de `user_version=2` a 3 al abrirse, sin tocar
   el JSONL; `cairn search "release/0.3.1"` devuelve la memoria por topic.

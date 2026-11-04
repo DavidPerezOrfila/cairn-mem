@@ -487,3 +487,16 @@ def test_schema_2_is_rebuilt_and_topic_becomes_searchable(root):
 
     store = Store(root)
     assert [row["id"] for row in store.search("storage")] == ["aaaaaaaabbbb"]
+
+
+def test_version_0_does_not_drop_existing_tables(root):
+    """Una DB recién creada puede seguir en version 0 mientras otro Store la usa."""
+    import sqlite3
+
+    store = Store(root)
+    mid = store.save(kind="fact", title="viva", body="b")
+    conn = sqlite3.connect(str(Path(root) / "cairn.db"))
+    conn.execute("PRAGMA user_version = 0")
+    conn.close()
+
+    assert Store(root).get(mid)["title"] == "viva"
