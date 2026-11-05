@@ -50,7 +50,16 @@ def test_initialize_and_list_tools():
 
     response = server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {tool["name"] for tool in response["result"]["tools"]}
-    assert names == {"save", "search", "get", "context", "save_session"}
+    assert names == {
+        "save",
+        "search",
+        "get",
+        "context",
+        "save_session",
+        "archive",
+        "session_list",
+        "session_get",
+    }
 
 
 def test_personal_scope_roundtrip(in_tmp):
@@ -188,6 +197,88 @@ def test_save_uses_topic_and_anchor(in_tmp):
     assert rows[second]["anchor_path"] == "a.py"
 
 
+def test_archive_tool_archives_memory():
+    server = Server()
+    memory_id = text(
+        call(server, "save", kind="fact", title="T", body="B", topic="t/one")
+    )
+    assert (
+        "archivada"
+        in call(server, "archive", id=memory_id)["result"]["content"][0]["text"]
+    )
+    rows = {row["id"]: row for row in server.store().dump()}
+    assert rows[memory_id]["status"] == "archived"
+    found = json.loads(text(call(server, "search", query="t/one")))
+    assert found == []
+
+
+def test_archive_tool_personal_scope(in_tmp):
+    server = Server()
+    memory_id = text(
+        call(
+            server,
+            "save",
+            kind="fact",
+            title="T",
+            body="B",
+            topic="t/two",
+            scope="personal",
+        )
+    )
+    text(call(server, "archive", id=memory_id, scope="personal"))
+    rows = {row["id"]: row for row in server.personal().dump()}
+    assert rows[memory_id]["status"] == "archived"
+
+
+def test_archive_tool_missing_memory():
+    response = call(Server(), "archive", id="000000000000")
+    assert response["result"]["isError"] is True
+    assert "no existe" in text(response)
+
+
+def test_session_list_and_get_roundtrip():
+    server = Server()
+    call(server, "save_session", summary="## Goal\nS1 primera")
+    call(server, "save_session", summary="## Goal\nS2 segunda")
+    call(server, "save_session", summary="## Goal\nS3 tercera")
+    listed = json.loads(text(call(server, "session_list", limit=1)))
+    assert [row["preview"] for row in listed] == ["## Goal S3 tercera"]
+    listed = json.loads(text(call(server, "session_list", limit=2)))
+    assert [row["preview"][-len("S2 segunda") :] for row in listed] == [
+        "S3 tercera",
+        "S2 segunda",
+    ]
+    all_ids = [row["id"] for row in json.loads(text(call(server, "session_list")))]
+    assert len(all_ids) == 3
+    got = json.loads(text(call(server, "session_get", id=all_ids[0])))
+    assert got["summary"] == "## Goal\nS3 tercera"
+
+
+def test_session_list_validates_limit():
+    server = Server()
+    response = call(server, "session_list", limit=True)
+    assert response["result"]["isError"] is True
+    response = call(server, "session_list", limit="3")
+    assert response["result"]["isError"] is True
+
+
+def test_session_get_missing():
+    response = call(Server(), "session_get", id="000000000000")
+    assert response["result"]["isError"] is True
+    assert "no existe" in text(response)
+
+
+def test_session_tools_respect_scope(in_tmp):
+    server = Server()
+    project_id = text(call(server, "save_session", summary="sesión del proyecto"))
+    text(call(server, "save_session", summary="sesión personal", scope="personal"))
+    listed = json.loads(text(call(server, "session_list", scope="personal")))
+    assert all(row["id"] != project_id for row in listed)
+    assert "sesión personal" in listed[0]["preview"]
+    got = json.loads(text(call(server, "session_get", id=project_id)))
+    assert got["summary"] == "sesión del proyecto"
+
+
 def test_context_returns_l0():
     server = Server()
     call(server, "save", kind="decision", title="Usar FTS5", body="bm25")
@@ -322,6 +413,9 @@ def test_mcp_without_init_returns_tool_error(in_tmp):
     (in_tmp / ".cairn").rmdir()
     server = Server()
     response = call(server, "search", query="x")
+    assert response["result"]["isError"] is True
+    assert "cairn init" in text(response)
+    response = call(server, "session_list")
     assert response["result"]["isError"] is True
     assert "cairn init" in text(response)
 

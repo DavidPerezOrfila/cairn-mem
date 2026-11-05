@@ -107,8 +107,8 @@ logs and chat transcripts do not.
 
 ### MCP
 
-One process, five tools (`save`, `search`, `get`, `context`, `save_session`),
-JSON-RPC over stdio:
+One process, eight tools (`save`, `search`, `get`, `context`, `save_session`,
+`archive`, `session_list`, `session_get`), JSON-RPC over stdio:
 
 ```json
 {
@@ -122,7 +122,9 @@ The server keeps the SQLite index open, so a tool call costs a few milliseconds
 instead of paying Python startup every time. `save` and `save_session` accept
 `"scope": "personal"`; `search` takes `"scope": "project" | "personal" | "all"`
 (default `all`). `context` returns `MEMORY.md` plus the project's last session
-recap, so a new session starts where the previous one stopped.
+recap, so a new session starts where the previous one stopped. `session_list` and
+`session_get` reach older recaps without touching the current context, and
+`archive` retires a memory that no longer applies.
 
 ### Any other harness
 
