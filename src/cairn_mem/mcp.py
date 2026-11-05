@@ -90,6 +90,44 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "archive",
+        "description": "Archiva una memoria: deja de salir en search y en el L0.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "scope": {"type": "string", "enum": ["project", "personal"]},
+            },
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "session_list",
+        "description": "Lista las sesiones recientes más nuevas primero (preview).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                "scope": {"type": "string", "enum": ["project", "personal"]},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "session_get",
+        "description": "Devuelve el resumen completo de una sesión por id.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "scope": {"type": "string", "enum": ["project", "personal"]},
+            },
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 INSTRUCTIONS = (
@@ -262,12 +300,62 @@ def _context(server, args):
     return f"{text}\n## Última sesión ({record['id']})\n{summary}\n"
 
 
+def _session_root(server, args):
+    root = personal_dir() if _scope(args) == "personal" else data_dir()
+    return Sessions(str(root))
+
+
 def _save_session(server, args):
     summary = args.get("summary")
     if not isinstance(summary, str) or not summary.strip():
         raise ValueError("falta el argumento: summary")
+    return _session_root(server, args).save(summary)
+
+
+def _archive(server, args):
+    memory_id = args.get("id")
+    if not isinstance(memory_id, str) or not memory_id:
+        raise ValueError("falta el argumento: id")
+    store = server.personal() if _scope(args) == "personal" else server.store()
+    # el store escribe el evento aunque el id no exista: validar como la CLI
+    if store.get(memory_id) is None:
+        raise ValueError(f"no existe la memoria {memory_id}")
+    store.archive(memory_id)
+    return f"archivada {memory_id}"
+
+
+def _session_root(server, args):
     root = personal_dir() if _scope(args) == "personal" else data_dir()
-    return Sessions(str(root)).save(summary)
+    return Sessions(str(root))
+
+
+def _session_list(server, args):
+    limit = args.get("limit", 20)
+    if not isinstance(limit, int) or isinstance(limit, bool):
+        raise TypeError("limit debe ser entero")
+    limit = max(1, min(limit, 50))
+    records = _session_root(server, args).all(limit=limit)
+    return json.dumps(
+        [
+            {
+                "id": record["id"],
+                "ts": record.get("ts", 0),
+                "preview": " ".join(record.get("summary", "").split())[:200],
+            }
+            for record in records
+        ],
+        ensure_ascii=False,
+    )
+
+
+def _session_get(server, args):
+    session_id = args.get("id")
+    if not isinstance(session_id, str) or not session_id:
+        raise ValueError("falta el argumento: id")
+    record = _session_root(server, args).get(session_id)
+    if record is None:
+        raise ValueError(f"no existe la sesión {session_id}")
+    return json.dumps(record, ensure_ascii=False)
 
 
 _TOOL_HANDLERS = {
@@ -276,6 +364,9 @@ _TOOL_HANDLERS = {
     "get": _get,
     "context": _context,
     "save_session": _save_session,
+    "archive": _archive,
+    "session_list": _session_list,
+    "session_get": _session_get,
 }
 
 

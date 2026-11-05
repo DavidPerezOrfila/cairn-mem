@@ -173,7 +173,7 @@ Cada ronda es un slice: tests primero, gate, review y release propia.
 | S1 | L0 reparte el presupuesto entre kinds (round-robin) | 0.3.0 | [`docs/features/l0-fair-share.md`](docs/features/l0-fair-share.md) |
 | S2 | `topic_key` visible en L0 y `search`; FTS indexa `topic_key` y `anchor_path` | 0.4.0 | [`docs/features/topic-visibility.md`](docs/features/topic-visibility.md) |
 | S3 | `search` transversal (proyecto + personal) y sesión del proyecto en `context` | 0.5.0 | [`docs/features/transversal-search.md`](docs/features/transversal-search.md) |
-| S4 | `archive` por MCP y consulta de sesiones anteriores | pendiente | — |
+| S4 | `archive` por MCP y consulta de sesiones anteriores | 0.6.0 | [`docs/features/mcp-archive-session-history.md`](docs/features/mcp-archive-session-history.md) |
 
 ## 5. Backlog (solo con evidencia medida)
 - `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
