@@ -62,4 +62,10 @@ Fuera de alcance: sincronización incremental (S7), formato del JSONL, ranking.
   con `write_text`, que en Windows añade `\r\n` y cambiaba el tamaño, así que pasaba
   también con el código viejo. Corregido con `write_bytes` y verificado en rojo contra
   la comparación anterior; se añadieron los tests de las ramas de `_repair_tail`.
+- **Publicación 0.7.0:** 2026-11-07 en PyPI (wheel + sdist). `pip index versions
+  cairn-mem` → 0.7.0; instalación limpia en venv desde PyPI verificada con `init`,
+  `save`, `search`, `session save` y `session list`. Sobre ese wheel: un token `ghp_`
+  se rechaza (exit 1) y un `save` tras una cola rasgada funciona y se recupera con
+  `search`. El primer `uv publish` subió 0.6.0 porque `dist/` no se había reconstruido;
+  se borraron `dist/` y `build/` y se volvió a construir (lección de AGENTS.md).
 
