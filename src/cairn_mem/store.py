@@ -12,17 +12,22 @@ from pathlib import Path
 
 from cairn_mem.anchor import is_stale
 from cairn_mem.jsonl import append_jsonl
-from cairn_mem.render import KIND_PRIORITY, render_l0
+from cairn_mem.render import KIND_PRIORITY, MAX_TOPIC, render_l0
 
 SCHEMA_VERSION = 3
 KINDS = tuple(KIND_PRIORITY)
 MAX_BODY = 500
 MAX_TITLE = 200
+ID_PATTERN = re.compile(r"[0-9a-f]{12}")
 
 SECRET_PATTERNS = (
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),
+    re.compile(
+        r"(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|glpat-|sk-proj-|sk-ant-|AIza)"
+        r"[A-Za-z0-9_-]{8,}"
+    ),
     re.compile(
         r"(?i)(?<![a-z0-9])"
         r"(password|passwd|secret|token|api[-_]?key|access[-_]?key|private_key"
@@ -79,6 +84,20 @@ def reject_secrets(*texts):
             raise ValueError("el texto parece contener un secreto; reescríbelo sin él")
 
 
+def validate_topic(topic_key):
+    """Normaliza el topic y rechaza lo que rompería el L0: líneas inyectadas por
+    un salto de línea o un topic tan largo que deja el título fuera del presupuesto."""
+    if topic_key is None:
+        return None
+    topic_key = str(topic_key)
+    if any(ord(char) < 32 or ord(char) == 127 for char in topic_key):
+        raise ValueError("topic_key no puede contener saltos de línea ni controles")
+    topic_key = topic_key.strip()
+    if len(topic_key) > MAX_TOPIC:
+        raise ValueError(f"topic_key supera {MAX_TOPIC} caracteres")
+    return topic_key or None
+
+
 class Store:
     def __init__(self, root: str):
         self.root = Path(root)
@@ -108,9 +127,6 @@ class Store:
             or self._fingerprint() != self._stored_fingerprint()
         ):
             self.rebuild()
-        # La huella guardada puede ser anterior al fichero actual si otro proceso
-        # escribió durante el rebuild: la siguiente lectura lo detecta y reconstruye.
-        self._known_size = int(self._stored_fingerprint()[0])
 
     # --- escritura ---
 
@@ -137,8 +153,11 @@ class Store:
             raise ValueError(
                 f"body supera {MAX_BODY} caracteres; divídelo en dos memorias"
             )
-        reject_secrets(title, body, why, topic_key, anchor_path)
+        topic_key = validate_topic(topic_key)
         mid = id or secrets.token_hex(6)
+        if ID_PATTERN.fullmatch(mid) is None:
+            raise ValueError("id debe ser 12 caracteres hex en minúscula")
+        reject_secrets(title, body, why, topic_key, anchor_path)
         event = {
             "op": "save",
             "id": mid,
@@ -162,7 +181,6 @@ class Store:
             with self._conn:
                 self._apply(event)
             self._remember_fingerprint(fingerprint)
-            self._known_size = int(fingerprint[0])
             self.write_l0()
         return mid
 
@@ -181,7 +199,6 @@ class Store:
             with self._conn:
                 self._apply(event)
             self._remember_fingerprint(fingerprint)
-            self._known_size = int(fingerprint[0])
             self.write_l0()
 
     # --- lectura ---
@@ -276,7 +293,6 @@ class Store:
                 self._apply(event)
             self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._remember_fingerprint(fingerprint)
-        self._known_size = int(fingerprint[0])
         self.write_l0()
 
     # --- internos ---
@@ -341,8 +357,13 @@ class Store:
                 self._syncing = False
 
     def _append(self, event: dict) -> tuple[tuple[str, str], bool]:
-        before, written, fingerprint = append_jsonl(self.events, event)
-        unseen = before != self._known_size or int(fingerprint[0]) != before + written
+        stored = self._stored_fingerprint()
+        start, written, before, fingerprint = append_jsonl(self.events, event)
+        # Huella completa, no solo el tamaño: un replace externo del mismo tamaño
+        # (git checkout) dejaba la huella vieja y no indexaba lo remoto. Un fichero
+        # vacío no tiene contenido que comparar: la mtime es ruido.
+        unchanged = (before[0] == "0" and stored[0] == "0") or before == stored
+        unseen = not unchanged or int(fingerprint[0]) != start + written
         return fingerprint, unseen
 
     @staticmethod
@@ -365,6 +386,8 @@ class Store:
             stat = self.events.stat()
         except FileNotFoundError:
             return ("0", "0")
+        if stat.st_size == 0:
+            return ("0", "0")  # vacío: no hay contenido que comparar
         return (str(stat.st_size), str(stat.st_mtime_ns))
 
     def _stored_fingerprint(self) -> tuple[str, str]:

@@ -32,15 +32,17 @@ Memoria persistente para agentes de código: **eficaz, barata en latencia/coste,
 - `save` con `id` existente = actualización (gana el último).
 - `save` con `topic_key` activo = el anterior pasa a `superseded` (se aplica antes de insertar).
 - Escritura: **una sola llamada `os.write` con `O_APPEND`**, línea < 4 KB. Sin lock de ficheros (un escritor por proyecto es lo normal; se testea concurrencia ligera).
+- Antes de cada append se repara la cola: si el fichero no acaba en `\n` (crash a mitad de write), un fragmento JSON válido conserva la línea y recibe el salto; uno inválido se trunca. Así el siguiente evento nunca queda pegado a una línea rota.
 - JSON con `ensure_ascii=False`; ficheros abiertos siempre con `encoding="utf-8"` (Windows).
 
 ## Sincronización DB ↔ JSONL
-Al abrir el `Store` se compara `(size, mtime_ns)` del JSONL con `meta`. Si difieren (p. ej. tras `git pull`) → `rebuild()` completo (ordenado por `(ts, nº de línea)`) y `render()`. Las escrituras propias actualizan la huella en la misma transacción. `PRAGMA user_version` distinto → se tira el esquema derivado (`mem`, `mem_fts`, `meta`) y se reconstruye.
+Al abrir el `Store` se compara `(size, mtime_ns)` del JSONL con `meta`. Si difieren (p. ej. tras `git pull`) → `rebuild()` completo (ordenado por `(ts, nº de línea)`) y `render()`. Las escrituras propias actualizan la huella en la misma transacción y comparan la huella **previa al append** (también la `mtime`, no solo el tamaño), para detectar reemplazos externos que conservan el tamaño. `PRAGMA user_version` distinto → se tira el esquema derivado (`mem`, `mem_fts`, `meta`) y se reconstruye.
 Coste esperado de rebuild con 10k eventos: del orden de cientos de ms (medido: 570 ms en reposo, S2).
 
 ## Escritura y seguridad
-- **Rechazar** (no redactar) si el texto parece contener un secreto: claves cloud (`AKIA…`), `-----BEGIN … PRIVATE KEY-----`, JWT (`eyJ…`), `password|secret|token|api_key = valor`, URLs con `://user:pass@`. Mensaje claro: "reescribe sin el secreto".
+- **Rechazar** (no redactar) si el texto parece contener un secreto: claves cloud (`AKIA…`), `-----BEGIN … PRIVATE KEY-----`, JWT (`eyJ…`), tokens con prefijo de proveedor (`ghp_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza…`), `password|secret|token|api_key = valor`, URLs con `://user:pass@`. Mensaje claro: "reescribe sin el secreto".
 - `body` > 500 caracteres → error pidiendo dividir en dos memorias.
+- `id` debe ser 12 hex en minúscula; `topic_key` ≤ 100 caracteres y sin caracteres de control (un salto de línea inyectaría líneas en el L0). `render` colapsa además id, título y topic al leer, para eventos externos anteriores a la validación.
 - Scrubbing desde M1, **antes** de que nada llegue al JSONL.
 
 ## Sesiones (M6)

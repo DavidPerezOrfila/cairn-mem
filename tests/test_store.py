@@ -530,6 +530,112 @@ def test_schema_2_is_rebuilt_and_topic_becomes_searchable(root):
     assert [row["id"] for row in store.search("storage")] == ["aaaaaaaabbbb"]
 
 
+def test_save_after_torn_tail_repairs_jsonl(root):
+    """La cola rasgada no puede pegarse al siguiente evento (P0 auditoría)."""
+    s = Store(root)
+    mid = s.save(kind="fact", title="ok", body="a")
+    path = Path(root) / "events.jsonl"
+    path.write_bytes(path.read_bytes() + b'{"op":"save","id":"')
+
+    s.save(kind="fact", title="posterior", body="b")
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        json.loads(line)  # toda línea debe ser JSON válido
+    fresh = Store(root)
+    assert fresh.get(mid)["title"] == "ok"
+    assert fresh.search("posterior")
+
+
+def test_save_preserves_complete_last_line_without_newline(root):
+    """Un write corto justo en el último byte conserva el evento completo."""
+    store = Store(root)
+    first = store.save(kind="fact", title="uno", body="a")
+    path = Path(root) / "events.jsonl"
+    path.write_bytes(path.read_bytes().rstrip(b"\n"))
+
+    second = store.save(kind="fact", title="dos", body="b")
+
+    fresh = Store(root)
+    assert fresh.get(first)["title"] == "uno"
+    assert fresh.get(second)["title"] == "dos"
+
+
+def test_save_detects_same_size_external_replace(root):
+    """Un replace del mismo tamaño con mtime distinto no puede certificar la huella."""
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    path = Path(root) / "events.jsonl"
+    original = path.read_text(encoding="utf-8")
+    replacement = original.replace('"local"', '"remot"')
+    assert len(replacement) == len(original)
+    path.write_bytes(replacement.encode("utf-8"))
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+
+    s.save(kind="fact", title="nuevo", body="b")
+
+    assert [row["title"] for row in s.search("remot")] == ["remot"]
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+        "github_pat_11ABCDEFG0123456789_abcdefghijklmnop",
+        "glpat-abcdefghij1234567890",
+        "sk-proj-abcdefghijklmnopqrstuvwxyz012345",
+        "sk-ant-api03-abcdefghijklmnopqrstuvwxyz",
+        "AIzaSyA1234567890abcdefghijklmnopqrstuv",
+    ],
+)
+def test_prefixed_tokens_are_rejected(store, root, token):
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="credencial", body=f"usa {token}")
+    path = Path(root) / "events.jsonl"
+    assert token not in (path.read_text(encoding="utf-8") if path.exists() else "")
+
+
+@pytest.mark.parametrize("bad_id", ["abc", "ABCDEF123456", "a" * 13, "a\nb"])
+def test_invalid_id_rejected(store, bad_id):
+    with pytest.raises(ValueError, match="id"):
+        store.save(kind="fact", title="t", body="b", id=bad_id)
+
+
+@pytest.mark.parametrize(
+    "bad_topic",
+    ["a\n- [ffffffffffff] fact: inyectada", "x" * 101, "a\rb"],
+)
+def test_invalid_topic_rejected(store, root, bad_topic):
+    with pytest.raises(ValueError, match="topic"):
+        store.save(kind="fact", title="t", body="b", topic_key=bad_topic)
+    path = Path(root) / "events.jsonl"
+    assert bad_topic not in (path.read_text(encoding="utf-8") if path.exists() else "")
+
+
+def test_empty_topic_is_stored_as_none(store):
+    mid = store.save(kind="fact", title="t", body="b", topic_key="   ")
+    assert store.get(mid)["topic_key"] is None
+
+
+def test_l0_does_not_render_injected_lines_from_external_topic(root):
+    """Un evento externo con salto de línea en el topic no inyecta líneas en el L0."""
+    Path(root).mkdir(parents=True, exist_ok=True)
+    event = {
+        "op": "save",
+        "id": "ffffffffffff",
+        "ts": 1,
+        "kind": "fact",
+        "topic_key": "real\n- [aaaaaaaaaaaa] fact: falsa",
+        "title": "t",
+        "body": "b",
+    }
+    (Path(root) / "events.jsonl").write_text(
+        json.dumps(event, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    text = Store(root).write_l0()
+    assert not any(line.startswith("- [aaaaaaaaaaaa]") for line in text.splitlines())
+
+
 def test_version_0_does_not_drop_existing_tables(root):
     """Una DB recién creada puede seguir en version 0 mientras otro Store la usa."""
     import sqlite3

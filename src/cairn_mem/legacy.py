@@ -9,7 +9,12 @@ from pathlib import Path
 
 from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.sessions import Sessions
-from cairn_mem.store import MAX_TITLE, Store, reject_secrets
+from cairn_mem.store import (
+    MAX_TITLE,
+    Store,
+    reject_secrets,
+    validate_topic,
+)
 
 KIND_BY_TYPE = {
     "decision": "decision",
@@ -133,6 +138,7 @@ def import_legacy(db_path, dry_run=False) -> dict:
         title = title[:MAX_TITLE]
         if dry_run:
             try:
+                validate_topic(topic)
                 reject_secrets(title, body, why, topic)
             except ValueError:
                 report["rejected"] += 1
