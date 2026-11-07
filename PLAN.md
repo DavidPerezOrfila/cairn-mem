@@ -1,202 +1,241 @@
-# PLAN v2 — cairn-mem (revisado)
+# PLAN v2: cairn-mem (revised)
 
-> Memoria persistente para agentes de código: eficaz, sin penalizar latencia/coste, portable a cualquier arnés con shell.
-> **Estimación: 4–6 días** (antes 6–9). Un hito = una sesión de agente. Flujo: entender → test rojo → implementar → medir → marcar.
+> Persistent memory for coding agents: effective, with no latency or cost penalty, and
+> portable to any harness with a shell.
+> **Estimate: 4-6 days** (down from 6-9). One milestone is one agent session. Flow:
+> understand → red test → implement → measure → tick.
 
-## 1. Revisión: puntos débiles y qué cambió
+## 1. Review: weak points and what changed
 
-| # | Punto débil del plan v1 | Cambio |
+| # | Weak point in plan v1 | Change |
 |---|---|---|
-| 1 | SLO "p95 < 10 ms" ignoraba el **arranque de Python** (lo que realmente nota el agente) | SLO end-to-end con arranque incluido (M4 lo revisó a `search` < 350 ms y `save` < 500 ms tras medir el suelo real) |
-| 2 | `stale` persistido con evento `verify`: depende del checkout y diverge entre ramas | **Se calcula al leer**, solo para los resultados devueltos. Sin evento, sin estado |
-| 3 | Hash de ancla distinto entre Windows/Linux (CRLF) → falsos stale | Hash con **CRLF→LF**; ruta ancla en POSIX relativo |
-| 4 | `hits` vía evento en cada `get`: la lectura se vuelve escritura (latencia, ruido en Git) | **Fuera de v0.1** (backlog). L0 = prioridad por `kind` + recencia |
-| 5 | Consultas FTS5 crudas **fallan** con `-`, `:`, `"` (probado: `oauth-callback` → error) | Saneado obligatorio: `"t"*` por término, **AND y si vacío OR** |
-| 6 | DB desactualizada tras `git pull` (nadie la reconstruía) | Huella `(size, mtime_ns)` del JSONL → `rebuild` automático; `user_version` → rebuild |
-| 7 | Scrubbing de secretos en M5 (tarde: el JSONL puede ir a Git) | **M1**, y por **rechazo** (no redacción silenciosa) |
-| 8 | `MEMORY.md` versionado y regenerado → conflictos/ruido | Derivado y gitignored; se regenera en `save/archive`/rebuild (sin depender de hooks) |
-| 9 | Memoria en Git por defecto en entorno corporativo | **Local-only por defecto**; `cairn init --share` para versionar |
-| 10 | Lock de ficheros (`msvcrt`/`fcntl`): complejo y poco portable | `O_APPEND` + **una sola** `os.write` por evento |
-| 11 | ULID propio, 6 tipos de evento, columnas `scope`/`last_verified`/`hits` | ID de 12 hex + `ts`; **2 eventos** (`save`,`archive`); esquema mínimo |
-| 12 | Ranking BM25 × boosts, dedupe léxico, decay, promoción, LLM `--propose` | Solo `bm25()` con pesos por columna. El resto → **backlog** |
-| 13 | Captura pasiva por git hook: ruido que baja la precisión | Fuera. Regla explícita de **qué guardar / qué no** en `docs/AGENT_SNIPPET.md` |
-| 14 | MCP a mano, scope global: coste y riesgo sin necesidad probada | **Backlog**. El CLI cubre cualquier arnés con shell |
-| 15 | Windows: `export.sh` no corre sin bash; codificación cp1252; falta `init` y raíz del proyecto | Export multiplataforma (stdlib); UTF-8 forzado + test; `cairn init`; búsqueda de `.cairn/` hacia arriba |
-| 16 | A/B de 10–20 tareas: ruidoso y caro | **Golden set** de recuperación (sin LLM, en CI) + A/B pequeño **pareado** |
-| 17 | `get` por ID largo (ULID) propenso a error del agente | ID corto de 12 hex |
+| 1 | The SLO "p95 < 10 ms" ignored **Python startup**, which is what the agent actually feels | End-to-end SLO with startup included (M4 revised it to `search` < 350 ms and `save` < 500 ms after measuring the real floor) |
+| 2 | `stale` persisted through a `verify` event: it depends on the checkout and diverges between branches | **Calculated when reading**, only for returned results. No event, no state |
+| 3 | Anchor hash differed between Windows and Linux (CRLF), causing false stale flags | Hash with **CRLF→LF**. Anchor path is POSIX and relative |
+| 4 | `hits` through an event on every `get`: reading becomes writing (latency, Git noise) | **Out of v0.1** (backlog). L0 uses `kind` priority plus recency |
+| 5 | Raw FTS5 queries **fail** with `-`, `:` and `"` (tested: `oauth-callback` raises an error) | Required sanitizing: `"t"*` per term, **AND and OR if empty** |
+| 6 | Database out of date after `git pull` (nobody rebuilt it) | JSONL fingerprint `(size, mtime_ns)` → automatic `rebuild`. `user_version` also triggers a rebuild |
+| 7 | Secret scrubbing in M5 was late: the JSONL may go to Git | **M1**, and by **rejection** (no silent redaction) |
+| 8 | `MEMORY.md` versioned and regenerated → conflicts and noise | Derived and gitignored. Regenerated on `save/archive`/rebuild, without hooks |
+| 9 | Memory in Git by default in a corporate environment | **Local-only by default**. `cairn init --share` versions it |
+| 10 | File lock (`msvcrt`/`fcntl`): complex and not very portable | `O_APPEND` plus **one** `os.write` per event |
+| 11 | Own ULID, 6 event types, `scope`/`last_verified`/`hits` columns | 12-hex id plus `ts`. **2 events** (`save`, `archive`). Minimal schema |
+| 12 | BM25 × boosts, lexical dedupe, decay, promotion, LLM `--propose` | Only `bm25()` with column weights. The rest goes to the **backlog** |
+| 13 | Passive capture through a git hook: noise that lowers precision | Out. An explicit rule for **what to save and what not** in `docs/AGENT_SNIPPET.md` |
+| 14 | Hand-written MCP with a global scope: cost and risk without proven need | **Backlog**. The CLI covers any harness with a shell |
+| 15 | Windows: `export.sh` needs bash, cp1252 encoding, no `init` and no project root | Cross-platform export (standard library). Forced UTF-8 plus a test. `cairn init`. Search `.cairn/` upward |
+| 16 | A/B of 10-20 tasks: noisy and expensive | **Golden set** for retrieval (no LLM, in CI) plus a small **paired** A/B |
+| 17 | `get` by long ID (ULID) is error prone for an agent | Short 12-hex ID |
 
-## 2. Metas medibles (SLOs)
+## 2. Measurable goals (SLOs)
 
-| Métrica | Objetivo |
+| Metric | Target |
 |---|---|
-| `cairn search` end-to-end (con arranque de Python), p95 | **< 350 ms** en reposo, 10k (antes 150 ms; ver abajo) |
-| `cairn save` end-to-end (incluye render L0), p95 | **< 500 ms** en reposo, 10k (antes 200 ms) |
-| Consulta interna `search` (10k registros) | **< 10 ms** |
-| Tool call MCP en proceso (10k registros) | **< 50 ms** |
-| L0 (`MEMORY.md`) | **≤ 3000 caracteres** (~900 tokens) |
-| Precisión@3 en golden set | **≥ 0.8** |
-| Rebuild con 10k eventos | medir (medido: 1,3 s en reposo) |
-| Dependencias / llamadas LLM | **0 / 0** |
+| `cairn search` end-to-end (Python startup included), p95 | **< 350 ms** idle, 10k (previously 150 ms; see below) |
+| `cairn save` end-to-end (L0 render included), p95 | **< 500 ms** idle, 10k (previously 200 ms) |
+| Internal `search` query (10k records) | **< 10 ms** |
+| In-process MCP tool call (10k records) | **< 50 ms** |
+| L0 (`MEMORY.md`) | **≤ 3000 characters** (about 900 tokens) |
+| Precision@3 on the golden set | **≥ 0.8** |
+| Rebuild with 10k events | measure (measured: 1.3 s idle) |
+| Dependencies / LLM calls | **0 / 0** |
 
-> Revisado 2026-11-02 tras medir el suelo de arranque: `python -c pass` ≈ 72 ms y solo importar
-> `sqlite3, json, re` ≈ 138 ms. Los 150/200 ms originales eran inalcanzables sin demonio o
-> binario nativo. Ver `docs/BENCHMARKS.md`.
+> Revised on 2026-11-02 after measuring the startup floor: `python -c pass` is about 72 ms,
+> and importing only `sqlite3, json, re` is about 138 ms. The original 150/200 ms were out
+> of reach without a daemon or a native binary. See `docs/BENCHMARKS.md`.
 
-## 3. Hitos
+## 3. Milestones
 
-### M0 — Bootstrap ✅
-- [x] Estructura, `pyproject.toml`, `AGENTS.md`, diseño, esquema, `AGENT_SNIPPET.md`
-- [x] Tests rojos de M1 + tests de M2 (se saltan hasta existir el módulo)
+### M0: Bootstrap ✅
+- [x] Structure, `pyproject.toml`, `AGENTS.md`, design, schema, `AGENT_SNIPPET.md`
+- [x] Red tests for M1 plus the M2 tests (they stay skipped until the module exists)
 
-**Aceptación:** `pip install -e ".[dev]" && pytest -q` → M1 en rojo, M2 *skipped*.
+**Acceptance:** `pip install -e ".[dev]" && pytest -q` → M1 red, M2 *skipped*.
 
-### M1 — Núcleo (1–2 días) ✅
-- [x] `Store`: `save/get/search/archive/rebuild/dump` según `docs/DESIGN.md`
-- [x] JSONL append-only (`O_APPEND` + 1 `os.write`), UTF-8 sin BOM, `ensure_ascii=False`
-- [x] Aplicación de eventos: `topic_key` → anterior `superseded` **antes** de insertar; orden `(ts, nº línea)`
-- [x] Huella del JSONL + `user_version` → rebuild automático
-- [x] Rechazo de secretos y de `body > 500`
-- [x] Búsqueda saneada AND→OR, `bm25(mem_fts,5.0,1.0,0.5)`, snippet
-- [x] CLI: `init [--share]`, `save`, `search`, `get`, `archive`, `rebuild` (texto y `--json`); raíz `.cairn/` hacia arriba o `CAIRN_DIR`
-- [x] Arranque rápido: imports mínimos, sin imports pesados al inicio
+### M1: Core (1-2 days) ✅
+- [x] `Store`: `save/get/search/archive/rebuild/dump` as described in `docs/DESIGN.md`
+- [x] Append-only JSONL (`O_APPEND` plus 1 `os.write`), UTF-8 without BOM,
+  `ensure_ascii=False`
+- [x] Event application: `topic_key` marks the previous memory `superseded` **before**
+  the insert. Order is `(ts, line number)`
+- [x] JSONL fingerprint and `user_version` → automatic rebuild
+- [x] Reject secrets and `body > 500`
+- [x] Sanitized search AND→OR, `bm25(mem_fts,5.0,1.0,0.5)`, snippet
+- [x] CLI: `init [--share]`, `save`, `search`, `get`, `archive`, `rebuild` (text and
+  `--json`). Root `.cairn/` upward or `CAIRN_DIR`
+- [x] Fast startup: minimal imports, no heavy imports at the beginning
 
-**Aceptación:** `tests/test_store.py` en verde · `rebuild` idempotente · `search` interno < 10 ms con 10k sintéticos (medido 2026-11-01: rebuild 507 ms, `search` p95 3.87 ms).
-**Dogfooding:** desde aquí, guarda las decisiones del propio proyecto con `cairn`.
+**Acceptance:** `tests/test_store.py` passes. `rebuild` is idempotent. Internal `search`
+< 10 ms with 10k synthetic records (measured 2026-11-01: rebuild 507 ms, `search` p95
+3.87 ms).
+**Dogfooding:** from here on, save the project decisions with `cairn`.
 
-### M2 — L0 y anclas (1 día) ✅
+### M2: L0 and anchors (1 day) ✅
 - [x] `anchor.py`: `file_hash` (CRLF→LF), `is_stale`
-- [x] `render.py`: `render_l0(store, max_chars=3000)` determinista, orden `convention > decision > gotcha > fact` y `ts` desc, `⚠ revisar` en stale
-- [x] `search` devuelve `stale` por resultado; `cairn render` y `cairn check`
-- [x] Regeneración automática de `MEMORY.md` tras `save/archive/rebuild`
+- [x] `render.py`: deterministic `render_l0(store, max_chars=3000)`, order
+  `convention > decision > gotcha > fact` and newest `ts` first, `⚠ revisar` on stale
+- [x] `search` returns `stale` per result. `cairn render` and `cairn check`
+- [x] Automatic `MEMORY.md` regeneration after `save/archive/rebuild`
 
-**Aceptación:** `test_anchor.py` y `test_render.py` en verde · salida de L0 byte-idéntica sin cambios (caché de prompt) · `check` sobre 1k registros < 1 s.
-(medido 2026-11-02: 53 tests verdes, L0 2944 car. con 1k registros y estable al reabrir, `check` end-to-end 181 ms, `render` 135 ms)
+**Acceptance:** `test_anchor.py` and `test_render.py` pass. L0 output is byte-identical
+when nothing changes (prompt cache). `check` over 1k records < 1 s.
+(measured 2026-11-02: 53 tests passed, L0 2,944 characters with 1k records and stable
+when reopened, `check` end-to-end 181 ms, `render` 135 ms)
 
-### M3 — Integración (0.5–1 día) ✅
-- [x] `docs/AGENT_SNIPPET.md` probado en **≥ 2 arneses** (p. ej. Claude Code y OpenCode): guardar en uno, recuperar en otro
-- [x] Instalación: `pipx install .` (Windows incluido); comprobar que `cairn` queda en PATH
-- [ ] Opcional: hook `Stop` de Claude Code que recuerde guardar (si se mide que el agente no guarda)
+### M3: Integration (0.5-1 day) ✅
+- [x] `docs/AGENT_SNIPPET.md` tested in **at least 2 harnesses** (for example Claude Code
+  and OpenCode): save in one, recover in the other
+- [x] Install: `pipx install .` (Windows included), and check that `cairn` ends up on PATH
+- [ ] Optional: a Claude Code `Stop` hook that reminds the agent to save (only if we
+  measure that the agent does not save)
 
-**Aceptación:** ciclo guardar → nueva sesión → recuperar funcionando en 2 arneses.
+**Acceptance:** save → new session → recover works in 2 harnesses.
 
-**Medido 2026-11-02:**
-- `pipx install .` → `cairn-mem 0.0.1`; shim `~/.local/bin/cairn.exe` con `render`/`check`.
-- OpenCode guardó `6146ba141640` (`decision`, topic `vcs/lf`) → GitHub Copilot CLI lo recuperó con `cairn search`.
-- Copilot CLI guardó `bd4076114207` (`convention`, topic `git/commits`) → sesión nueva de OpenCode lo recuperó.
-- Hook `Stop`: no se instala; no hay evidencia de que el agente no guarde (se mide en el A/B de M4).
+**Measured 2026-11-02:**
+- `pipx install .` → `cairn-mem 0.0.1`. Shim `~/.local/bin/cairn.exe` with `render` and
+  `check`.
+- OpenCode saved `6146ba141640` (`decision`, topic `vcs/lf`), and GitHub Copilot CLI
+  recovered it with `cairn search`.
+- Copilot CLI saved `bd4076114207` (`convention`, topic `git/commits`), and a new OpenCode
+  session recovered it.
+- `Stop` hook: not installed. There is no evidence that the agent does not save (it is
+  measured in the M4 A/B).
 
-### M4 — Medición y release (1 día) ✅
-- [x] `bench/bench_cli.py`: p50/p95 end-to-end de `search` y `save` con 1k y 10k registros (en Windows real)
-- [x] `bench/golden.jsonl` (~30 consultas) + test de precisión@3 en CI
-- [x] **A/B pequeño pareado:** 8 tareas × 2 brazos (sin / con memoria), mismo modelo, 2 repeticiones; métricas: tokens totales, llamadas a herramientas, éxito, intervenciones humanas. Con n tan bajo es **orientativo**, no concluyente
-- [x] Reservar/publicar `cairn-mem` en PyPI (libre el 2026-10-31; comprobar de nuevo antes) y verificar que el comando `cairn` no choca en PATH
-- [x] README final, versión 0.1.0, etiqueta Git
+### M4: Measurement and release (1 day) ✅
+- [x] `bench/bench_cli.py`: p50/p95 end-to-end for `search` and `save` with 1k and 10k
+  records (on real Windows)
+- [x] `bench/golden.jsonl` (about 30 queries) plus a precision@3 test in CI
+- [x] **Small paired A/B:** 8 tasks × 2 arms (without and with memory), same model,
+  2 repetitions. Metrics: total tokens, tool calls, success, human interventions. With
+  such a small n it is **indicative**, not conclusive
+- [x] Reserve or publish `cairn-mem` on PyPI (free on 2026-10-31; check again before) and
+  verify that the `cairn` command does not clash on PATH
+- [x] Final README, version 0.1.0, Git tag
 
-**Aceptación:** SLOs de §2 anotados en `docs/BENCHMARKS.md` y decisión explícita: ¿hay que tocar L0, ranking o reglas de guardado?
+**Acceptance:** the §2 SLOs are written in `docs/BENCHMARKS.md`, with an explicit decision:
+do we need to change the L0, ranking or save rules?
 
-**Medido 2026-11-02:**
-- Bench 1k/10k en [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md). Precisión@3: 30/30 = 1,00.
-- SLO end-to-end revisado a `search` < 350 ms y `save` < 500 ms tras medir el suelo de arranque (`python -c pass` 72 ms; imports 138 ms). En reposo: search p95 304 ms, save p95 451 ms, consulta interna 5,9 ms → **cumple**.
-- Decisión: **no** tocar L0, ranking ni reglas de guardado; optimizar arranque queda en backlog solo con evidencia de uso.
-- A/B: sin memoria 0/16 aciertos y 26 826 tokens; con memoria 16/16 y 20 982 tokens ([`docs/AB_RESULTS.md`](docs/AB_RESULTS.md)).
-- `uv build` + instalación del wheel 0.1.0 en venv limpio: `init`, `save`, `search` y `render` funcionan.
-- PyPI: **publicado 2026-11-02** (`cairn_mem-0.1.0` wheel + sdist, https://pypi.org/project/cairn-mem/0.1.0/); `pip index versions cairn-mem` → 0.1.0; instalación desde PyPI en venv limpio verificada. `cairn` en PATH sin choque (shim de pipx + editable).
+**Measured 2026-11-02:**
+- 1k/10k benchmark in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md). Precision@3: 30/30 = 1.00.
+- End-to-end SLO revised to `search` < 350 ms and `save` < 500 ms after measuring the
+  startup floor (`python -c pass` 72 ms, imports 138 ms). Idle: search p95 304 ms, save
+  p95 451 ms, internal query 5.9 ms → **passes**.
+- Decision: **do not** touch the L0, ranking or save rules. Optimizing startup stays in
+  the backlog, only with evidence of use.
+- A/B: without memory 0/16 correct and 26,826 tokens. With memory 16/16 and 20,982 tokens
+  ([`docs/AB_RESULTS.md`](docs/AB_RESULTS.md)).
+- `uv build` plus installing the 0.1.0 wheel in a clean venv: `init`, `save`, `search` and
+  `render` work.
+- PyPI: **published 2026-11-02** (`cairn_mem-0.1.0` wheel and sdist,
+  https://pypi.org/project/cairn-mem/0.1.0/). `pip index versions cairn-mem` → 0.1.0.
+  Installing from PyPI in a clean venv verified. `cairn` on PATH with no clash (pipx shim
+  plus editable).
 
-### M5 — MCP stdio y CI multiplataforma ✅
-- [x] `mcp.py`: JSON-RPC 2.0 en NDJSON sobre stdio, sin SDK ni dependencias
-- [x] 4 tools (`save`, `search`, `get`, `context`); el resto sigue solo en CLI
-- [x] `Store` cacheado: un proceso, un escritor, sin arranque de Python por llamada
-- [x] `cairn mcp` como subcomando; nada se escribe en stdout fuera del protocolo
-- [x] CI: ubuntu/macos/windows × Python 3.10 y 3.14 (tests + ruff)
-- [x] `bench/bench_mcp.py` para latencia de tool calls con 10k
-- [x] Fix: `_known_size` no se actualizaba tras `save`/`archive` → cada escritura
-      en un proceso largo disparaba un rebuild completo
-- [x] L0 acotado en SQL (`active_ordered`) en vez de ordenar todas las filas en Python
+### M5: MCP stdio and cross-platform CI ✅
+- [x] `mcp.py`: JSON-RPC 2.0 over NDJSON on stdio, no SDK and no dependencies
+- [x] 4 tools (`save`, `search`, `get`, `context`). The rest stays in the CLI
+- [x] Cached `Store`: one process, one writer, no Python startup per call
+- [x] `cairn mcp` as a subcommand. Nothing is written to stdout outside the protocol
+- [x] CI: ubuntu/macos/windows × Python 3.10 and 3.14 (tests and ruff)
+- [x] `bench/bench_mcp.py` for tool-call latency with 10k
+- [x] Fix: `_known_size` was not updated after `save`/`archive`, so every write in a long
+  process triggered a full rebuild
+- [x] L0 limited in SQL (`active_ordered`) instead of sorting every row in Python
 
-**Aceptación:** tool call p95 < 50 ms (medido 2026-11-02: search 4,0 ms, save 37,4 ms,
-context 18,4 ms con 10k) · 66 tests en verde · `ruff` limpio · las 6 celdas de CI en verde.
+**Acceptance:** tool call p95 < 50 ms (measured 2026-11-02: search 4.0 ms, save 37.4 ms,
+context 18.4 ms with 10k). 66 tests pass. `ruff` is clean. All 6 CI cells pass.
 
-### M6 — Sesiones (0.5 día) ✅
-- [x] `sessions.jsonl` append-only en `.cairn/`, separado de la memoria curada
-- [x] `Sessions`: `save/list/get`; reabrir el proceso y recuperar el resumen
-- [x] CLI `cairn session save|list|get` y tool MCP `session`
-- [x] Resumen largo (sin límite de 500 caracteres) sin tocar L0
+### M6: Sessions (0.5 day) ✅
+- [x] `sessions.jsonl` append-only in `.cairn/`, separate from curated memory
+- [x] `Sessions`: `save/list/get`. Reopen the process and recover the recap
+- [x] CLI `cairn session save|list|get` and MCP tool `session`
+- [x] Long recap (no 500-character limit) without touching the L0
 
-**Aceptación:** un resumen de ~2k caracteres se guarda y recupera; `MEMORY.md` no cambia ·
-el JSONL tolera una última línea rasgada como `events.jsonl`.
-(medido 2026-11-03: resumen de 5k guardado y recuperado, 84 tests en verde)
+**Acceptance:** a recap of about 2k characters is saved and recovered. `MEMORY.md` does
+not change. The JSONL tolerates a torn last line like `events.jsonl`.
+(measured 2026-11-03: 5k recap saved and recovered, 84 tests passed)
 
-### M7 — Scope personal (0.5 día) ✅
-- [x] `paths.personal_dir()`: `CAIRN_HOME` o `~/.cairn`
-- [x] `save/search --personal`; `get` busca en proyecto y personal
-- [x] MCP: `scope` (`project|personal`) en `save` y `search`
+### M7: Personal scope (0.5 day) ✅
+- [x] `paths.personal_dir()`: `CAIRN_HOME` or `~/.cairn`
+- [x] `save/search --personal`. `get` looks in the project and the personal scope
+- [x] MCP: `scope` (`project|personal`) in `save` and `search`
 
-**Aceptación:** una memoria personal se recupera desde otro repo y no aparece en el L0 del
-proyecto · el proyecto sigue funcionando sin `CAIRN_HOME`.
-(medido 2026-11-03: `--personal` con `CAIRN_HOME` temporal; el L0 del proyecto no la incluye)
+**Acceptance:** a personal memory is recovered from another repo and does not appear in
+the project L0. The project keeps working without `CAIRN_HOME`.
+(measured 2026-11-03: `--personal` with a temporary `CAIRN_HOME`. The project L0 does not
+include it)
 
-### M8 — Importador legacy (1 día) ✅
-- [x] `cairn import legacy --db RUTA [--dry-run]`
-- [x] Mapeo: `What`→`body`, `Why/Where/Learned`→`why`; tipo→`kind`; `session_summary`→sesión
-- [x] `project` → `.cairn/` del repo (por provenance); `global/personal` → `~/.cairn`
-- [x] Idempotente: id derivado del id de origen con sal fija; omite borradas y superseded
+### M8: Legacy importer (1 day) ✅
+- [x] `cairn import legacy --db PATH [--dry-run]`
+- [x] Mapping: `What`→`body`, `Why/Where/Learned`→`why`. Type→`kind`.
+  `session_summary`→session
+- [x] `project` → the repo `.cairn/` (by provenance). `global/personal` → `~/.cairn`
+- [x] Idempotent: id derived from the source id with a fixed salt. Deleted and superseded
+  rows are skipped
 
-**Aceptación:** importa las 64 observaciones reales sin duplicados al reejecutar ·
-los secretos se rechazan por fila y se reportan, no abortan el lote.
-(medido 2026-11-03: 23 memorias + 10 sesiones; segunda pasada 0 + 0 con 33 omitidas)
+**Acceptance:** imports the 64 real observations with no duplicates when re-run. Secrets
+are rejected per row and reported, without aborting the batch.
+(measured 2026-11-03: 23 memories plus 10 sessions. Second pass 0 + 0 with 33 skipped)
 
-**Publicación 0.2.0:** 2026-11-03 en PyPI (wheel + sdist) y tag `v0.2.0`; instalación limpia
-desde PyPI verificada con `init`, `save`, `session`, `search` e `import --dry-run`.
+**0.2.0 release:** 2026-11-03 on PyPI (wheel and sdist) and tag `v0.2.0`. A clean install
+from PyPI was verified with `init`, `save`, `session`, `search` and `import --dry-run`.
 
-### M9 — Cierre de huecos de paridad ✅
-- [x] `Sessions.save` rechaza secretos (antes `sessions.jsonl` los aceptaba)
-- [x] MCP `context` devuelve L0 + último resumen de sesión (≤ 4000 car.), sin tocar `MEMORY.md`
-- [x] `Store` reaplica el JSONL en lecturas si la huella cambió (MCP de vida larga tras `git pull`/CLI)
-- [x] Reinstalado el binario global: `pipx install . --force` sirve las 5 tools
-- [x] Importador renombrado a `legacy` (módulo, subcomando y docs): el repo remoto no nombra la herramienta que sustituye
+### M9: Closing parity gaps ✅
+- [x] `Sessions.save` rejects secrets (before, `sessions.jsonl` accepted them)
+- [x] MCP `context` returns the L0 plus the last session recap (≤ 4000 chars), without
+  touching `MEMORY.md`
+- [x] `Store` reapplies the JSONL on reads when the fingerprint changed (long-lived MCP
+  after `git pull` or the CLI)
+- [x] Global binary reinstalled: `pipx install . --force` serves the 5 tools
+- [x] Importer renamed to `legacy` (module, subcommand and docs). The remote repo does not
+  name the tool it replaces
 
-**Aceptación:** 94 tests en verde · `ruff` limpio · `tools/list` por `cairn mcp` muestra
-`save, search, get, context, session` con `context` describiendo el resumen de sesión.
-(medido 2026-11-03: 94 passed; lectura sin cambios no dispara rebuild)
+**Acceptance:** 94 tests pass. `ruff` is clean. `tools/list` from `cairn mcp` shows
+`save, search, get, context, session`, with `context` describing the session recap.
+(measured 2026-11-03: 94 passed. A read with no changes does not trigger a rebuild)
 
-**Publicación 0.2.1:** 2026-11-03 en PyPI (wheel + sdist, `uv build` + `uv publish`).
+**0.2.1 release:** 2026-11-03 on PyPI (wheel and sdist, `uv build` plus `uv publish`).
 
-**0.2.2:** la tool MCP de sesión pasa a `save_session` (OpenCode filtraba `session` por
-colisión de nombre y el agente no podía guardar el resumen).
+**0.2.2:** the session MCP tool becomes `save_session` (OpenCode filtered `session`
+because of a name collision, and the agent could not save the recap).
 
-## 4. Rondas de mejora (una por release)
+## 4. Improvement rounds (one per release)
 
-Cada ronda es un slice: tests primero, gate, review y release propia.
+Each round is a slice: tests first, gate, review and its own release.
 
-| Ronda | Mejora | Release | Evidencia |
+| Round | Improvement | Release | Evidence |
 |---|---|---|---|
-| S1 | L0 reparte el presupuesto entre kinds (round-robin) | 0.3.0 | [`docs/features/l0-fair-share.md`](docs/features/l0-fair-share.md) |
-| S2 | `topic_key` visible en L0 y `search`; FTS indexa `topic_key` y `anchor_path` | 0.4.0 | [`docs/features/topic-visibility.md`](docs/features/topic-visibility.md) |
-| S3 | `search` transversal (proyecto + personal) y sesión del proyecto en `context` | 0.5.0 | [`docs/features/transversal-search.md`](docs/features/transversal-search.md) |
-| S4 | `archive` por MCP y consulta de sesiones anteriores | 0.6.0 | [`docs/features/mcp-archive-session-history.md`](docs/features/mcp-archive-session-history.md) |
-| S5 | Durabilidad y seguridad: cola rasgada, replace del mismo tamaño, tokens con prefijo, `id`/`topic` validados | 0.7.0 | [`docs/features/s5-durabilidad-seguridad.md`](docs/features/s5-durabilidad-seguridad.md) |
+| S1 | L0 shares the budget across kinds (round-robin) | 0.3.0 | [`docs/features/l0-fair-share.md`](docs/features/l0-fair-share.md) |
+| S2 | `topic_key` visible in the L0 and `search`. FTS indexes `topic_key` and `anchor_path` | 0.4.0 | [`docs/features/topic-visibility.md`](docs/features/topic-visibility.md) |
+| S3 | Cross-scope `search` (project plus personal) and the project session in `context` | 0.5.0 | [`docs/features/transversal-search.md`](docs/features/transversal-search.md) |
+| S4 | `archive` over MCP and reading older sessions | 0.6.0 | [`docs/features/mcp-archive-session-history.md`](docs/features/mcp-archive-session-history.md) |
+| S5 | Durability and security: torn tail, same-size replacement, prefixed tokens, validated `id`/`topic` | 0.7.0 | [`docs/features/s5-durabilidad-seguridad.md`](docs/features/s5-durabilidad-seguridad.md) |
 
-## 5. Backlog (solo con evidencia medida)
-- `hits` en tabla local no versionada + boost de ranking (si el golden set o el A/B muestran mala priorización)
-- `compact`/decay (si el nº de memorias activas degrada la precisión)
-- `sqlite-vec` (si precisión@3 < 0.8 por sinónimos y los títulos no lo arreglan)
-- Captura pasiva por git hook (solo si el agente no guarda y el ruido es aceptable)
+## 5. Backlog (only with measured evidence)
 
-## 6. Riesgos (los que quedan)
+- `hits` in a local, non-versioned table plus a ranking boost (if the golden set or the A/B
+  shows bad prioritization)
+- `compact`/decay (if the number of active memories hurts precision)
+- `sqlite-vec` (if precision@3 is < 0.8 because of synonyms and titles do not fix it)
+- Passive capture through a git hook (only if the agent does not save and the noise is
+  acceptable)
 
-| Riesgo | Mitigación |
+## 6. Risks (the ones left)
+
+| Risk | Mitigation |
 |---|---|
-| El agente no guarda memorias | Reglas claras en el snippet + hook `Stop` opcional; medir en A/B |
-| El agente guarda basura | Regla "NO guardes…" + límite 500 car. + `topic_key` para reemplazar |
-| Stale por ancla de archivo entero (falsos positivos en ficheros grandes) | Solo avisa (`⚠ revisar`), no oculta; medir tasa en A/B; anclar al fichero más específico |
-| Latencia de arranque en Windows (antivirus, `pipx` shim) | Medir end-to-end en M4; imports mínimos |
-| Memoria desactualizada tras `git pull` | Huella del JSONL + rebuild automático |
-| Secretos | Rechazo en escritura + local-only por defecto |
-| FTS5 no disponible en algún Python | Comprobar al arrancar y fallar con mensaje claro |
+| The agent does not save memories | Clear rules in the snippet plus an optional `Stop` hook. Measure in the A/B |
+| The agent saves junk | A "do NOT save..." rule, a 500-character limit and `topic_key` to replace old entries |
+| Stale due to a whole-file anchor (false positives on large files) | It only warns (`⚠ revisar`), it does not hide. Measure the rate in the A/B. Anchor to the most specific file |
+| Windows startup latency (antivirus, pipx shim) | Measure end-to-end in M4. Minimal imports |
+| Out-of-date memory after `git pull` | JSONL fingerprint plus automatic rebuild |
+| Secrets | Rejection on write plus local-only by default |
+| FTS5 missing in some Python build | Check at startup and fail with a clear message |
 
-## 7. Prompt de arranque para el agente
+## 7. Startup prompt for the agent
+
 ```text
-Lee AGENTS.md, PLAN.md y docs/DESIGN.md. Implementa SOLO M1 con TDD
-(tests/test_store.py ya está en rojo). Solo stdlib. Muestra la salida real de pytest,
-marca la checklist de M1 en PLAN.md y no avances a M2.
+Read AGENTS.md, PLAN.md and docs/DESIGN.md. Implement ONLY M1 with TDD
+(tests/test_store.py is already red). Standard library only. Show the real pytest
+output, tick the M1 checklist in PLAN.md and do not move on to M2.
 ```

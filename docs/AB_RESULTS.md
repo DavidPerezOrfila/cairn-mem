@@ -1,20 +1,24 @@
-# A/B pareado (orientativo)
+# Paired A/B test (indicative)
 
-Medición **2026-11-02**, `python bench/ab.py --reps 2` (Windows 11, Python 3.14.10, modelo por defecto de OpenCode).
+Measured on **2026-11-02** with `python bench/ab.py --reps 2` (Windows 11, Python
+3.14.10, OpenCode default model).
 
-- 8 tareas de respuesta cerrada sobre un proyecto de juguete; los datos no están en el código.
-- 2 brazos × 8 tareas × 2 repeticiones = 32 ejecuciones, cada una en una copia limpia.
-- Brazo **con**: `.cairn` sembrada + `AGENTS.md` con `docs/AGENT_SNIPPET.md`.
-- Intervenciones humanas: 0 (`--auto`).
+- 8 closed-answer tasks on a toy project. The answers are not in the code.
+- 2 arms × 8 tasks × 2 repetitions = 32 runs, each in a clean copy of the project.
+- The "with" arm had a seeded `.cairn` and an `AGENTS.md` built from
+  `docs/AGENT_SNIPPET.md`.
+- Human interventions: 0 (`--auto`).
 
-| Brazo | Éxito | Tokens (media) | Llamadas a herramientas (media) |
+| Arm | Success | Tokens (mean) | Tool calls (mean) |
 |---|---|---|---|
-| sin memoria | 0/16 | 26 826 | 6,3 |
-| con memoria | 16/16 | 20 982 | 7,6 |
+| without memory | 0/16 | 26,826 | 6.3 |
+| with memory | 16/16 | 20,982 | 7.6 |
 
-Lectura: con la memoria el agente acierta siempre y, aunque hace más llamadas (busca y lee
-la memoria), gasta menos tokens porque deja de explorar el código sin éxito. El brazo sin
-memoria contesta con lo que deduce del código (por ejemplo, "lee `RATE_LIMIT`") y falla.
+With memory, the agent answers correctly every time. It makes more tool calls because it
+searches and reads the memory, but it spends fewer tokens because it stops exploring the
+code without a result. The arm without memory answers from what it can infer from the
+code (for example, "read `RATE_LIMIT`") and fails.
 
-Con n=8 por brazo esto es **orientativo**: mide que la memoria se usa y ahorra trabajo, no
-significación estadística. El protocolo está en [`bench/ab_protocol.md`](../bench/ab_protocol.md).
+With n=8 per arm, this is **indicative**. It shows that the memory gets used and saves
+work. It does not show statistical significance. The protocol lives in
+[`bench/ab_protocol.md`](../bench/ab_protocol.md).
