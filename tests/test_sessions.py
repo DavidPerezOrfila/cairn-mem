@@ -21,6 +21,13 @@ def test_list_latest_first_and_limit(tmp_path):
     assert [record["id"] for record in sessions.all(limit=1)] == [second]
 
 
+def test_list_orders_equal_timestamps_by_append_order(tmp_path):
+    sessions = Sessions(str(tmp_path))
+    first = sessions.save("primera", id="ffffffffffff", ts=1)
+    second = sessions.save("segunda", id="000000000000", ts=1)
+    assert [record["id"] for record in sessions.all()] == [second, first]
+
+
 def test_corrupt_tail_is_ignored(tmp_path):
     sessions = Sessions(str(tmp_path))
     sid = sessions.save("ok")
