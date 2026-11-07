@@ -1,24 +1,26 @@
-# A/B pequeño y pareado (orientativo)
+# Small paired A/B test (indicative)
 
-Objetivo: ¿la memoria de proyecto reduce esfuerzo (tokens, llamadas a herramientas) y
-mejora el éxito en tareas que dependen de conocimiento no deducible del código?
+Goal: does project memory reduce effort (tokens, tool calls) and improve success on tasks
+that depend on knowledge you cannot infer from the code?
 
-Diseño (`bench/ab.py`):
+Design (`bench/ab.py`):
 
-- 8 tareas de respuesta cerrada sobre un proyecto de juguete cuyos datos **no** están en el código.
-- Dos brazos, mismo modelo y mismo prompt:
-  - **sin**: proyecto limpio, sin `.cairn` ni `AGENTS.md`.
-  - **con**: `.cairn` sembrada con los 8 hechos + snippet de `docs/AGENT_SNIPPET.md` en `AGENTS.md`.
-- 2 repeticiones por tarea y brazo (32 ejecuciones). Cada ejecución usa una copia limpia del proyecto.
-- Métricas: éxito (la respuesta contiene el dato esperado), tokens de entrada/salida, llamadas a herramientas.
-- Intervenciones humanas: 0 (se ejecuta con `--auto`).
+- 8 closed-answer tasks on a toy project whose answers are **not** in the code.
+- Two arms, same model and same prompt:
+  - without: clean project, no `.cairn` and no `AGENTS.md`.
+  - with: `.cairn` seeded with the 8 facts, plus the snippet from
+    `docs/AGENT_SNIPPET.md` in `AGENTS.md`.
+- 2 repetitions per task and arm (32 runs). Each run uses a clean copy of the project.
+- Metrics: success (the answer contains the expected fact), input and output tokens, and
+  tool calls.
+- Human interventions: 0 (it runs with `--auto`).
 
-Con n=8 por brazo el resultado es **orientativo**, no concluyente: mide si la memoria se usa
-y si ahorra trabajo, no significación estadística.
+With n=8 per arm, the result is **indicative**, not conclusive. It measures whether the
+memory gets used and saves work. It does not measure statistical significance.
 
-Ejecución:
+Run it:
 
 ```bash
-python bench/ab.py --reps 2          # tabla resumen
-python bench/ab.py --reps 2 --json   # filas completas
+python bench/ab.py --reps 2          # summary table
+python bench/ab.py --reps 2 --json   # full rows
 ```

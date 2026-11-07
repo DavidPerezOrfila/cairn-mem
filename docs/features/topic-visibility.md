@@ -1,41 +1,47 @@
-# S2 — `topic_key` visible y buscable
+# S2: `topic_key` is visible and searchable
 
-**Objetivo:** que la clave estable de una memoria (`topic_key`) se vea en el L0 y en
-`search`, y que FTS5 la indexe junto con la ruta del ancla. Así el agente puede pedir
-"lo de `storage/fts5`" o "lo de `src/auth.py`" sin recordar el título.
+**Goal:** the stable key of a memory (`topic_key`) should show up in the L0 and in
+`search`, and FTS5 should index it together with the anchor path. That way the agent can
+ask for "the `storage/fts5` thing" or "the `src/auth.py` thing" without remembering the
+title.
 
-## Alcance
+## Scope
 
-- FTS5 pasa a indexar `topic_key` y `anchor_path` además de `title`, `body` y `why`.
-  Pesos BM25: título 5, topic 3, ancla 2, body 1, why 0.5.
-- `search` devuelve `topic_key` en JSON y lo muestra en texto cuando existe.
-- El L0 muestra `[topic]` entre el `kind` y el título, solo si la memoria tiene topic.
-- `SCHEMA_VERSION` 2 → 3. Al abrir una DB vieja se borra el esquema derivado y se
-  reconstruye desde `events.jsonl`; no hay migración manual ni evento nuevo.
+- FTS5 starts indexing `topic_key` and `anchor_path` in addition to `title`, `body` and
+  `why`. BM25 weights: title 5, topic 3, anchor 2, body 1, why 0.5.
+- `search` returns `topic_key` in JSON and shows it in text when present.
+- The L0 shows `[topic]` between the `kind` and the title, only when the memory has a
+  topic.
+- `SCHEMA_VERSION` goes from 2 to 3. When an old database opens, the derived schema is
+  dropped and rebuilt from `events.jsonl`. There is no manual migration and no new event.
 
-Fuera de alcance: cuotas de L0, ranking nuevo, `hits`, cambios en `archive` o MCP tools.
+Out of scope: L0 quotas, a new ranking, `hits`, changes to `archive` or the MCP tools.
 
-## Criterios de aceptación
+## Acceptance criteria
 
-1. `search "storage/fts5"` y `search "src/auth"` encuentran la memoria por topic y ancla.
-2. `search --json` incluye `topic_key`; el texto lo muestra sin romper el formato actual.
-3. El L0 incluye `[topic]` cuando existe, sigue ≤ 3000 caracteres y es determinista.
-4. Una DB con `user_version = 2` se reconstruye sola al abrirla y queda buscable por topic.
-5. Precisión@3 sigue en 30/30; suite y `ruff` verdes; `search` MCP p95 < 50 ms con 10k.
+1. `search "storage/fts5"` and `search "src/auth"` find the memory by topic and anchor.
+2. `search --json` includes `topic_key`, and text output shows it without breaking the
+   current format.
+3. The L0 includes `[topic]` when it exists, stays ≤ 3,000 characters and stays
+   deterministic.
+4. A database with `user_version = 2` rebuilds itself on open and becomes searchable by
+   topic.
+5. Precision@3 stays at 30/30. Suite and `ruff` pass. MCP `search` p95 < 50 ms with 10k.
 
-## Evidencia (2026-11-04)
+## Evidence (2026-11-04)
 
-- `pytest -q`: **138 passed** (10 tests nuevos: store, render, CLI y MCP).
-- `ruff check src tests bench`: limpio.
-- CI macOS 3.14 detectó una carrera: con `user_version=0` el drop del esquema tumbaba
-  las tablas que otro `Store` estaba usando (`no such table: mem`). El drop ahora solo
-  actúa sobre esquemas 1/2; hay test de regresión y 5 pasadas seguidas del test de
-  concurrencia en verde.
-- Precisión@3: 30/30 (`pytest -q tests/test_golden.py`).
-- Migración real: el store del repo pasó de `user_version=2` a 3 al abrirse, sin tocar
-  el JSONL; `cairn search "release/0.3.1"` devuelve la memoria por topic.
-- `python bench/bench_cli.py --reps 20` (10k): search p95 150,6 ms, save p95 137,8 ms,
-  interno 2,2 ms. `bench_mcp`: search 2,3 / save 9,4 / context 5,8 ms p95.
-- L0 del repo: 2927 caracteres, 14 líneas, `[topic]` visible en todas.
-- Baseline de topics: 39 activas, 39 con `topic_key`, 4 claves repetidas incluyendo
-  superseded (5 superseded). No hay duplicados activos (índice único parcial).
+- `pytest -q`: **138 passed** (10 new tests: store, render, CLI and MCP).
+- `ruff check src tests bench`: clean.
+- macOS CI 3.14 caught a race: with `user_version=0`, dropping the schema removed tables
+  another `Store` was using (`no such table: mem`). The drop now only acts on schemas 1
+  and 2. There is a regression test, and 5 consecutive runs of the concurrency test
+  passed.
+- Precision@3: 30/30 (`pytest -q tests/test_golden.py`).
+- Real migration: the repository store went from `user_version=2` to 3 on open, without
+  touching the JSONL. `cairn search "release/0.3.1"` returns the memory by topic.
+- `python bench/bench_cli.py --reps 20` (10k): search p95 150.6 ms, save p95 137.8 ms,
+  internal 2.2 ms. `bench_mcp`: search 2.3 / save 9.4 / context 5.8 ms p95.
+- Repository L0: 2,927 characters, 14 lines, `[topic]` visible on all of them.
+- Topic baseline: 39 active memories, 39 with `topic_key`, 4 repeated keys when superseded
+  entries are included (5 superseded). There are no active duplicates (partial unique
+  index).

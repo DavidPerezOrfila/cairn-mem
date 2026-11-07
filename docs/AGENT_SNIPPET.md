@@ -1,19 +1,25 @@
-# Snippet para AGENTS.md / CLAUDE.md del proyecto que usa cairn-mem
+# Snippet for the AGENTS.md / CLAUDE.md of a project that uses cairn-mem
 
 ```markdown
-## Memoria del proyecto (cairn-mem)
+## Project memory (cairn-mem)
 @.cairn/MEMORY.md
-<!-- Si tu arnés no soporta @imports: al empezar ejecuta `cairn render` y lee .cairn/MEMORY.md -->
+<!-- If your harness does not support @imports: run `cairn render` at the start and read .cairn/MEMORY.md -->
 
-- Si el arnés soporta MCP: arranca `cairn mcp` y usa `search`, `save`, `get`, `context`, `save_session`.
-  `context` ya incluye el último resumen de sesión: no hace falta leerlo aparte.
-- Si no: al empezar una tarea, `cairn search "<términos>"` (máx. 2–3 búsquedas; cubre proyecto y personal). Detalle: `cairn get <id>`.
-- Guarda SOLO cuando: tomas una decisión con motivo, descubres un gotcha, o confirmas una convención.
-  `cairn save --kind decision|convention|gotcha|fact --topic <clave/estable> --title "..." --body "<=500 car." --why "..." [--anchor ruta/archivo]`
-- Conocimiento válido en cualquier repo (estilo de commits, preferencias del usuario): guárdalo con `--personal`; el `search` normal ya lo encuentra y lo marca `[personal]`.
-- Al cerrar una sesión: `cairn session save --summary "<qué se hizo, qué queda>"` (sin límite de 500).
-- NO guardes: lo que se deduce leyendo el código o `git log`, estado temporal de la tarea, logs,
-  secretos/credenciales/datos de clientes.
-- Mismo `--topic` = reemplaza la memoria anterior. No dupliques.
-- Si una entrada sale con "⚠ revisar": comprueba el código antes de fiarte; si cambió, reescríbela con el mismo `--topic`.
+- If your harness supports MCP: start `cairn mcp` and use `search`, `save`, `get`,
+  `context`, `save_session`. `context` already includes the last session recap, so you
+  do not need to read it separately.
+- If it does not: at the start of a task, run `cairn search "<terms>"` (at most 2 or 3
+  searches; it covers project and personal memory). For detail, use `cairn get <id>`.
+- Save ONLY when you make a decision with a reason, find a gotcha, or confirm a
+  convention.
+  `cairn save --kind decision|convention|gotcha|fact --topic <stable/key> --title "..." --body "<=500 chars" --why "..." [--anchor path/to/file]`
+- Knowledge that applies to any repo (commit style, user preferences): save it with
+  `--personal`. A normal `search` already finds it and marks it `[personal]`.
+- When you close a session: `cairn session save --summary "<what you did, what is left>"`
+  (no 500-character limit).
+- Do NOT save: anything you can work out from the code or `git log`, temporary task
+  state, logs, or secrets, credentials and customer data.
+- The same `--topic` replaces the previous memory. Do not duplicate.
+- If an entry comes back with "⚠ revisar", check the code before trusting it. If the
+  code changed, rewrite the entry with the same `--topic`.
 ```

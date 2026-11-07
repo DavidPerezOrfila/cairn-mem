@@ -41,17 +41,19 @@ class Sessions:
         return summary
 
     def get(self, id: str):
-        return self._records().get(id)
+        record = self._records().get(id)
+        return record[1] if record else None
 
     def all(self, limit: int | None = None) -> list[dict]:
         records = sorted(
             self._records().values(),
-            key=lambda record: (record.get("ts", 0), record["id"]),
+            key=lambda item: (item[1].get("ts", 0), item[0]),
             reverse=True,
         )
-        return records[:limit] if limit is not None else records
+        ordered = [record for _, record in records]
+        return ordered[:limit] if limit is not None else ordered
 
-    def _records(self) -> dict[str, dict]:
+    def _records(self) -> dict[str, tuple[int, dict]]:
         if not self.path.exists():
             return {}
         lines = self.path.read_text(encoding="utf-8-sig").splitlines()
@@ -67,5 +69,7 @@ class Sessions:
                     continue  # escritura rasgada por un crash
                 raise
             if event.get("op") == "session" and event.get("id"):
-                records[event["id"]] = event
+                # El nº de línea desempata: dos recaps en el mismo ns siguen el orden
+                # del append en vez de un id aleatorio.
+                records[event["id"]] = (number, event)
         return records

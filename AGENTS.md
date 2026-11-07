@@ -1,49 +1,100 @@
-# AGENTS.md — reglas para construir cairn-mem
+# AGENTS.md: rules for building cairn-mem
 
-## Estado y alcance
-- **M6–M9 cerrados y 0.2.2 publicada** (2026-11-03); **S1 cerrado y 0.3.0 publicada** (2026-11-04) en PyPI y etiquetada `v0.3.0`. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` y `legacy.py` implementados; `tests/` (128) cubre la CLI, el store, L0, anclas, MCP, sesiones, importación y el golden set.
-- Implementa **una ronda (S#) o un hito (M#) cada vez** y solo el que toque. Lee `PLAN.md` y `docs/DESIGN.md` antes de codificar.
-- Los tests fijan la API exacta (también en el docstring de `store.py`). No los relajes para poner verde.
-- Lo siguiente sale del **backlog** y solo con una medición que lo justifique.
+## State and scope
 
-## Setup y comandos
+- **M6-M9 are closed and 0.2.2 is published** (2026-11-03). **S1-S5 are closed and 0.7.0
+  is published** (2026-11-07) on PyPI and tagged `v0.7.0`. `store.py`, `cli.py`,
+  `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` and
+  `legacy.py` are implemented. `tests/` (175) covers the CLI, the store, the L0, anchors,
+  MCP, sessions, import, the JSONL tail repair and the golden set.
+- Implement **one round (S#) or milestone (M#) at a time**, and only that one. Read
+  `PLAN.md` and `docs/DESIGN.md` before writing code.
+- Tests fix the exact API, including the docstring in `store.py`. Do not relax them to get
+  green.
+- The next thing comes from the **backlog**, and only with a measurement that justifies
+  it.
+
+## Setup and commands
+
 ```bash
-pip install -e ".[dev]"                            # obligatorio; sin esto pytest falla con ModuleNotFoundError
+pip install -e ".[dev]"                            # required; without it pytest fails with ModuleNotFoundError
 pytest -q
-pytest tests/test_store.py::test_save_and_get -q   # un solo test
+pytest tests/test_store.py::test_save_and_get -q   # one test
 ruff check src tests bench
-python bench/bench_mcp.py --reps 20                 # latencia de tool calls MCP (10k)
+python bench/bench_mcp.py --reps 20                 # MCP tool-call latency (10k)
 ```
-- Antes de publicar: borra `dist/` **y** `build/`. `uv build` reutiliza `build/lib` y
-  empaqueta módulos ya borrados del árbol (un wheel llegó a incluir el importador
-  antiguo por un `build/lib/` huérfano).
-- CI en `.github/workflows/ci.yml`: ubuntu/macos/windows × Python 3.10 y 3.14 (tests + ruff). Sin config de ruff ni pre-commit: además, verificación local (pytest + ruff + criterios de `PLAN.md`).
-- Python 3.10+, **solo stdlib** en el núcleo. `dev` solo aporta pytest y ruff.
 
-## Arquitectura
-- `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` y `cairn-mem`, texto y `--json`), `store.py` (núcleo), `anchor.py` (hash/stale), `render.py` (L0), `paths.py` (raíz `.cairn/` y scope personal), `mcp.py` (stdio JSON-RPC), `sessions.py` (resúmenes), `jsonl.py` (append compartido) y `legacy.py` (importador).
-- **Verdad:** `.cairn/events.jsonl` (append-only, 2 ops: `save`, `archive`). `cairn.db` y `MEMORY.md` son derivados y regenerables: no los edites a mano. `sessions.jsonl` es append-only aparte y no es memoria curada.
-- `Store(root)` debe crear `.cairn/` y la DB si no existen: los tests lo instancian sin `cairn init`.
-- IDs de 12 hex (`secrets.token_hex(6)`) + `ts` en `time_ns`; orden de aplicación `(ts, nº de línea)`. `save` con `topic_key` marca `superseded` el anterior **antes** de insertar.
-- Escritura: `O_APPEND` + **una sola** `os.write` por evento; lock en proceso (`jsonl._LOCK`) porque el `O_APPEND` de Windows no es atómico entre hilos.
-- Al abrir la DB se compara `(size, mtime_ns)` del JSONL y `PRAGMA user_version`; si difieren → rebuild automático (cubre `git pull`).
-- `stale` se calcula al leer; no se persiste ni hay evento de verificación.
-- L0 (`.cairn/MEMORY.md`) ≤ 3000 caracteres; round-robin por kind (en cada vuelta `convention > decision > gotcha > fact`) y `ts` desc dentro de cada kind; salida determinista (caché de prompt).
-- Raíz del proyecto: busca `.cairn/` hacia arriba desde el cwd o usa `CAIRN_DIR`, excluyendo `~/.cairn` y `CAIRN_HOME` (scope personal). Scope personal: `CAIRN_HOME` o `~/.cairn`.
+- Before publishing: delete `dist/` **and** `build/`. `uv build` reuses `build/lib` and
+  packages modules you already deleted from the tree. One wheel included the old importer
+  because of an orphan `build/lib/`.
+- CI lives in `.github/workflows/ci.yml`: ubuntu/macos/windows × Python 3.10 and 3.14
+  (tests and ruff). There is no ruff config and no pre-commit, so also verify locally
+  (pytest, ruff and the criteria in `PLAN.md`).
+- Python 3.10+, **standard library only** in the core. `dev` only adds pytest and ruff.
 
-## Reglas no obvias
-- **Windows primero:** todo fichero con `encoding="utf-8"` y JSON con `ensure_ascii=False`; rutas de ancla POSIX relativas a la raíz; hash sha1 con CRLF→LF (si no, falsos stale entre SO). `os.open` del JSONL necesita `O_BINARY` (si no, Windows traduce `\n` a `\r\n`). Commits en LF: `.gitattributes` fija `eol=lf`; no dependas de `core.autocrlf` del clon.
-- **FTS5:** nunca pasar texto crudo a `MATCH`; sanea (`\w+` → `"t"*`, prefijo), usa AND y cae a OR si no hay resultados. Crudo falla con `-`, `:`, `"`. Ranking `bm25(mem_fts, 5.0, 1.0, 0.5)`.
-- **Seguridad:** rechaza (no redactes) secretos antes de escribir: claves cloud, `BEGIN … PRIVATE KEY`, JWT `eyJ…`, `password|secret|token|api_key` con `=` o `:` (JSON/YAML), URLs `://user:pass@`. `body` > 500 caracteres o `title` > 200 → error.
-- Imports mínimos al arranque: SLO de CLI end-to-end (p95 `search` < 350 ms, `save` < 500 ms, arranque incluido) y de tool MCP en proceso (< 50 ms).
-- **MCP:** stdout solo protocolo (NDJSON en binario, `\n`); logs a stderr; sin asyncio ni señales; el proceso cachea un `Store` por scope y es el único escritor mientras vive.
-- **Sesiones:** `.cairn/sessions.jsonl` es local y no entra en FTS ni L0; un resumen puede superar 500 caracteres. `context` solo inyecta el último resumen **del proyecto**: uno personal es de otro repo.
-- **Importador:** idempotente por `sha1("<sal fija>:<id de origen>")[:12]`; `What` → `body` (≤500) y el resto → `why`; `global/personal` va al scope personal y no al repo actual.
-- Sin LLM en ninguna ruta. Nada del backlog (`hits`, decay, sqlite-vec, git hook pasivo) sin una medición que lo justifique.
-- Cambio de diseño → una fila en `docs/DECISIONS.md` (fecha + decisión + motivo).
-- Dogfooding: en cuanto M1 funcione, guarda las decisiones del proyecto con `cairn`.
+## Architecture
 
-## Definición de hecho (por hito)
-1. Tests del hito en verde, y los de hitos anteriores (un skipped no cuenta).
-2. Criterios de aceptación de `PLAN.md` medidos y anotados.
-3. Checklist del hito marcada en `PLAN.md`.
+- `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` and `cairn-mem`, text and
+  `--json`), `store.py` (core), `anchor.py` (hash and stale), `render.py` (L0),
+  `paths.py` (`.cairn/` root and personal scope), `mcp.py` (stdio JSON-RPC), `sessions.py`
+  (recaps), `jsonl.py` (shared append) and `legacy.py` (importer).
+- **Truth:** `.cairn/events.jsonl` (append-only, 2 operations: `save`, `archive`).
+  `cairn.db` and `MEMORY.md` are derived and can be regenerated. Do not edit them by hand.
+  `sessions.jsonl` is a separate append-only file and is not curated memory.
+- `Store(root)` must create `.cairn/` and the database if they do not exist. Tests
+  instantiate it without `cairn init`.
+- IDs are 12 hex characters (`secrets.token_hex(6)`) plus a `ts` in `time_ns`. Apply
+  order is `(ts, line number)`. A `save` with `topic_key` marks the previous memory
+  `superseded` **before** the insert.
+- Writes: `O_APPEND` plus **one** `os.write` per event. There is an in-process lock
+  (`jsonl._LOCK`) because Windows `O_APPEND` is not atomic between threads.
+- When the database opens, it compares `(size, mtime_ns)` of the JSONL and
+  `PRAGMA user_version`. If they differ, it rebuilds automatically (this covers
+  `git pull`).
+- `stale` is calculated when reading. It is not persisted, and there is no verification
+  event.
+- L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters. It goes round-robin by kind (each round:
+  `convention > decision > gotcha > fact`) and newest `ts` first inside each kind. Output
+  is deterministic (prompt cache).
+- Project root: search for `.cairn/` upward from the cwd, or use `CAIRN_DIR`. The search
+  excludes `~/.cairn` and `CAIRN_HOME` (the personal scope). Personal scope:
+  `CAIRN_HOME` or `~/.cairn`.
+
+## Non-obvious rules
+
+- **Windows first:** every file uses `encoding="utf-8"` and JSON uses
+  `ensure_ascii=False`. Anchor paths are POSIX paths relative to the root. The sha1 hash
+  normalizes CRLF to LF; otherwise you get false stale flags between OSes. `os.open` for
+  the JSONL needs `O_BINARY`; otherwise Windows turns `\n` into `\r\n`. Commits use LF:
+  `.gitattributes` sets `eol=lf`, so do not rely on the clone's `core.autocrlf`.
+- **FTS5:** never pass raw text to `MATCH`. Sanitize it (`\w+` → `"t"*`, prefix), use AND
+  and fall back to OR when there are no results. Raw queries fail with `-`, `:` and `"`.
+  Ranking: `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)`.
+- **Security:** reject (do not redact) secrets before writing: cloud keys,
+  `BEGIN ... PRIVATE KEY`, JWTs `eyJ...`, provider tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`,
+  `ghr_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza`),
+  `password|secret|token|api_key` with `=` or `:` (JSON/YAML), and URLs `://user:pass@`.
+  A `body` over 500 characters or a `title` over 200 is an error. `id` must be 12 lowercase
+  hex, and `topic_key` is ≤ 100 characters with no control characters.
+- Minimal imports at startup. CLI end-to-end SLO: p95 `search` < 350 ms and `save` <
+  500 ms, startup included. In-process MCP tool call: < 50 ms.
+- **MCP:** stdout carries protocol only (NDJSON in binary, `\n`). Logs go to stderr. No
+  asyncio and no signals. The process caches one `Store` per scope and is the only writer
+  while it lives.
+- **Sessions:** `.cairn/sessions.jsonl` is local and does not enter FTS or the L0. A recap
+  may exceed 500 characters. `context` injects only the last **project** recap; a personal
+  one belongs to another repo.
+- **Importer:** idempotent through `sha1("<fixed salt>:<source id>")[:12]`. `What` →
+  `body` (≤ 500) and the rest → `why`. `global/personal` goes to the personal scope, not
+  to the current repo.
+- No LLM in any path. Nothing from the backlog (`hits`, decay, sqlite-vec, passive git
+  hook) without a measurement that justifies it.
+- A design change needs a row in `docs/DECISIONS.md` (date, decision, reason).
+- Dogfooding: as soon as M1 works, save the project decisions with `cairn`.
+
+## Definition of done (per milestone)
+
+1. Tests for the milestone pass, and so do the tests from earlier milestones (a skipped
+   test does not count).
+2. The acceptance criteria in `PLAN.md` are measured and written down.
+3. The milestone checklist in `PLAN.md` is ticked.

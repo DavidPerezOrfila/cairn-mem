@@ -1,58 +1,58 @@
-# Decisiones (ADR corto)
+# Decisions (short ADRs)
 
-| Fecha | Decisión | Motivo |
+| Date | Decision | Reason |
 |---|---|---|
-| 2026-10-31 | IDs de 12 hex aleatorios + `ts` aparte (no ULID, no enteros) | Cortos de teclear para el agente, sin colisiones en merge, orden por `ts` |
-| 2026-10-31 | 2 operaciones de evento (`save`, `archive`) | Menos superficie; supersede se deriva de `topic_key` |
-| 2026-10-31 | `stale` calculado al leer, no persistido | Depende del checkout; persistirlo causa verdades contradictorias entre ramas |
-| 2026-10-31 | Sin `hits` en v0.1 | Convertía `get` en escritura (latencia, ruido en Git). Reintroducir solo si el A/B lo justifica |
-| 2026-10-31 | Sin lock de ficheros: `O_APPEND` + 1 `os.write` | Portable y suficiente; evita `msvcrt`/`fcntl` |
-| 2026-10-31 | `MEMORY.md` y `cairn.db` derivados y gitignored | Evita conflictos de merge y ruido en diffs |
-| 2026-10-31 | Local-only por defecto (`--share` para versionar) | Entorno corporativo: la memoria puede contener contexto interno |
-| 2026-10-31 | Scrubbing en M1 y por **rechazo** | Un secreto en JSONL versionado es el peor fallo; redactar en silencio corrompe la memoria |
-| 2026-10-31 | Búsqueda saneada AND→OR | FTS5 crudo falla con `-`, `:`, `"` |
-| 2026-10-31 | MCP, compact/decay, git hook pasivo, scope global → backlog | No hay medición que los justifique; el CLI ya cubre cualquier arnés con shell |
-| 2026-10-31 | SLO de latencia medido end-to-end (con arranque de Python) | La consulta en sí es ms; lo que nota el agente es el proceso |
-| 2026-10-31 | FTS5 sin vectores | Latencia/coste; `sqlite-vec` solo si el recall medido es malo |
-| 2026-10-31 | Nombre: **cairn-mem** (paquete PyPI), módulo `cairn_mem`, comando `cairn`, datos en `.cairn/` | Metáfora de marcas para quien viene detrás; `cairn` suelto ya existe en PyPI, `cairn-mem` estaba libre (comprobado 2026-10-31) |
-| 2026-11-01 | `ts` > int64 se recorta a `2**63-1` al aplicar a SQLite; el JSONL conserva el original | SQLite usa enteros signed de 64 bits: un evento importado con `ts` mayor rompía el rebuild con `OverflowError` |
-| 2026-11-01 | `rebuild` tolera JSON inválido solo en la última línea no vacía | Un crash a mitad de `os.write` dejaría el Store inutilizable en cada apertura; una línea intermedia corrupta sigue fallando en voz alta |
-| 2026-11-01 | La huella del JSONL se captura al terminar el append, no tras aplicar el evento | Evita certificar como aplicados eventos externos que llegaron entre ambas operaciones |
-| 2026-11-01 | El append usa `O_BINARY` (Windows) | `os.open` en modo texto traduce `\n` a `\r\n`; el JSONL quedaba con CRLF y el guard de tamaño lo detectaba como evento externo |
-| 2026-11-02 | Lock en proceso alrededor del append del JSONL | El `O_APPEND` del CRT de Windows no es atómico entre hilos: el test de concurrencia perdía líneas (19/20). Entre procesos se mantiene la regla de un escritor por proyecto |
-| 2026-11-02 | SLO end-to-end revisado a `search` < 350 ms y `save` < 500 ms | Medido el suelo: `python -c pass` 72 ms e importar `sqlite3, json, re` 138 ms; los 150/200 ms originales exigían demonio o binario nativo. No se toca L0, ranking ni guardado |
-| 2026-11-02 | Publicada la v0.1.0 en PyPI como `cairn-mem` (wheel + sdist) | Nombre libre y verificado; el comando `cairn` no choca con el shim de pipx ni con el editable |
-| 2026-11-02 | MCP por stdio con JSON-RPC a mano (stdlib), no SDK | Mantiene `dependencies = []`, funciona en los 3 SO sin Go y elimina el arranque de Python por llamada |
-| 2026-11-02 | MCP expone solo `save/search/get/context` | 4 esquemas cuestan ~500 tokens fijos por turno; el mantenimiento no necesita estar en el prompt |
-| 2026-11-02 | CI con matriz ubuntu/macos/windows × 3.10/3.14 | "Windows primero" se verificaba a mano; el framing stdio y las rutas necesitan prueba real por SO |
-| 2026-11-02 | `_known_size` se actualiza tras `save`/`archive` | Un `Store` de vida larga (MCP) reconstruía la DB en cada escritura: save p95 pasó de 3,4 s a 37 ms |
-| 2026-11-02 | Ancla confinada al proyecto con `Path.relative_to` | `os.path.relpath` no falla con `../` dentro de la misma unidad: el ancla podía salir del repo y filtrar rutas |
-| 2026-11-03 | Sesiones en `sessions.jsonl`, no en `events.jsonl` | Un resumen de sesión es continuidad (2–5k car.), no memoria curada; si entrara, rompería el límite de 500 y el L0 |
-| 2026-11-03 | Scope personal en `CAIRN_HOME` o `~/.cairn` | Hay conocimiento transversal que vale en cualquier repo; el L0 del proyecto no lo mezcla y `search --personal` lo consulta aparte |
-| 2026-11-03 | Import legacy con id derivado del id de origen y sal fija | Reimportar no duplica y el orden se conserva con el `ts` original |
-| 2026-11-03 | Import: `What` → `body`, resto → `why`; `global/personal` → scope personal | Respeta el límite de 500 sin partir memorias; el detalle queda buscable y la ubicación no mezcla repos |
-| 2026-11-03 | `append_jsonl` compartido por Store y Sessions | El lock de Windows y el `O_BINARY` deben ser los mismos en ambos JSONL; duplicarlo invitaba a divergir |
-| 2026-11-03 | `data_dir` excluye `~/.cairn` y `CAIRN_HOME` de la búsqueda hacia arriba | Con el scope personal en `~/.cairn`, cualquier cwd bajo el home lo encontraba como raíz de proyecto y `cairn search` leía la memoria personal sin avisar |
-| 2026-11-03 | Las sesiones pasan por `reject_secrets` | `events.jsonl` ya rechazaba secretos, pero `sessions.jsonl` los aceptaba: un resumen con un token acababa en disco sin aviso |
-| 2026-11-03 | La tool MCP `context` añade el último resumen de sesión (recortado a 4000 car.) | `session` era write-only por MCP: el agente guardaba al cerrar y no recuperaba nada al empezar. `MEMORY.md` sigue siendo solo memoria curada |
-| 2026-11-03 | `Store` reaplica el JSONL en las lecturas si la huella cambió | El `Store` del MCP vive horas: tras un `git pull` o un `save` desde la CLI, `search`/`get`/`context` servían datos viejos |
-| 2026-11-03 | El importador se llama `legacy` (módulo, subcomando y docs) | La herramienta que sustituye no debe aparecer en el repo remoto; el id conserva la sal antigua para no duplicar lo ya importado |
-| 2026-11-03 | La tool MCP de sesión se llama `save_session` | `session` colisiona con el espacio de nombres del arnés: OpenCode no la exponía y el agente no podía guardar el resumen |
-| 2026-11-03 | Rebuild captura la huella antes de leer y archive usa un `ts` posterior al save (`SCHEMA_VERSION=2`) | Un append externo a mitad del rebuild quedaba certificado sin aplicar; un save importado con `ts` futuro resucitaba al reconstruir. El bump fuerza un rebuild de las DB ya envenenadas |
-| 2026-11-03 | `title` se normaliza y se limita a 200 caracteres | Un título largo vaciaba el L0 (el render corta en la primera línea que no cabe) y un salto de línea rompía el formato |
-| 2026-11-03 | `init` rechaza el scope personal y los stores anidados; re-init en su raíz sigue permitido | En el home creaba un store invisible para `data_dir`; en un subdirectorio partía la memoria en dos |
-| 2026-11-03 | El filtro de secretos acepta `:` y comillas, y claves compuestas (`DB_PASSWORD`, `api-key`) | YAML y JSON eran los formatos más probables de fuga y pasaban el filtro |
-| 2026-11-03 | Anchors > 2 MB se marcan stale sin hashear en `search`; `cairn check` hashea siempre | Leer varios ficheros grandes por búsqueda podía recorrer cientos de MB |
-| 2026-11-04 | L0 reparte el presupuesto en round-robin por `kind` (una línea de cada uno por vuelta) | Con 15 `decision` en el repo, los `gotcha` y `fact` existentes nunca entraban en los 3000 caracteres |
-| 2026-11-04 | Índice parcial `(kind, ts DESC, id) WHERE status='active'` | Sin él, el reparto hacía cuatro escaneos de la tabla: `context` pasaba de 18 a 89 ms p95 con 10k |
-| 2026-11-04 | FTS5 indexa `topic_key` y `anchor_path` (`SCHEMA_VERSION=3`) | El topic es el asa estable que el agente recuerda y la ruta del ancla es lo que ve en el editor: buscar `storage/fts5` o `src/auth.py` no debe depender del título. Pesos 5/1/0.5/3/2 (título/topic/ancla/body/why). El esquema es derivado: si la versión no coincide se tira y se reconstruye |
-| 2026-11-04 | El L0 muestra `[topic]` entre el `kind` y el título, y `search` lo añade al resultado | Sin él, dos memorias del mismo tema eran indistinguibles; solo ocupa caracteres en las entradas que tienen topic |
-| 2026-11-04 | El drop por cambio de esquema solo actúa con `user_version` 1 o 2, nunca con 0 | Una DB recién creada sigue en 0 hasta el primer rebuild: si otro `Store` la abre a la vez y tira las tablas, el `save` concurrente falla con `no such table: mem` (visto en CI macOS) |
-| 2026-11-04 | `search` consulta proyecto y scope personal y entrelaza por posición de ranking | El agente no sabe si lo que busca es decisión del repo o costumbre suya, y una búsqueda fallida le hacía duplicar la memoria. Un BM25 de otra base no es comparable, pero el primero de cada scope sí: se alternan proyectos/personal y el límite se aplica al conjunto |
-| 2026-11-04 | `context` carga el último resumen del proyecto, no el más reciente de ambos scopes | La sesión personal pertenece a otro repo: meterla como "la última sesión" daba continuidad falsa. El resumen personal se sigue guardando y listando con `--personal` |
-| 2026-11-06 | La cola rasgada del JSONL se repara antes del append: si el fragmento es JSON válido se le añade el `\n`; si no, se trunca | Un crash a mitad de `os.write` dejaba una línea sin salto; el siguiente `save` pegaba su evento detrás y el `rebuild` fallaba con `JSONDecodeError` en una línea intermedia, dejando el Store inutilizable en cada apertura |
-| 2026-11-06 | `_append` compara la huella completa `(size, mtime_ns)` previa al append, no solo el tamaño | Un reemplazo externo del mismo tamaño (`git checkout`/`cp`) dejaba la huella vieja certificada y los eventos remotos no se indexaban hasta el siguiente rebuild manual |
-| 2026-11-06 | Se rechazan tokens con prefijo de proveedor (`ghp_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza`) | El patrón `clave = valor` no ve un token que aparece suelto en el texto; son credenciales de alta confianza y prefijo inequívoco |
-| 2026-11-06 | `id` debe ser 12 hex en minúscula; `topic_key` ≤ 100 caracteres y sin controles; `render` colapsa id/title/topic al leer | Un salto de línea en el topic inyectaba líneas falsas en `MEMORY.md`; un topic de 4000 caracteres dejaba el L0 en el título. La defensa en lectura cubre ficheros ya contaminados por eventos externos |
-| 2026-11-06 | Una línea del JSONL con JSON válido pero semánticamente inválida (sin `op`, `kind` fuera de enum) falla el `rebuild` en voz alta; no se ignora | Es la fuente de verdad: saltarla en silencio ocultaría memorias corruptas. La cola rasgada de un crash sí se tolera porque es una escritura incompleta, no un dato inventado |
-| 2026-11-07 | Publicada la v0.7.0 en PyPI (wheel + sdist) | S5: un `save` tras un crash ya no rompe el rebuild, un replace externo del mismo tamaño se detecta y las credenciales con prefijo se rechazan. Instalación limpia desde PyPI verificada (init, save, search, session); el token y la cola rasgada se comprobaron sobre el wheel publicado |
+| 2026-10-31 | Random 12-hex ids plus a separate `ts` (no ULID, no integers) | Short enough for an agent to type, no collisions when branches merge, and ordering by `ts` |
+| 2026-10-31 | Only 2 event operations (`save`, `archive`) | Less surface area. Supersede is derived from `topic_key` |
+| 2026-10-31 | `stale` is calculated when reading, not persisted | It depends on the checkout. Persisting it creates contradictory truths between branches |
+| 2026-10-31 | No `hits` in v0.1 | It turned `get` into a write (latency, Git noise). Bring it back only if the A/B test justifies it |
+| 2026-10-31 | No file lock: `O_APPEND` plus one `os.write` | Portable and enough. Avoids `msvcrt`/`fcntl` |
+| 2026-10-31 | `MEMORY.md` and `cairn.db` are derived and gitignored | Avoids merge conflicts and diff noise |
+| 2026-10-31 | Local-only by default (`--share` to version the memory) | Corporate environments: memory may hold internal context |
+| 2026-10-31 | Scrubbing in M1, by **rejection** | A secret in a versioned JSONL is the worst failure. Silent redaction corrupts memory |
+| 2026-10-31 | Sanitized search, AND then OR | Raw FTS5 fails with `-`, `:` and `"` |
+| 2026-10-31 | MCP, compact/decay, passive git hook and global scope go to the backlog | No measurement justifies them. The CLI already covers any harness with a shell |
+| 2026-10-31 | Latency SLO measured end-to-end, including Python startup | The query itself takes milliseconds. What the agent feels is the process |
+| 2026-10-31 | FTS5 without vectors | Latency and cost. `sqlite-vec` only if measured recall is bad |
+| 2026-10-31 | Name: **cairn-mem** (PyPI package), module `cairn_mem`, command `cairn`, data in `.cairn/` | The cairn metaphor: marks for whoever comes next. `cairn` alone already existed on PyPI and `cairn-mem` was free (checked 2026-10-31) |
+| 2026-11-01 | A `ts` above int64 is clamped to `2**63-1` when applied to SQLite; the JSONL keeps the original | SQLite uses signed 64-bit integers, so an imported event with a larger `ts` broke the rebuild with `OverflowError` |
+| 2026-11-01 | `rebuild` tolerates invalid JSON only on the last non-empty line | A crash in the middle of an `os.write` would leave the Store unusable on every open. A corrupt intermediate line still fails loudly |
+| 2026-11-01 | The JSONL fingerprint is captured when the append finishes, not after applying the event | Avoids certifying as applied some external events that arrived between the two operations |
+| 2026-11-01 | The append uses `O_BINARY` on Windows | `os.open` in text mode translates `\n` to `\r\n`, so the JSONL ended up with CRLF and the size guard saw it as an external event |
+| 2026-11-02 | In-process lock around the JSONL append | The Windows CRT `O_APPEND` is not atomic between threads, so the concurrency test lost lines (19/20). Between processes, the one-writer-per-project rule still applies |
+| 2026-11-02 | End-to-end SLO revised to `search` < 350 ms and `save` < 500 ms | We measured the floor: `python -c pass` takes 72 ms and importing `sqlite3, json, re` 138 ms. The original 150/200 ms required a daemon or a native binary. L0, ranking and save rules stay the same |
+| 2026-11-02 | Published v0.1.0 on PyPI as `cairn-mem` (wheel and sdist) | The name was free and checked. The `cairn` command does not clash with the pipx shim or the editable install |
+| 2026-11-02 | MCP over stdio with hand-written JSON-RPC (standard library), no SDK | Keeps `dependencies = []`, works on all 3 OS without Go, and removes Python startup per call |
+| 2026-11-02 | MCP exposes only `save/search/get/context` | Four schemas cost about 500 fixed tokens per turn. Maintenance does not need to be in the prompt |
+| 2026-11-02 | CI matrix: ubuntu/macos/windows × 3.10/3.14 | "Windows first" was checked by hand. stdio framing and paths need a real test per OS |
+| 2026-11-02 | `_known_size` is updated after `save`/`archive` | A long-lived `Store` (MCP) rebuilt the database on every write: save p95 went from 3.4 s to 37 ms |
+| 2026-11-02 | The anchor is confined to the project with `Path.relative_to` | `os.path.relpath` does not fail with `../` inside the same drive, so the anchor could leave the repo and leak paths |
+| 2026-11-03 | Sessions live in `sessions.jsonl`, not `events.jsonl` | A session recap is continuity (2-5k characters), not curated memory. Inside the events file it would break the 500-character limit and the L0 |
+| 2026-11-03 | Personal scope in `CAIRN_HOME` or `~/.cairn` | Some knowledge applies to every repo. The project L0 does not mix it, and `search --personal` queries it separately |
+| 2026-11-03 | Legacy import with an id derived from the source id and a fixed salt | Re-importing does not duplicate anything, and the original `ts` keeps the order |
+| 2026-11-03 | Import: `What` → `body`, the rest → `why`; `global/personal` → personal scope | Respects the 500-character limit without splitting memories. Detail stays searchable and the location does not mix repos |
+| 2026-11-03 | `append_jsonl` shared by Store and Sessions | The Windows lock and `O_BINARY` must be the same in both JSONL files. Duplicating them invited drift |
+| 2026-11-03 | `data_dir` excludes `~/.cairn` and `CAIRN_HOME` from the upward search | With the personal scope in `~/.cairn`, any cwd under the home directory found it as the project root, and `cairn search` read personal memory without warning |
+| 2026-11-03 | Sessions go through `reject_secrets` | `events.jsonl` already rejected secrets, but `sessions.jsonl` accepted them: a recap with a token ended up on disk without warning |
+| 2026-11-03 | The `context` MCP tool adds the last session recap (trimmed to 4,000 characters) | `session` was write-only over MCP: the agent saved on close and recovered nothing on start. `MEMORY.md` stays curated memory only |
+| 2026-11-03 | `Store` reapplies the JSONL on reads when the fingerprint changed | The MCP `Store` lives for hours. After a `git pull` or a CLI `save`, `search`/`get`/`context` served old data |
+| 2026-11-03 | The importer is called `legacy` (module, subcommand and docs) | The tool it replaces should not appear in the remote repo. The id keeps the old salt so already imported memories do not duplicate |
+| 2026-11-03 | The session MCP tool is called `save_session` | `session` collides with the harness name space: OpenCode did not expose it and the agent could not save the recap |
+| 2026-11-03 | Rebuild captures the fingerprint before reading, and archive uses a `ts` after the save (`SCHEMA_VERSION=2`) | An external append during the rebuild was certified without being applied. A save imported with a future `ts` became active again on rebuild. The version bump forces a rebuild of already poisoned databases |
+| 2026-11-03 | `title` is normalized and limited to 200 characters | A long title emptied the L0 (render cuts at the first line that does not fit), and a newline broke the format |
+| 2026-11-03 | `init` rejects the personal scope and nested stores. Re-init at its own root is still allowed | In the home directory it created an invisible store for `data_dir`. In a subdirectory it split the memory in two |
+| 2026-11-03 | The secret filter accepts `:` and quotes, and compound keys (`DB_PASSWORD`, `api-key`) | YAML and JSON were the most likely leak formats and they passed the filter |
+| 2026-11-03 | Anchors over 2 MB are marked stale without hashing in `search`; `cairn check` always hashes | Reading several large files per search could scan hundreds of MB |
+| 2026-11-04 | L0 shares the budget round-robin across `kind` (one line from each per round) | With 15 `decision` entries in the repo, existing `gotcha` and `fact` memories never entered the 3,000 characters |
+| 2026-11-04 | Partial index `(kind, ts DESC, id) WHERE status='active'` | Without it, the round-robin did four table scans: `context` went from 18 to 89 ms p95 with 10k |
+| 2026-11-04 | FTS5 indexes `topic_key` and `anchor_path` (`SCHEMA_VERSION=3`) | The topic is the stable handle the agent remembers, and the anchor path is what it sees in the editor. Searching `storage/fts5` or `src/auth.py` should not depend on the title. Weights 5/1/0.5/3/2 (title/topic/anchor/body/why). The schema is derived: if the version does not match, it is dropped and rebuilt |
+| 2026-11-04 | The L0 shows `[topic]` between the `kind` and the title, and `search` adds it to the result | Without it, two memories of the same topic looked the same. It only uses characters on entries that have a topic |
+| 2026-11-04 | The drop on schema change only acts on `user_version` 1 or 2, never 0 | A freshly created database stays at version 0 until the first rebuild. If another `Store` opened it at the same time and dropped the tables, the concurrent `save` failed with `no such table: mem` (seen in macOS CI) |
+| 2026-11-04 | `search` queries the project and the personal scope, then interleaves by ranking position | The agent does not know whether what it needs is a repo decision or a personal habit, and a failed search made it duplicate the memory. A BM25 from another database is not comparable, but the first result from each scope is, so project and personal results alternate and the limit applies to the combined list |
+| 2026-11-04 | `context` loads the last recap from the project, not the newest from both scopes | The personal session belongs to another repo. Using it as "the last session" gave false continuity. Personal recaps are still saved and listed with `--personal` |
+| 2026-11-06 | A torn JSONL tail is repaired before the append: a valid JSON fragment gets the `\n`, and an invalid one is truncated | A crash in the middle of an `os.write` left a line without a newline. The next `save` appended its event behind it and the `rebuild` failed with `JSONDecodeError` on an intermediate line, leaving the Store unusable on every open |
+| 2026-11-06 | `_append` compares the full fingerprint `(size, mtime_ns)` from before the append, not just the size | An external replacement with the same size (`git checkout`/`cp`) left the old fingerprint certified and remote events unindexed until a manual rebuild |
+| 2026-11-06 | Provider tokens with a prefix are rejected (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza`) | The `key = value` pattern does not see a token that appears alone in the text. These are high-confidence credentials with an unmistakable prefix |
+| 2026-11-06 | `id` must be 12 lowercase hex. `topic_key` is ≤ 100 characters with no control characters. `render` collapses id, title and topic when reading | A newline in the topic injected fake lines into `MEMORY.md`, and a 4,000-character topic left the L0 with just the title. The read-side defense covers files already contaminated by external events |
+| 2026-11-06 | A JSONL line with valid JSON but invalid semantics (no `op`, a `kind` outside the enum) fails the `rebuild` loudly; it is not skipped | It is the source of truth. Skipping it silently would hide corrupt memories. A torn tail from a crash is still tolerated because it is an incomplete write, not invented data |
+| 2026-11-07 | Published v0.7.0 on PyPI (wheel and sdist) | S5: a `save` after a crash no longer breaks the rebuild, an external same-size replacement is detected, and prefixed credentials are rejected. A clean install from PyPI was verified (init, save, search, session). The token and torn-tail checks were run against the published wheel |

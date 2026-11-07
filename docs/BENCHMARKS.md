@@ -1,134 +1,145 @@
 # Benchmarks (M4)
 
-Medición **2026-11-02** en la máquina real del usuario.
+Measured on **2026-11-02** on the real machine.
 
 - Windows 11 Pro 10.0.26300, 16 GB RAM, Python 3.14.10.
-- Comando: `python bench/bench_cli.py --reps 20` (sembrado por JSONL + rebuild; la CLI se mide con `python -m cairn_mem.cli`, arranque de Python incluido).
+- Command: `python bench/bench_cli.py --reps 20` (seed through JSONL plus rebuild; the
+  CLI is measured with `python -m cairn_mem.cli`, Python startup included).
 
-## Latencia end-to-end
+## End-to-end latency
 
-| Registros | Carga | rebuild | search p50 | search p95 | save p50 | save p95 | search interno p95 |
+| Records | Load | rebuild | search p50 | search p95 | save p50 | save p95 | internal search p95 |
 |---|---|---|---|---|---|---|---|
-| 1 000 | 54 % | 212 ms | 353 ms | 378 ms | 387 ms | 398 ms | 1,1 ms |
-| 10 000 | 54 % | 1 816 ms | 361 ms | 390 ms | 534 ms | 636 ms | 4,8 ms |
-| 1 000 | 16 % | 172 ms | 292 ms | 317 ms | 318 ms | 331 ms | 0,8 ms |
-| 10 000 | 16 % | 1 303 ms | 283 ms | 304 ms | 439 ms | 451 ms | 5,9 ms |
+| 1,000 | 54 % | 212 ms | 353 ms | 378 ms | 387 ms | 398 ms | 1.1 ms |
+| 10,000 | 54 % | 1,816 ms | 361 ms | 390 ms | 534 ms | 636 ms | 4.8 ms |
+| 1,000 | 16 % | 172 ms | 292 ms | 317 ms | 318 ms | 331 ms | 0.8 ms |
+| 10,000 | 16 % | 1,303 ms | 283 ms | 304 ms | 439 ms | 451 ms | 5.9 ms |
 
-La primera pasada se hizo con el editor/agente ocupando la CPU; la segunda con la máquina en reposo (16 %).
+The first pass ran with the editor and agent using the CPU. The second pass ran with the
+machine idle (16 %).
 
-## MCP (tool call en proceso, 10k registros)
+## MCP (in-process tool call, 10k records)
 
-`python bench/bench_mcp.py --reps 20` (2026-11-02, misma máquina):
+`python bench/bench_mcp.py --reps 20` (2026-11-02, same machine):
 
 | Tool | p50 | p95 |
 |---|---|---|
-| `search` | 3,4 ms | 4,0 ms |
-| `save` | 28,4 ms | 37,4 ms |
-| `context` (L0) | 14,5 ms | 18,4 ms |
+| `search` | 3.4 ms | 4.0 ms |
+| `save` | 28.4 ms | 37.4 ms |
+| `context` (L0) | 14.5 ms | 18.4 ms |
 
-SLO nuevo: tool call p95 < 50 ms → **cumple** sin arranque de Python.
+The new SLO is a tool call p95 < 50 ms. It **passes**, with no Python startup.
 
-## Precisión@3
+## Precision@3
 
-`python -m pytest tests/test_golden.py` → **30/30 = 1,00** (golden set de 20 memorias y 30 consultas, sin LLM).
+`python -m pytest tests/test_golden.py` gives **30/30 = 1.00**. The golden set has 20
+memories and 30 queries, with no LLM involved.
 
-## Suelo de arranque
+## Startup floor
 
-Medido en reposo (10 ejecuciones, p50):
+Measured on an idle machine (10 runs, p50):
 
-| Proceso | p50 |
+| Process | p50 |
 |---|---|
 | `python -c pass` | 72 ms |
 | `import sqlite3, json, re` | 138 ms |
 | `import sqlite3, json, re, secrets, hashlib, pathlib` | 169 ms |
 | `import cairn_mem.cli` | 178 ms |
 
-El SLO original (`search` < 150 ms) está por debajo del coste de importar la stdlib necesaria antes de tocar la base: no es alcanzable sin cambiar la arquitectura (demonio o binario nativo). Por eso §2 del PLAN se revisa con esta medición: `search` p95 < 350 ms y `save` p95 < 500 ms en reposo con 10k.
+The original SLO (`search` < 150 ms) is below the cost of importing the standard library
+you need before touching the database. You cannot reach it without changing the
+architecture (a daemon or a native binary). That measurement is why §2 of PLAN.md now
+sets `search` p95 < 350 ms and `save` p95 < 500 ms on an idle machine with 10k records.
 
-## Veredicto frente a §2 del PLAN (revisado)
+## Verdict against §2 of PLAN.md (revised)
 
-- `search` interno: **cumple** (< 10 ms).
-- Precisión@3: **cumple** (≥ 0,8).
-- `search` e2e en reposo: **cumple** (304 ms < 350 ms). `save`: **cumple** (451 ms < 500 ms).
-- Rebuild 10k: 1,3 s (el PLAN pedía medirlo, no fijaba objetivo).
+- Internal `search`: **passes** (< 10 ms).
+- Precision@3: **passes** (≥ 0.8).
+- End-to-end `search` on an idle machine: **passes** (304 ms < 350 ms). `save`:
+  **passes** (451 ms < 500 ms).
+- 10k rebuild: 1.3 s (PLAN.md asked us to measure it, with no target).
 
-## Decisión
+## Decision
 
-No se toca L0, ni el ranking, ni las reglas de guardado: la consulta interna y la precisión cumplen, y el margen está en el arranque del proceso, no en el diseño de la memoria. Optimizar el arranque (parser propio, imports perezosos) queda en backlog solo si el A/B o el uso real muestran que molesta.
+We did not touch the L0, the ranking or the save rules. The internal query and precision
+pass, and the remaining margin sits in process startup, not in the memory design.
+Optimizing startup (a custom parser, lazy imports) stays in the backlog, and only if the
+A/B test or real usage shows it hurts.
 
-L0 con 1k memorias: 2 944 caracteres (≤ 3 000) y byte-idéntico al reabrir (ver `PLAN.md`, M2).
+L0 with 1k memories: 2,944 characters (≤ 3,000) and byte-identical when reopened (see
+`PLAN.md`, M2).
 
 ## L0 round-robin (S1, 2026-11-04)
 
-`python bench/bench_mcp.py --reps 20` con 10k registros, misma máquina:
+`python bench/bench_mcp.py --reps 20` with 10k records, same machine:
 
 | Tool | p50 | p95 |
 |---|---|---|
-| `search` | 6,7 ms | 10,6 ms |
-| `save` | 24,2 ms | 27,6 ms |
-| `context` (L0) | 18,0 ms | 23,0 ms |
+| `search` | 6.7 ms | 10.6 ms |
+| `save` | 24.2 ms | 27.6 ms |
+| `context` (L0) | 18.0 ms | 23.0 ms |
 
-- `active_ordered` con 10k: 8,2 ms p50 (antes 13,3 ms p50).
-- `cairn render` end-to-end: 288–393 ms (antes 315–376 ms el mismo día).
-- L0 del repo: 2919 caracteres y 15 líneas `decision` → 2991 caracteres con
-  5 `decision`, 5 `gotcha` y 5 `fact`.
-- Detalle y criterios: [`docs/features/l0-fair-share.md`](features/l0-fair-share.md).
+- `active_ordered` with 10k: 8.2 ms p50 (13.3 ms p50 before).
+- `cairn render` end-to-end: 288-393 ms (315-376 ms earlier that day).
+- Repository L0: 2,919 characters and 15 `decision` lines became 2,991 characters with
+  5 `decision`, 5 `gotcha` and 5 `fact`.
+- Details and criteria: [`docs/features/l0-fair-share.md`](features/l0-fair-share.md).
 
-## S2 — topic y ancla en FTS (2026-11-04)
+## S2: topic and anchor in FTS (2026-11-04)
 
-`SCHEMA_VERSION=3`: `mem_fts` indexa `title, body, why, topic_key, anchor_path` con
-pesos `5.0, 1.0, 0.5, 3.0, 2.0`. Medido en la misma máquina, en reposo (la pasada de
-M4 se hizo con el agente ocupando CPU, de ahí la diferencia):
+`SCHEMA_VERSION=3`: `mem_fts` indexes `title, body, why, topic_key, anchor_path` with
+weights `5.0, 1.0, 0.5, 3.0, 2.0`. Measured on the same machine on an idle system (the M4
+pass ran with the agent using the CPU, which explains the difference):
 
 `python bench/bench_cli.py --reps 20`:
 
-| Registros | rebuild | search p95 | save p95 | search interno p95 |
+| Records | rebuild | search p95 | save p95 | internal search p95 |
 |---|---|---|---|---|
-| 1 000 | 92 ms | 156,4 ms | 147,2 ms | 0,3 ms |
-| 10 000 | 570 ms | 150,6 ms | 137,8 ms | 2,2 ms |
+| 1,000 | 92 ms | 156.4 ms | 147.2 ms | 0.3 ms |
+| 10,000 | 570 ms | 150.6 ms | 137.8 ms | 2.2 ms |
 
-`python bench/bench_mcp.py --reps 20` con 10k:
+`python bench/bench_mcp.py --reps 20` with 10k:
 
 | Tool | p50 | p95 |
 |---|---|---|
-| `search` | 1,8 ms | 2,3 ms |
-| `save` | 8,1 ms | 9,4 ms |
-| `context` (L0) | 4,6 ms | 5,8 ms |
+| `search` | 1.8 ms | 2.3 ms |
+| `save` | 8.1 ms | 9.4 ms |
+| `context` (L0) | 4.6 ms | 5.8 ms |
 
-- Precisión@3: 30/30 (`pytest -q tests/test_golden.py`).
-- L0 del repo: 2927 caracteres, 14 líneas, todas con `[topic]`.
-- Baseline de topics (store real): 39 activas, 39 con `topic_key`, 4 claves repetidas
-  contando superseded (5 superseded).
-- Detalle y criterios: [`docs/features/topic-visibility.md`](features/topic-visibility.md).
+- Precision@3: 30/30 (`pytest -q tests/test_golden.py`).
+- Repository L0: 2,927 characters, 14 lines, all with `[topic]`.
+- Topic baseline on the real store: 39 active memories, 39 with `topic_key`, 4 repeated
+  keys when superseded entries are counted (5 superseded).
+- Details and criteria: [`docs/features/topic-visibility.md`](features/topic-visibility.md).
 
-## S3 — search transversal y sesión del proyecto (2026-11-04)
+## S3: cross-scope search and project session (2026-11-04)
 
-`cairn search` consulta proyecto y scope personal y entrelaza por posición de
-ranking; `context` solo inyecta sesiones del proyecto. Medido en la misma máquina,
-con el scope personal real (18 memorias) y el agente cargando CPU, así que las
-cifras absolutas no son comparables con la pasada en reposo de S2:
+`cairn search` queries the project and the personal scope, then interleaves results by
+ranking position. `context` only injects project sessions. Measured on the same machine
+with the real personal scope (18 memories) and the agent loading the CPU, so the absolute
+numbers are not comparable with the idle S2 pass:
 
 `python bench/bench_cli.py --reps 40`:
 
-| Registros | rebuild | search p95 | save p95 | search interno p95 |
+| Records | rebuild | search p95 | save p95 | internal search p95 |
 |---|---|---|---|---|
-| 1 000 | 219 ms | 336,9 ms | 391,4 ms | 3,0 ms |
-| 10 000 | 2 989 ms | 309,3 ms | 329,6 ms | 4,5 ms |
+| 1,000 | 219 ms | 336.9 ms | 391.4 ms | 3.0 ms |
+| 10,000 | 2,989 ms | 309.3 ms | 329.6 ms | 4.5 ms |
 
-`python bench/bench_mcp.py --reps 40` con 10k y personal real:
+`python bench/bench_mcp.py --reps 40` with 10k and the real personal scope:
 
 | Tool | p50 | p95 |
 |---|---|---|
-| `search` | 4,3 ms | 6,6 ms |
-| `save` | 15,3 ms | 17,9 ms |
-| `context` (L0 + sesión del proyecto) | 9,0 ms | 12,4 ms |
+| `search` | 4.3 ms | 6.6 ms |
+| `save` | 15.3 ms | 17.9 ms |
+| `context` (L0 + project session) | 9.0 ms | 12.4 ms |
 
-- Coste de la segunda base: con 20 repeticiones, `search` MCP p95 7,4 ms con
-  personal real frente a 4,7 ms sin `~/.cairn`; la consulta interna no cambia.
-- Una repetición posterior de `bench_mcp` con el agente cargando la CPU dio
-  search 13,5 / save 29,9 / context 31,0 ms p95; el SLO de 50 ms se mantiene.
-- Con 20 repeticiones en la misma máquina cargada salió algún `p95` de 624–683 ms
-  en `search` e2e por un arranque de proceso lento (el p50 seguía en ~300 ms);
-  con 40 repeticiones ambos tamaños cumplen.
-- Precisión@3: 30/30. Detalle y criterios:
+- Cost of the second database: with 20 repetitions, MCP `search` p95 was 7.4 ms with the
+  real personal scope and 4.7 ms without `~/.cairn`. The internal query does not change.
+- A later `bench_mcp` run with the agent loading the CPU gave search 13.5 / save 29.9 /
+  context 31.0 ms p95. The 50 ms SLO still holds.
+- With 20 repetitions on that busy machine, an end-to-end `search` p95 of 624-683 ms
+  appeared because of a slow process startup (p50 stayed around 300 ms). With 40
+  repetitions, both sizes pass.
+- Precision@3: 30/30. Details and criteria:
   [`docs/features/transversal-search.md`](features/transversal-search.md).
