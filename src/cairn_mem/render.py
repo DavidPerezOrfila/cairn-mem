@@ -6,6 +6,7 @@ from cairn_mem.anchor import is_stale
 
 KIND_PRIORITY = {"convention": 0, "decision": 1, "gotcha": 2, "fact": 3}
 EXCERPT = 120
+MAX_TOPIC = 100
 TITLE = "# Memoria del proyecto (cairn L0)"
 
 
@@ -24,8 +25,13 @@ def render_l0(store, max_chars: int = 3000, project_root=None) -> str:
 
 def _line(row: dict, root: Path) -> str:
     body = " ".join(row["body"].split())[:EXCERPT]
-    topic = f"[{row['topic_key']}] " if row.get("topic_key") else ""
-    text = f"- [{row['id']}] {row['kind']}: {topic}{row['title']} — {body}"
+    # Un evento externo puede traer saltos de línea: el L0 no admite líneas inyectadas.
+    mid = " ".join(str(row["id"]).split())
+    title = " ".join(str(row["title"]).split())
+    topic = ""
+    if row.get("topic_key"):
+        topic = f"[{' '.join(str(row['topic_key']).split())[:MAX_TOPIC]}] "
+    text = f"- [{mid}] {row['kind']}: {topic}{title} — {body}"
     if is_stale(row["anchor_path"], row["anchor_hash"], root):
         text += " ⚠ revisar"
     return text

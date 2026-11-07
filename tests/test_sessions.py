@@ -29,6 +29,19 @@ def test_corrupt_tail_is_ignored(tmp_path):
     assert [record["id"] for record in sessions.all()] == [sid]
 
 
+def test_save_after_torn_tail_keeps_both_sessions(tmp_path):
+    """Un crash a mitad de write no puede hacer que el siguiente save rompa el replay."""
+    sessions = Sessions(str(tmp_path))
+    first = sessions.save("primera")
+    with open(sessions.path, "a", encoding="utf-8", newline="\n") as handle:
+        handle.write('{"op":"session","id":"')
+    second = sessions.save("segunda")
+
+    fresh = Sessions(str(tmp_path))
+    assert fresh.get(first)["summary"] == "primera"
+    assert fresh.get(second)["summary"] == "segunda"
+
+
 def test_empty_summary_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="vacío"):
         Sessions(str(tmp_path)).save("   ")
