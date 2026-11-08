@@ -67,8 +67,9 @@ python bench/bench_mcp.py --reps 20                 # MCP tool-call latency (10k
   normalizes CRLF to LF; otherwise you get false stale flags between OSes. `os.open` for
   the JSONL needs `O_BINARY`; otherwise Windows turns `\n` into `\r\n`. Commits use LF:
   `.gitattributes` sets `eol=lf`, so do not rely on the clone's `core.autocrlf`.
-- **FTS5:** never pass raw text to `MATCH`. Sanitize it (`\w+` → `"t"*`, prefix), use AND
-  and fall back to OR when there are no results. Raw queries fail with `-`, `:` and `"`.
+- **FTS5:** never pass raw text to `MATCH`. Sanitize it (`\w+` → `"t"*`, stopwords
+  out, plural trimmed to 5+ characters, prefix), use AND and fall back to OR when there
+  are no results. Raw queries fail with `-`, `:` and `"`.
   Ranking: `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)`.
 - **Security:** reject (do not redact) secrets before writing: cloud keys,
   `BEGIN ... PRIVATE KEY`, JWTs `eyJ...`, provider tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`,
