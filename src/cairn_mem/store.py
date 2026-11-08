@@ -39,6 +39,128 @@ SECRET_PATTERNS = (
 
 MAX_TS = 2**63 - 1  # SQLite INTEGER es signed 64-bit
 
+# Palabras sin contenido: no deben exigir quórum ni decidir la abstención.
+STOPWORDS = frozenset(
+    {
+        "a",
+        "al",
+        "algo",
+        "an",
+        "and",
+        "ante",
+        "antes",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "como",
+        "con",
+        "contra",
+        "cual",
+        "cuando",
+        "cómo",
+        "cuál",
+        "cuándo",
+        "de",
+        "del",
+        "desde",
+        "donde",
+        "dónde",
+        "el",
+        "ella",
+        "en",
+        "entre",
+        "era",
+        "es",
+        "esa",
+        "ese",
+        "eso",
+        "esta",
+        "este",
+        "esto",
+        "for",
+        "from",
+        "fue",
+        "ha",
+        "hasta",
+        "hay",
+        "how",
+        "in",
+        "is",
+        "it",
+        "la",
+        "las",
+        "le",
+        "les",
+        "lo",
+        "los",
+        "mas",
+        "me",
+        "mi",
+        "muy",
+        "más",
+        "no",
+        "nos",
+        "o",
+        "of",
+        "on",
+        "or",
+        "otra",
+        "otro",
+        "para",
+        "pero",
+        "poco",
+        "por",
+        "que",
+        "qué",
+        "quien",
+        "quién",
+        "se",
+        "ser",
+        "si",
+        "sin",
+        "sobre",
+        "son",
+        "su",
+        "sus",
+        "te",
+        "that",
+        "the",
+        "this",
+        "tiene",
+        "to",
+        "tu",
+        "un",
+        "una",
+        "uno",
+        "was",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "with",
+        "y",
+        "ya",
+    }
+)
+
+
+def _singular(term: str) -> str:
+    """Recorta el plural solo si la raíz conserva 5 caracteres. Con 4, `redis`
+    pasaba a `redi` y encontraba `redirect_uri`: un falso positivo peor que el
+    plural sin recortar."""
+    lowered = term.lower()
+    if len(term) >= 7 and lowered.endswith("es"):
+        return term[:-2]
+    if len(term) >= 6 and lowered.endswith("s"):
+        return term[:-1]
+    return term
+
+
 DDL = """
 CREATE TABLE IF NOT EXISTS mem (
   id          TEXT PRIMARY KEY,
@@ -233,14 +355,13 @@ class Store:
     def search(self, query: str, limit: int = 5) -> list[dict]:
         self._sync()
         limit = max(0, limit)
-        terms = re.findall(r"\w+", query, re.UNICODE)
+        terms = self._stems(query)
         if not terms:
             return []
-        rows = []
-        for op in ("AND", "OR"):
-            rows = self._search(self._match(terms, op), limit)
-            if rows:
-                break
+        rows = self._search(self._match(terms, "AND"), limit)
+        if not rows and len(terms) > 1:
+            # Sin quórum: exigir 2 raíces hundía el parafraseo (S6.1).
+            rows = self._search(self._match(terms, "OR"), limit)
         root = self.root.parent
         for row in rows:
             row["stale"] = is_stale(row["anchor_path"], row["anchor_hash"], root)
@@ -369,6 +490,21 @@ class Store:
     @staticmethod
     def _match(terms, op):
         return f" {op} ".join(f'"{t}"*' for t in terms)
+
+    @staticmethod
+    def _stems(query: str) -> list[str]:
+        """Stopwords fuera y plural recortado: el prefijo FTS5 solo crece, así
+        que "tokens"* no alcanza "token" y "enlaces"* no alcanza "enlace"."""
+        stems = []
+        seen = set()
+        for term in re.findall(r"\w+", query, re.UNICODE):
+            if term.lower() in STOPWORDS:
+                continue
+            stem = _singular(term)
+            if stem.lower() not in seen:
+                seen.add(stem.lower())
+                stems.append(stem)
+        return stems
 
     def _search(self, match: str, limit: int) -> list[dict]:
         rows = self._conn.execute(

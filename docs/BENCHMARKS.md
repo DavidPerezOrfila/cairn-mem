@@ -143,3 +143,65 @@ numbers are not comparable with the idle S2 pass:
   repetitions, both sizes pass.
 - Precision@3: 30/30. Details and criteria:
   [`docs/features/transversal-search.md`](features/transversal-search.md).
+
+## S6: retrieval quality (2026-11-08)
+
+Baseline measured **before** the S6.1 query-side fix, kept for comparison.
+
+The legacy precision@3 uses queries built from title words: 30/30 only proves the search
+works. `python bench/bench_retrieval.py` measures against a corpus with confusables and a
+grep baseline (52 memories, 37 queries, no LLM):
+
+| Category | n | System | Hit@3 | R@5 | MRR |
+|---|---|---|---|---|---|
+| lexical | 12 | cairn | 1.00 | 1.00 | 1.00 |
+| lexical | 12 | grep | 1.00 | 1.00 | 1.00 |
+| paraphrase | 10 | cairn | 0.90 | 0.90 | 0.80 |
+| paraphrase | 10 | grep | 0.90 | 0.90 | 0.85 |
+| multi | 7 | cairn | 1.00 | 0.95 | 1.00 |
+| multi | 7 | grep | 1.00 | 0.95 | 1.00 |
+| no_answer | 8 | cairn | abstained 5/8 | | |
+| no_answer | 8 | grep | abstained 5/8 | | |
+| overall | 29 | cairn | 0.97 | 0.95 | 0.93 |
+| overall | 29 | grep | 0.97 | 0.95 | 0.95 |
+
+- BM25 shows no measurable advantage over word-count grep on this set: equal Hit@3 and
+  Recall@5, worse MRR (0.93 vs 0.95).
+- Paraphrase failures are morphological and two-directional: FTS5 prefix matching only
+  grows a token, so `caducan`, `enlaces` and `tokens` do not reach `caducidad`, `enlace`
+  and `token`.
+- Abstention is 5/8: the system abstains only when every term is absent. The AND→OR
+  fallback answers `kafka consumer lag`, `terraform state locking` and `kubernetes
+  ingress tls` with a partial match.
+- Decision: keep the ranking. Details and criteria:
+  [`docs/features/s6-benchmark-retrieval.md`](features/s6-benchmark-retrieval.md).
+
+## S6.1: query stemming and stopwords (2026-11-09)
+
+`Store.search` trims plural queries to the singular (5-character floor) and drops
+stopwords before FTS5. No schema change, no rebuild. Same command and dataset:
+
+| Category | n | System | Hit@3 | R@5 | MRR |
+|---|---|---|---|---|---|
+| lexical | 12 | cairn | 1.00 | 1.00 | 1.00 |
+| lexical | 12 | grep | 1.00 | 1.00 | 1.00 |
+| paraphrase | 10 | cairn | 0.90 | 1.00 | 0.88 |
+| paraphrase | 10 | grep | 0.90 | 0.90 | 0.85 |
+| multi | 7 | cairn | 1.00 | 1.00 | 1.00 |
+| multi | 7 | grep | 1.00 | 0.95 | 1.00 |
+| no_answer | 8 | cairn | abstained 5/8 | | |
+| no_answer | 8 | grep | abstained 5/8 | | |
+| overall | 29 | cairn | 0.97 | 1.00 | 0.96 |
+| overall | 29 | grep | 0.97 | 0.95 | 0.95 |
+
+- Recall@5 0.95 → 1.00 and MRR 0.93 → 0.96. Every expected memory enters the top 5.
+- The 5-character floor on the stem is measured: with 4, `redis` became `redi` and
+  matched `redirect_uri`.
+- A two-root quorum for the OR fallback lifted abstention to 8/8 but cut paraphrase
+  Hit@3 to 0.40 and overall Hit@3 to 0.79. A "2 roots or 5+ character root" variant gave
+  0.94 MRR and 7/8 with an arbitrary length threshold. Both rejected; the fallback stays
+  AND→OR.
+- `python bench/bench_cli.py --reps 20`: search p95 135 ms, save p95 139 ms with 10k
+  (idle), internal search p95 1.4 ms. SLOs unchanged.
+- Details and criteria:
+  [`docs/features/query-stemming-stopwords.md`](features/query-stemming-stopwords.md).

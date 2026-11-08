@@ -138,8 +138,11 @@ idle, S2).
   fact), newest `ts` first inside each kind, until the budget is full. That way a kind
   with many entries cannot push the others out. `[topic]` only appears when the memory has
   one.
-- **Search:** sanitized terms (`\w+` → `"t"*`, prefix), **AND first and OR if there are no
-  results**, with `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)` over
+- **Search:** stopwords dropped and the plural trimmed before FTS5 (`\w+` → `"t"*`,
+  prefix); the stem keeps at least 5 characters (`redis` must not become `redi`).
+  **AND first and OR if there are no results**, with no quorum: requiring two roots cut
+  paraphrase Hit@3 from 0.90 to 0.40 (S6.1). Ranking is
+  `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)` over
   `title, body, why, topic_key, anchor_path` (title > topic > anchor > body > why), and a
   `status='active'` filter. No other boosts in v0.1.
 - Raw FTS5 queries **fail** with `-`, `:` and `"` (for example `oauth-callback`), so

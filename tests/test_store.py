@@ -70,8 +70,41 @@ def test_search_never_raises_on_special_chars(store, q):
 
 
 def test_search_falls_back_from_and_to_or(store):
-    store.save(kind="fact", title="Pipeline KNIME", body="carga nocturna de ventas")
-    assert store.search("knime inexistente")  # AND vacío -> OR encuentra
+    store.save(kind="fact", title="Pipeline KNIME", body="carga nocturna")
+    store.save(kind="fact", title="Informe de ventas", body="carga por turno")
+    titles = {row["title"] for row in store.search("knime carga ventas")}
+    assert titles == {"Pipeline KNIME", "Informe de ventas"}  # AND vacío, dos raíces
+
+
+def test_search_matches_singular_and_plural(store):
+    store.save(
+        kind="decision",
+        title="Rotacion de refresh token JWT",
+        body="rotar en cada uso",
+    )
+    assert [row["title"] for row in store.search("token")] == [
+        "Rotacion de refresh token JWT"
+    ]
+    assert [row["title"] for row in store.search("tokens")] == [
+        "Rotacion de refresh token JWT"
+    ]
+    store.save(
+        kind="gotcha",
+        title="Magic links",
+        body="caducidad de 10 minutos",
+        why="el enlace reenviado sigue vivo",
+    )
+    assert [row["title"] for row in store.search("enlaces")] == ["Magic links"]
+
+
+def test_search_ignores_stopwords(store):
+    store.save(
+        kind="fact", title="Puerto de Vite", body="5173 para el servidor de desarrollo"
+    )
+    assert store.search("el de la") == []
+    assert [
+        row["title"] for row in store.search("el puerto del servidor de desarrollo")
+    ] == ["Puerto de Vite"]
 
 
 def test_body_over_500_chars_rejected(store):
