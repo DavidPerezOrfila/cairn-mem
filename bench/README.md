@@ -6,5 +6,9 @@
   [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md).
 - `golden.jsonl`: 20 seeded memories and about 30 `{query, expected title}` queries,
   used to measure precision@3 without an LLM (`tests/test_golden.py`).
+- `retrieval.jsonl` and `bench_retrieval.py`: S6 honest benchmark (52 memories, 37
+  lexical/paraphrase/multi/no-answer queries, Hit@3, Recall@5, MRR and abstention
+  against a grep baseline). Run `python bench/bench_retrieval.py [--json]`. Results are
+  in [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md).
 - `ab_protocol.md`: the small paired A/B test (see PLAN.md). `ab.py` runs it with
   OpenCode. Results are in [`docs/AB_RESULTS.md`](../docs/AB_RESULTS.md).

@@ -1,0 +1,89 @@
+{"id":"c01","kind":"gotcha","title":"OAuth callback en Django","body":"redirect_uri debe coincidir exactamente con el registrado","why":"Django rechaza el callback si cambia un caracter"}
+{"id":"c02","kind":"gotcha","title":"OAuth callback en FastAPI","body":"state firmado y PKCE obligatorio","why":"el callback sin state acepta peticiones cruzadas"}
+{"id":"c03","kind":"decision","title":"Rotacion de refresh tokens JWT","body":"rotar en cada uso y detectar reutilizacion","why":"un token filtrado dura para siempre"}
+{"id":"c04","kind":"decision","title":"Hash de contrasenas con Argon2id","body":"memory_cost 64 MiB y parallelism 4","why":"bcrypt se queda corto frente a GPU"}
+{"id":"c05","kind":"gotcha","title":"CSRF en formularios server-side","body":"token por sesion y SameSite Lax","why":"una cookie sin token permite post cruzado"}
+{"id":"c06","kind":"decision","title":"Rate limit del login","body":"5 intentos por minuto por IP y usuario","why":"frena fuerza bruta sin bloquear oficinas"}
+{"id":"c07","kind":"convention","title":"Cookies de sesion SameSite","body":"SameSite=Lax y Secure","why":"Strict rompe el retorno desde enlaces externos"}
+{"id":"c08","kind":"convention","title":"API keys en cabecera Authorization","body":"prefijo Bearer y hash guardado en base","why":"en query string quedan escritas en los logs"}
+{"id":"c09","kind":"gotcha","title":"Magic links de un solo uso","body":"caducidad de 10 minutos y consumo atomico","why":"el enlace reenviado sigue vivo"}
+{"id":"c10","kind":"convention","title":"Cifrado de secretos en reposo","body":"clave en el gestor, cifrado AES-GCM y rotacion","why":"la clave dentro del repo no protege nada"}
+{"id":"c11","kind":"convention","title":"Cabeceras de seguridad HTTP","body":"CSP, HSTS y X-Content-Type-Options","why":"sin CSP cualquier XSS ejecuta"}
+{"id":"c12","kind":"decision","title":"Migracion Postgres expand-contract","body":"anadir columna, desplegar, rellenar y borrar","why":"hay trafico 24/7 y no admite downtime"}
+{"id":"c13","kind":"decision","title":"Indice bm25 en FTS5","body":"pesos 5.0 1.0 0.5 y AND con fallback OR","why":"el titulo pesa mas que el cuerpo"}
+{"id":"c14","kind":"convention","title":"WAL en SQLite","body":"journal_mode WAL y busy_timeout","why":"lectores y escritor tienen que convivir"}
+{"id":"c15","kind":"convention","title":"Migraciones con Alembic","body":"autogenerate y revisar el diff","why":"nunca se edita una migracion ya aplicada"}
+{"id":"c16","kind":"decision","title":"Backups de Postgres","body":"pg_dump diario y WAL archivado","why":"el dump solo no cubre point-in-time"}
+{"id":"c17","kind":"gotcha","title":"Lag de replicacion","body":"monitorizar replay_lag","why":"una replica retrasada sirve datos viejos"}
+{"id":"c18","kind":"gotcha","title":"Consultas N+1 en SQLAlchemy","body":"selectinload en las relaciones","why":"mil queries en una sola vista"}
+{"id":"c19","kind":"decision","title":"Tamano del pool de conexiones","body":"10 por proceso y timeout corto","why":"un pool grande satura Postgres"}
+{"id":"c20","kind":"convention","title":"Columnas jsonb en Postgres","body":"indice GIN sobre la clave consultada","why":"sin indice cada consulta escanea la tabla"}
+{"id":"c21","kind":"gotcha","title":"Vacuum y bloat","body":"autovacuum agresivo en tablas de eventos","why":"el bloat dispara el tamano en disco"}
+{"id":"c22","kind":"decision","title":"Borrado logico de memorias","body":"status archived, no DELETE","why":"la fuente es append-only"}
+{"id":"c23","kind":"gotcha","title":"Timeout del proxy nginx","body":"60s corta las subidas grandes","why":"el upload de 2 GB tardaba 90s"}
+{"id":"c24","kind":"decision","title":"Docker multi-stage","body":"imagen final sin compilador","why":"baja de 1.2 GB a 180 MB"}
+{"id":"c25","kind":"convention","title":"Matriz de GitHub Actions","body":"ubuntu, macos y windows por version","why":"el framing stdio falla distinto en cada sistema"}
+{"id":"c26","kind":"decision","title":"Cache de pip en CI","body":"cache-dependency-path con pyproject","why":"instalar de cero cuesta 40s en cada job"}
+{"id":"c27","kind":"decision","title":"Rollback de despliegue","body":"imagen etiquetada por commit y comando de vuelta","why":"sin tag no hay vuelta atras"}
+{"id":"c28","kind":"convention","title":"Health checks de la API","body":"health sin dependencias y ready con base","why":"el balanceador saca la instancia tarde"}
+{"id":"c29","kind":"convention","title":"Secretos en variables de entorno","body":"os.environ falla si falta la clave","why":"nunca un valor por defecto silencioso"}
+{"id":"c30","kind":"convention","title":"Rotacion de certificados TLS","body":"renovacion automatica y aviso a 15 dias","why":"el aviso manual llega tarde"}
+{"id":"c31","kind":"convention","title":"Logs en JSON","body":"level y ts estructurados","why":"el agregador no necesita parser"}
+{"id":"c32","kind":"decision","title":"Limites de recursos en contenedores","body":"requests y limits separados","why":"sin limites un pico tumba el nodo"}
+{"id":"c33","kind":"fact","title":"Puerto del servidor de desarrollo","body":"5173 para Vite","why":"el 3000 lo ocupa otra app"}
+{"id":"c34","kind":"gotcha","title":"Cache de plantillas Jinja","body":"cache_size 400 por defecto","why":"las plantillas dinamicas se cacheaban mal"}
+{"id":"c35","kind":"gotcha","title":"Hidratacion de React","body":"el HTML del servidor debe coincidir","why":"una fecha distinta rompe la hidratacion"}
+{"id":"c36","kind":"convention","title":"Presupuesto de bundle","body":"200 KB gzip por ruta","why":"el informe de Lighthouse lo vigila"}
+{"id":"c37","kind":"convention","title":"Carga diferida de imagenes","body":"loading lazy y width height","why":"sin medidas salta el layout"}
+{"id":"c38","kind":"convention","title":"Foco visible en accesibilidad","body":"outline nunca a none sin sustituto","why":"el teclado se pierde en el formulario"}
+{"id":"c39","kind":"decision","title":"Estado global con Zustand","body":"stores pequenos por dominio","why":"un store unico provoca renders en cascada"}
+{"id":"c40","kind":"convention","title":"Tokens de diseno en CSS","body":"variables en root y temas por data-theme","why":"los hex sueltos se desincronizan"}
+{"id":"c41","kind":"decision","title":"Rutas con carga diferida","body":"import por pagina y Suspense","why":"el bundle inicial baja a la mitad"}
+{"id":"c42","kind":"convention","title":"Traducciones con i18n","body":"claves por pantalla y plurales","why":"concatenar textos rompe el orden"}
+{"id":"c43","kind":"convention","title":"Formularios accesibles","body":"label asociado y aria-describedby","why":"el placeholder no es una etiqueta"}
+{"id":"c44","kind":"convention","title":"Nombres de ramas Git","body":"feat, fix y docs en minusculas","why":"el CI filtra por prefijo"}
+{"id":"c45","kind":"convention","title":"Mensajes de commit convencionales","body":"tipo, alcance y descripcion","why":"el changelog se genera solo"}
+{"id":"c46","kind":"convention","title":"Versionado semantico","body":"semver 0.x antes de 1.0","why":"la API aun puede cambiar"}
+{"id":"c47","kind":"gotcha","title":"Limpieza de worktrees","body":"git worktree prune tras merge","why":"quedan directorios huerfanos"}
+{"id":"c48","kind":"convention","title":"Codificacion UTF-8 en Windows","body":"encoding utf-8 en cada open","why":"cp1252 rompe acentos"}
+{"id":"c49","kind":"convention","title":"Saltos de linea LF","body":"crlf a lf antes de calcular el hash","why":"evita falsos stale entre sistemas"}
+{"id":"c50","kind":"decision","title":"Registro de decisiones","body":"ADR con contexto y consecuencias","why":"la decision sin motivo se repite"}
+{"id":"c51","kind":"convention","title":"Cobertura de tests","body":"80 por ciento en rutas criticas","why":"la cobertura alta sin asserts no prueba nada"}
+{"id":"c52","kind":"decision","title":"Politica de dependencias","body":"stdlib primero y una dependencia por necesidad","why":"el arbol crece sin control"}
+{"id":"q01","category":"lexical","query":"redirect_uri oauth django","expect":["OAuth callback en Django"]}
+{"id":"q02","category":"lexical","query":"PKCE state fastapi","expect":["OAuth callback en FastAPI"]}
+{"id":"q03","category":"lexical","query":"argon2id memory_cost","expect":["Hash de contrasenas con Argon2id"]}
+{"id":"q04","category":"lexical","query":"replay_lag replicacion","expect":["Lag de replicacion"]}
+{"id":"q05","category":"lexical","query":"expand contract columnas","expect":["Migracion Postgres expand-contract"]}
+{"id":"q06","category":"lexical","query":"pg_dump point in time","expect":["Backups de Postgres"]}
+{"id":"q07","category":"lexical","query":"autovacuum bloat","expect":["Vacuum y bloat"]}
+{"id":"q08","category":"lexical","query":"multi-stage imagen compilador","expect":["Docker multi-stage"]}
+{"id":"q09","category":"lexical","query":"cache-dependency-path pip","expect":["Cache de pip en CI"]}
+{"id":"q10","category":"lexical","query":"cache_size plantillas","expect":["Cache de plantillas Jinja"]}
+{"id":"q11","category":"lexical","query":"loading lazy width height","expect":["Carga diferida de imagenes"]}
+{"id":"q12","category":"lexical","query":"outline foco teclado","expect":["Foco visible en accesibilidad"]}
+{"id":"q13","category":"paraphrase","query":"las subidas pesadas se cortan a mitad","expect":["Timeout del proxy nginx"]}
+{"id":"q14","category":"paraphrase","query":"la contrasena se guarda con un hash costoso en GPU","expect":["Hash de contrasenas con Argon2id"]}
+{"id":"q15","category":"paraphrase","query":"enlaces de acceso que caducan rapido","expect":["Magic links de un solo uso"]}
+{"id":"q16","category":"paraphrase","query":"la replica va por detras del primario","expect":["Lag de replicacion"]}
+{"id":"q17","category":"paraphrase","query":"consultas repetidas por cada fila de la lista","expect":["Consultas N+1 en SQLAlchemy"]}
+{"id":"q18","category":"paraphrase","query":"la imagen final pesa demasiado","expect":["Docker multi-stage"]}
+{"id":"q19","category":"paraphrase","query":"el servidor de desarrollo choca con otro programa","expect":["Puerto del servidor de desarrollo"]}
+{"id":"q20","category":"paraphrase","query":"el HTML del cliente no coincide con el del servidor","expect":["Hidratacion de React"]}
+{"id":"q21","category":"paraphrase","query":"la memoria pierde el orden entre sistemas operativos","expect":["Saltos de linea LF"]}
+{"id":"q22","category":"paraphrase","query":"decisiones sin explicacion que se repiten","expect":["Registro de decisiones"]}
+{"id":"q23","category":"multi","query":"oauth","expect":["OAuth callback en Django","OAuth callback en FastAPI"]}
+{"id":"q24","category":"multi","query":"cache","expect":["Cache de plantillas Jinja","Cache de pip en CI"]}
+{"id":"q25","category":"multi","query":"secretos","expect":["Cifrado de secretos en reposo","Secretos en variables de entorno"]}
+{"id":"q26","category":"multi","query":"indice","expect":["Indice bm25 en FTS5","Columnas jsonb en Postgres"]}
+{"id":"q27","category":"multi","query":"migracion","expect":["Migracion Postgres expand-contract","Migraciones con Alembic"]}
+{"id":"q28","category":"multi","query":"tokens","expect":["Rotacion de refresh tokens JWT","CSRF en formularios server-side","Tokens de diseno en CSS"]}
+{"id":"q29","category":"multi","query":"hash","expect":["Hash de contrasenas con Argon2id","Saltos de linea LF","API keys en cabecera Authorization"]}
+{"id":"q30","category":"no_answer","query":"terraform state locking","expect":[]}
+{"id":"q31","category":"no_answer","query":"kafka consumer lag","expect":[]}
+{"id":"q32","category":"no_answer","query":"stripe webhooks","expect":[]}
+{"id":"q33","category":"no_answer","query":"graphql federation","expect":[]}
+{"id":"q34","category":"no_answer","query":"redis eviction policy","expect":[]}
+{"id":"q35","category":"no_answer","query":"kubernetes ingress tls","expect":[]}
+{"id":"q36","category":"no_answer","query":"flutter animations","expect":[]}
+{"id":"q37","category":"no_answer","query":"mobile push notifications","expect":[]}
