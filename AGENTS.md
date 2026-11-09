@@ -2,11 +2,13 @@
 
 ## State and scope
 
-- **M6-M9 are closed and 0.2.2 is published** (2026-11-03). **S1-S5 are closed and 0.7.0
-  is published** (2026-11-07) on PyPI and tagged `v0.7.0`. `store.py`, `cli.py`,
-  `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` and
-  `legacy.py` are implemented. `tests/` (175) covers the CLI, the store, the L0, anchors,
-  MCP, sessions, import, the JSONL tail repair and the golden set.
+- **M6-M9 are closed; S1-S6.1 are implemented.** 0.8.0 is published (2026-11-09, tagged
+  `v0.8.0`). `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`,
+  `sessions.py`, `jsonl.py` and `legacy.py` are implemented. `tests/` (183) covers the CLI,
+  the store, the L0, anchors, MCP, sessions, import, the JSONL tail repair, retrieval and
+  the golden set.
+- **Keep this file current in the same change:** version and release state, test count,
+  modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.
 - Implement **one round (S#) or milestone (M#) at a time**, and only that one. Read
   `PLAN.md` and `docs/DESIGN.md` before writing code.
 - Tests fix the exact API, including the docstring in `store.py`. Do not relax them to get
@@ -99,3 +101,5 @@ python bench/bench_mcp.py --reps 20                 # MCP tool-call latency (10k
    test does not count).
 2. The acceptance criteria in `PLAN.md` are measured and written down.
 3. The milestone checklist in `PLAN.md` is ticked.
+4. `AGENTS.md` reflects the new state in the same commit (version, release, test count,
+   modules, rules).
