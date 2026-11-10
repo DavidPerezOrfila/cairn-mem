@@ -1,8 +1,11 @@
 """Tests de sesiones (M6): append-only, lectura y tolerancia a línea rasgada."""
 
+import json
+
 import pytest
 
-from cairn_mem.sessions import Sessions
+from cairn_mem import sessions as sessions_module
+from cairn_mem.sessions import MAX_SUMMARY, Sessions
 
 
 def test_save_and_get_long_summary(tmp_path):
@@ -71,6 +74,53 @@ def test_last_reads_a_long_file_without_loading_it(tmp_path):
         sessions.save("linea " * 100, ts=number)
     last = sessions.save("última", ts=10_000)
     assert sessions.last()["id"] == last
+
+
+def _line(**event):
+    return json.dumps(event, ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
+
+
+def test_last_finds_a_recap_near_the_character_cap(tmp_path):
+    """`MAX_SUMMARY` son caracteres y el fichero bytes: 20k emojis son 80 KB.
+
+    Con una ventana de 64 KB el registro más nuevo no cabía, y `last()` devolvía
+    el recap anterior: la sesión siguiente arrancaba con la continuidad de dos
+    sesiones antes, sin ningún aviso.
+    """
+    sessions = Sessions(str(tmp_path))
+    first = sessions.save("primera", ts=1)
+    big = sessions.save("🎉" * MAX_SUMMARY)
+    assert sessions.path.stat().st_size > 64 * 1024
+    assert sessions.last()["id"] == big
+    assert sessions.last()["id"] != first
+
+
+def test_last_widens_the_window_until_the_record_fits(tmp_path, monkeypatch):
+    """Un recap escrito por fuera del límite tampoco puede ocultar la última sesión."""
+    monkeypatch.setattr(sessions_module, "RECORD_WINDOW", 16)
+    store = Sessions(str(tmp_path))
+    store.save("una", ts=1)
+    last = store.save("dos " * 200, ts=2)
+    assert store.last()["id"] == last
+
+
+def test_last_keeps_a_record_that_starts_at_the_window_edge(tmp_path, monkeypatch):
+    """La primera línea de la ventana es entera cuando el corte cae tras un `\\n`."""
+    path = tmp_path / "sessions.jsonl"
+    first = _line(op="session", id="aaaaaaaaaaaa", ts=1, summary="primera")
+    second = _line(op="session", id="bbbbbbbbbbbb", ts=2, summary="segunda")
+    path.write_bytes(first + second)
+    monkeypatch.setattr(sessions_module, "RECORD_WINDOW", len(second))
+    assert sessions_module.Sessions(str(tmp_path)).last()["id"] == "bbbbbbbbbbbb"
+
+
+@pytest.mark.parametrize("limit", [0, -2])
+def test_list_rejects_a_non_positive_limit(tmp_path, limit):
+    sessions = Sessions(str(tmp_path))
+    sessions.save("uno", ts=1)
+    sessions.save("dos", ts=2)
+    with pytest.raises(ValueError, match="1 o más"):
+        sessions.all(limit=limit)
 
 
 def test_unknown_session_returns_none(tmp_path):
