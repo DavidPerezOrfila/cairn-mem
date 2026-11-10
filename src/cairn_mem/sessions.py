@@ -1,6 +1,7 @@
 """Resúmenes de sesión: `sessions.jsonl` append-only, fuera de la memoria curada."""
 
 import json
+import os
 import secrets
 import time
 from pathlib import Path
@@ -43,6 +44,33 @@ class Sessions:
     def get(self, id: str):
         record = self._records().get(id)
         return record[1] if record else None
+
+    def last(self):
+        """Último recap escrito, leyendo solo la cola. `context` se llama al
+        empezar cada sesión, así que no debe parsear el fichero entero."""
+        if not self.path.exists():
+            return None
+        window = 64 * 1024  # MAX_SUMMARY (20000) siempre cabe en una ventana
+        with self.path.open("rb") as f:
+            end = f.seek(0, os.SEEK_END)
+            while end > 0:
+                start = max(0, end - window)
+                f.seek(start)
+                lines = f.read(end - start).split(b"\n")
+                if start > 0:
+                    lines = lines[1:]  # la primera puede venir partida
+                for raw in reversed(lines):
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        continue  # cola rasgada por un crash
+                    if event.get("op") == "session" and event.get("id"):
+                        return event
+                end = start
+        return None
 
     def all(self, limit: int | None = None) -> list[dict]:
         records = sorted(

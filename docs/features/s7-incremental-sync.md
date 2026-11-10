@@ -56,11 +56,13 @@ loop with an explicit `rebuild()` before each operation (10 repetitions, this ma
 - A rebuild alone with 10k measured 3.3-3.9 s in this run; the machine is slower than the
   1.3 s pass recorded in `BENCHMARKS.md`. The relative result is what matters: ~250x lower
   p50 on the writer path, and the 50 ms SLO passes with margin.
-- 190 tests pass; `ruff` is clean.
+- 191 tests pass; `ruff` is clean.
 - **Limit:** the prefix hash is recomputed from disk on every write and every changed sync.
   With 10k that is about 2 MB and stays under 5 ms; at 100k it becomes the next cost to
   measure against the 50 ms SLO.
-- **Known window:** in `_append`, the hash is read after the write. A file replacement that
-  grows inside that few-millisecond window could certify bytes that were not applied (see
-  the `shortcut:` note in `store.py`). `rebuild` hashes the bytes it already read, so the
-  window only exists on the append path.
+- **Window closed on 2026-11-10 (S7.1):** the hash is still read after the write, so a
+  replacement that lands inside that window used to certify bytes this Store never applied.
+  `_remember_fingerprint` now re-stats after the sha1 and returns no certification when the
+  file changed, and the caller rebuilds. A concurrent append during a catch-up therefore
+  costs one rebuild: correct and rare. Re-measured after the change: `save` p95 11.3 ms and
+  `search` p95 4.0 ms with 10k.

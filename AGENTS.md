@@ -2,10 +2,10 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7 are implemented.** 0.9.0 is published (2026-11-10, tagged
+- **M6-M9 are closed; S1-S7.1 and S9 are implemented.** 0.9.0 is published (2026-11-10, tagged
   `v0.9.0`). `store.py`, `cli.py`, `anchor.py`,
   `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` and `legacy.py` are
-  implemented. `tests/` (190) covers the CLI, the store, the L0, anchors, MCP, sessions,
+  implemented. `tests/` (196) covers the CLI, the store, the L0, anchors, MCP, sessions,
   import, the JSONL tail repair, incremental sync, retrieval and the golden set.
 - **Keep this file current in the same change:** version and release state, test count,
   modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.
@@ -58,7 +58,9 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
   `jsonl_offset` and the sha1 of the applied prefix match. It rebuilds on truncation, a
   same-size replacement, a different prefix, `archive`, an update of an existing id or a
   duplicate id in the batch: their result depends on the global `ts` order, not on append
-  order. `save` syncs before appending; never add a rebuild per append.
+  order. `save` syncs before appending; never add a rebuild per append. The prefix is
+  certified only if a re-stat after its sha1 still matches the fingerprint; otherwise the
+  read rebuilds (S7.1).
 - `stale` is calculated when reading. It is not persisted, and there is no verification
   event.
 - L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters. It goes round-robin by kind (each round:

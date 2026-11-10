@@ -831,3 +831,66 @@ def test_catch_up_does_not_certify_events_written_during_it(root, monkeypatch):
     assert s.get("aaaaaaaaaaaa")["title"] == "primera"
     monkeypatch.setattr(s, "_apply", original)
     assert s.get("bbbbbbbbbbbb")["title"] == "segunda"
+
+
+def test_save_does_not_certify_a_prefix_replaced_while_hashing(root, monkeypatch):
+    """Un replace ajeno que cae entre el append y el sha1 del prefijo no puede
+    certificar bytes que este Store nunca aplicó: el offset guardado tiene que
+    ser el del fichero que de verdad se indexó."""
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    dense = (",", ":")
+    real = Store._prefix_hash
+    swapped = []
+
+    def replace_then_hash(self, offset):
+        source = Path(root) / "events.jsonl"
+        if not swapped and b'"nueva"' in source.read_bytes():
+            # nuestro append ya está; el replace llega durante el sha1
+            swapped.append(True)
+            head = json.dumps(
+                {
+                    "op": "save",
+                    "id": "cccccccccccc",
+                    "ts": 9,
+                    "kind": "fact",
+                    "title": "ajena",
+                    "body": "",
+                },
+                ensure_ascii=False,
+                separators=dense,
+            )
+            padding = offset - len(head.encode("utf-8")) - 1
+            assert padding > 0
+            head = head.replace('"body":""', f'"body":"{"x" * padding}"') + "\n"
+            assert len(head.encode("utf-8")) == offset
+            tail = (
+                json.dumps(
+                    {
+                        "op": "save",
+                        "id": "bbbbbbbbbbbb",
+                        "ts": 10,
+                        "kind": "fact",
+                        "title": "cola",
+                        "body": "b",
+                    },
+                    ensure_ascii=False,
+                    separators=dense,
+                )
+                + "\n"
+            )
+            source.write_bytes((head + tail).encode("utf-8"))
+        return real(self, offset)
+
+    monkeypatch.setattr(Store, "_prefix_hash", replace_then_hash)
+
+    s.save(kind="fact", title="nueva", body="c")
+
+    assert swapped, "el test no llegó a simular el replace"
+    mirror = Path(root).parent / "espejo" / ".cairn"
+    mirror.mkdir(parents=True)
+    (mirror / "events.jsonl").write_bytes((Path(root) / "events.jsonl").read_bytes())
+    assert [(row["id"], row["title"]) for row in s.dump()] == [
+        (row["id"], row["title"]) for row in Store(str(mirror)).dump()
+    ]
+    assert s.get("bbbbbbbbbbbb")["title"] == "cola"

@@ -304,8 +304,10 @@ class Store:
         else:
             with self._conn:
                 self._apply(event)
-            self._remember_fingerprint(fingerprint, int(fingerprint[0]))
-            self.write_l0()
+            if not self._remember_fingerprint(fingerprint, int(fingerprint[0])):
+                self.rebuild()  # el fichero cambió mientras se certificaba
+            else:
+                self.write_l0()
         return mid
 
     def archive(self, id: str) -> None:
@@ -322,8 +324,10 @@ class Store:
         else:
             with self._conn:
                 self._apply(event)
-            self._remember_fingerprint(fingerprint, int(fingerprint[0]))
-            self.write_l0()
+            if not self._remember_fingerprint(fingerprint, int(fingerprint[0])):
+                self.rebuild()
+            else:
+                self.write_l0()
 
     # --- lectura ---
 
@@ -525,7 +529,8 @@ class Store:
                 for event in events:
                     self._apply(event)
             self.write_l0()
-        self._remember_fingerprint(fingerprint, offset + end)
+        if not self._remember_fingerprint(fingerprint, offset + end):
+            self.rebuild()  # otro proceso cambió el fichero durante el catch-up
 
     def _append(self, event: dict) -> tuple[tuple[str, str], bool]:
         stored = self._stored_fingerprint()
@@ -605,20 +610,22 @@ class Store:
                     remaining -= len(chunk)
         return hasher.hexdigest()
 
-    def _remember_fingerprint(self, fingerprint=None, offset=None, digest=None) -> None:
+    def _remember_fingerprint(self, fingerprint=None, offset=None, digest=None) -> bool:
         """Guarda la huella y el prefijo aplicado. `rebuild` pasa el sha1 de los
-        bytes que ya leyó; el resto lo recalcula del fichero."""
+        bytes que ya leyó; el resto lo recalcula del fichero y devuelve `False`
+        si el fichero cambió mientras lo hacía (el prefijo ya no es el aplicado)."""
         size, mtime = fingerprint or self._fingerprint()
         offset = int(size) if offset is None else offset
         if digest is None:
-            # shortcut: un replace que crezca entre el append y este sha1 puede
-            # certificar bytes no aplicados. Cerrarlo exige re-stat y reintento;
-            # la ventana es de ms, se mide si alguna vez aparece.
             digest = (
                 self._prefix_hash(offset)
                 if self.events.exists()
                 else hashlib.sha1().hexdigest()
             )
+            # Re-stat tras el sha1: un replace ajeno que crezca o cambie de
+            # tamaño en esa ventana certificaría bytes que nunca se aplicaron.
+            if self._fingerprint() != (str(size), str(mtime)):
+                return False
         with self._conn:
             self._conn.executemany(
                 "INSERT INTO meta (key, value) VALUES (?, ?) "
@@ -630,6 +637,7 @@ class Store:
                     ("jsonl_hash", digest),
                 ),
             )
+        return True
 
 
 def search_scopes(project, personal, query: str, limit: int = 5) -> list[dict]:

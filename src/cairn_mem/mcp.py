@@ -290,10 +290,9 @@ def _get(server, args):
 
 def _context(server, args):
     text = render_l0(server.store())
-    records = Sessions(str(server.store().root)).all(limit=1)
-    if not records:
+    record = Sessions(str(server.store().root)).last()
+    if not record:
         return text
-    record = records[0]
     summary = record.get("summary", "")
     if len(summary) > LAST_SESSION_CHARS:
         summary = summary[:LAST_SESSION_CHARS] + "\n… (recortado)"
@@ -322,11 +321,6 @@ def _archive(server, args):
         raise ValueError(f"no existe la memoria {memory_id}")
     store.archive(memory_id)
     return f"archivada {memory_id}"
-
-
-def _session_root(server, args):
-    root = personal_dir() if _scope(args) == "personal" else data_dir()
-    return Sessions(str(root))
 
 
 def _session_list(server, args):

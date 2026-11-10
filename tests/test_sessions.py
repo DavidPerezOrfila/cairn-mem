@@ -54,6 +54,25 @@ def test_empty_summary_is_rejected(tmp_path):
         Sessions(str(tmp_path)).save("   ")
 
 
+def test_last_returns_the_newest_and_skips_a_torn_line(tmp_path):
+    sessions = Sessions(str(tmp_path))
+    assert sessions.last() is None
+    sessions.save("primera", ts=1)
+    second = sessions.save("segunda", ts=2)
+    with open(sessions.path, "a", encoding="utf-8", newline="\n") as handle:
+        handle.write('{"op":"session"')
+    assert sessions.last()["id"] == second
+
+
+def test_last_reads_a_long_file_without_loading_it(tmp_path):
+    """El último recap se busca en la cola: 5k recaps no se parsean enteros."""
+    sessions = Sessions(str(tmp_path))
+    for number in range(500):
+        sessions.save("linea " * 100, ts=number)
+    last = sessions.save("última", ts=10_000)
+    assert sessions.last()["id"] == last
+
+
 def test_unknown_session_returns_none(tmp_path):
     assert Sessions(str(tmp_path)).get("000000000000") is None
 

@@ -52,3 +52,32 @@ def test_resolve_anchor_returns_posix_relative(tmp_path):
     relative, digest = anchor.resolve_anchor(str(target), tmp_path)
     assert relative == "src/a.py"
     assert digest == anchor.file_hash(target)
+
+
+def test_resolve_anchor_rejects_a_file_over_the_hash_limit(tmp_path, monkeypatch):
+    big = tmp_path / "dump.csv"
+    big.write_text("x" * 32, encoding="utf-8")
+    monkeypatch.setattr(anchor, "MAX_HASH_BYTES", 10)
+    with pytest.raises(ValueError, match="demasiado grande"):
+        anchor.resolve_anchor(str(big), tmp_path)
+
+
+def test_stale_reuses_the_hash_while_the_file_does_not_change(tmp_path, monkeypatch):
+    """El L0 revisa todas las anclas tras cada save: sin caché cada una se relee."""
+    target = tmp_path / "a.py"
+    target.write_text("v1\n", encoding="utf-8")
+    digest = anchor.file_hash(target)
+    calls = []
+    real = anchor.file_hash
+
+    def counted(path):
+        calls.append(1)
+        return real(path)
+
+    monkeypatch.setattr(anchor, "file_hash", counted)
+    assert anchor.is_stale("a.py", digest, str(tmp_path)) is False
+    assert anchor.is_stale("a.py", digest, str(tmp_path)) is False
+    assert len(calls) == 1
+    target.write_text("v2\n", encoding="utf-8")
+    assert anchor.is_stale("a.py", digest, str(tmp_path)) is True
+    assert len(calls) == 2

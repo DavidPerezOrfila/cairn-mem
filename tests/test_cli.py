@@ -29,6 +29,7 @@ def test_init_local_only_by_default(capsys, in_tmp):
     ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
     assert "events.jsonl" in ignore
     assert "sessions.jsonl" in ignore
+    assert ".MEMORY.md.*" in ignore
 
 
 def test_init_refuses_personal_dir(capsys, in_tmp, monkeypatch):
@@ -81,6 +82,12 @@ def test_init_share_tracks_events(capsys, in_tmp):
     run(capsys, "init", "--share")
     ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
     assert "events.jsonl" not in ignore
+
+
+def test_search_personal_does_not_create_the_home(capsys, in_tmp):
+    """Buscar en el scope personal no debe crear `~/.cairn` si no existe."""
+    assert run(capsys, "search", "algo", "--personal")[0] == 0
+    assert not (in_tmp / "home").exists()
 
 
 def test_save_search_get_json(capsys):
