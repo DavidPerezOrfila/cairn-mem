@@ -201,6 +201,7 @@ why the agent believes something.
 | `cairn save` | Store a decision, convention, gotcha or fact |
 | `cairn search "terms"` | Ranked active memories from project and personal scope |
 | `cairn get <id>` | Full memory |
+| `cairn context` | The L0 plus the last session recap, the same text the MCP `context` tool returns |
 | `cairn archive <id>` | Stop returning a memory |
 | `cairn check` | List memories whose anchor changed |
 | `cairn render` | Regenerate and print `MEMORY.md` |
@@ -209,9 +210,9 @@ why the agent believes something.
 | `cairn import legacy --db <path> [--dry-run]` | Migrate observations from another SQLite store |
 | `cairn mcp` | Serve MCP over stdio |
 
-`--json` is available on `save`, `search`, `get`, `check`, `session` and `import` for
+`--json` is available on `save`, `search`, `get`, `context`, `check`, `session` and `import` for
 agent consumption. `save`, `search` and `archive` accept `--personal`. `search` spans both
-scopes by default, and `get` checks both stores.
+scopes by default, and `get` checks both stores. `--limit` takes 1 or more.
 
 ## Benchmarks
 

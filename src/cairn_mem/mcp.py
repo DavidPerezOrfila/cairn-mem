@@ -10,8 +10,7 @@ import sys
 from cairn_mem import __version__
 from cairn_mem.anchor import resolve_anchor
 from cairn_mem.paths import data_dir, personal_dir
-from cairn_mem.render import render_l0
-from cairn_mem.sessions import Sessions
+from cairn_mem.sessions import Sessions, context_text
 from cairn_mem.store import KINDS, Store, search_scopes
 
 PROTOCOL_VERSION = "2025-06-18"
@@ -21,7 +20,6 @@ INVALID_REQUEST = -32600
 METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
-LAST_SESSION_CHARS = 4000
 SCOPES = ("project", "personal", "all")
 
 TOOLS = [
@@ -289,14 +287,7 @@ def _get(server, args):
 
 
 def _context(server, args):
-    text = render_l0(server.store())
-    record = Sessions(str(server.store().root)).last()
-    if not record:
-        return text
-    summary = record.get("summary", "")
-    if len(summary) > LAST_SESSION_CHARS:
-        summary = summary[:LAST_SESSION_CHARS] + "\n… (recortado)"
-    return f"{text}\n## Última sesión ({record['id']})\n{summary}\n"
+    return context_text(server.store())
 
 
 def _session_root(server, args):

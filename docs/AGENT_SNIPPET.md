@@ -8,7 +8,8 @@
 - If your harness supports MCP: start `cairn mcp` and use `search`, `save`, `get`,
   `context`, `save_session`. `context` already includes the last session recap, so you
   do not need to read it separately.
-- If it does not: at the start of a task, run `cairn search "<terms>"` (at most 2 or 3
+- If it does not: at the start of a task, run `cairn context` (the L0 plus the last session
+  recap, the same text the MCP tool returns), then `cairn search "<terms>"` (at most 2 or 3
   searches; it covers project and personal memory). For detail, use `cairn get <id>`.
 - Save ONLY when you make a decision with a reason, find a gotcha, or confirm a
   convention.

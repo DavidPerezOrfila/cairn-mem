@@ -413,11 +413,15 @@ class Store:
                     if number == last:
                         continue  # escritura rasgada por un crash
                     raise
-                events.append((min(int(event.get("ts", 0)), MAX_TS), number, event))
-        events.sort(key=lambda item: (item[0], item[1]))
+                events.append(event)
+        # Orden de aplicación = orden del fichero, el mismo que ya usa el catch-up
+        # y el que ve un append. Ordenar por `ts` cambiaba el ganador de un topic
+        # cuando un archive caía entre dos saves: la memoria que la CLI acababa de
+        # guardar quedaba superseded al reconstruir, y un clon nuevo (que siempre
+        # reconstruye) se quedaba sin ninguna memoria activa para ese topic.
         with self._conn:
             self._conn.execute("DELETE FROM mem")
-            for _, _, event in events:
+            for event in events:
                 self._apply(event)
             self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._remember_fingerprint(fingerprint, len(raw), hashlib.sha1(raw).hexdigest())

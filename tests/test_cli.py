@@ -453,3 +453,50 @@ def test_search_by_topic_shows_it_in_text_and_json(capsys):
     assert code == 0 and "[storage/fts5]" in out
     code, out, _ = run(capsys, "search", "storage/fts5", "--json")
     assert code == 0 and json.loads(out)[0]["topic_key"] == "storage/fts5"
+
+
+def test_context_prints_the_l0_and_the_last_recap(capsys):
+    run(capsys, "init")
+    run(capsys, "save", "--kind", "decision", "--title", "Usar FTS5", "--body", "bm25")
+    run(capsys, "session", "save", "--summary", "## Goal\nCerrar la migración")
+    code, out, _ = run(capsys, "context")
+    assert code == 0
+    assert out.startswith("# Memoria del proyecto")
+    assert "Usar FTS5" in out and "Cerrar la migración" in out
+
+
+def test_context_json_carries_l0_and_last_session(capsys):
+    run(capsys, "init")
+    run(capsys, "save", "--kind", "fact", "--title", "Puerto de Vite", "--body", "5173")
+    run(capsys, "session", "save", "--summary", "primera")
+    run(capsys, "session", "save", "--summary", "segunda")
+    code, out, _ = run(capsys, "context", "--json")
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["l0"].startswith("# Memoria del proyecto")
+    assert "Puerto de Vite" in payload["l0"]
+    assert payload["last_session"]["summary"] == "segunda"
+
+
+def test_context_without_a_recap_is_just_the_l0(capsys):
+    run(capsys, "init")
+    run(capsys, "save", "--kind", "fact", "--title", "Solo memoria", "--body", "x")
+    code, out, _ = run(capsys, "context")
+    assert code == 0 and "Última sesión" not in out
+    assert json.loads(run(capsys, "context", "--json")[1])["last_session"] is None
+
+
+def test_session_list_rejects_a_non_positive_limit(capsys):
+    for flag in ("0", "-2"):
+        with pytest.raises(SystemExit) as error:
+            main(["session", "list", "--limit", flag])
+        assert error.value.code == 2
+        assert "1 o más" in capsys.readouterr().err
+
+
+def test_search_rejects_a_non_positive_limit(capsys):
+    for flag in ("0", "-3"):
+        with pytest.raises(SystemExit) as error:
+            main(["search", "redis", "--limit", flag])
+        assert error.value.code == 2
+        assert "1 o más" in capsys.readouterr().err

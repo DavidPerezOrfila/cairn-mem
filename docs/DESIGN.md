@@ -62,8 +62,13 @@ When the `Store` opens, it compares `(size, mtime_ns)` of the JSONL with `meta`.
 long-lived `Store` does the same on every read and write. If the file only grew and the
 applied prefix (`jsonl_offset` plus its sha1) is unchanged, it applies just the new suffix
 (`_catch_up`). Otherwise (for example after a `git pull`, a truncation, a same-size replace,
-an `archive` or an update of an existing id) it runs a full `rebuild()` ordered by
-`(ts, line number)` and then `render()`. Own writes update the fingerprint in the same
+an `archive` or an update of an existing id) it runs a full `rebuild()` in file order (the
+order events were appended, which is the order `_catch_up` already uses) and then
+`render()`. Ordering the rebuild by `ts` re-derived a different winner for a topic whenever
+an `archive` fell between two `save`s: the memory the CLI had just stored came back
+`superseded` and a fresh clone saw no active memory for that topic. `ts` still decides who
+wins a topic, but through `_apply`'s "a newer active row exists" check, not through the
+order of the replay. Own writes update the fingerprint in the same
 transaction and compare the fingerprint **before the append**, including `mtime`, not just
 the size, so an external replacement that keeps the size is still detected. A different
 `PRAGMA user_version` drops the derived schema (`mem`, `mem_fts`, `meta`) and rebuilds it.
@@ -93,11 +98,15 @@ see `docs/features/s7-incremental-sync.md`.
 - They do not go into `events.jsonl`, FTS or the L0. They are continuity, not curated
   memory.
 - Read: replay in memory (there are few), tolerating a torn last line.
-- Commands: `cairn session save|list|get` (with `--personal` for the personal scope). MCP
-  exposes `save_session` (write), `session_list` and `session_get` (read). The `context`
+- `context` reads only the tail: a window of `MAX_SUMMARY * 6 + 1 KB` bytes (a valid recap
+  can take 6 bytes per character once JSON escapes it) that widens until the newest record
+  fits. A fixed 64 KB window looked big enough for 20,000 characters, but 20,000 emojis are
+  80 KB, and the tool then answered with the recap before the last one.
+- Commands: `cairn session save|list|get` (with `--personal` for the personal scope).
+  MCP exposes `save_session` (write), `session_list` and `session_get` (read). The `context`
   tool returns the L0 and then the last **project** recap (at most 4,000 characters), so
   a new session starts knowing where the previous one stopped. A personal recap from
-  another repo does not mix in.
+  another repo does not mix in. `cairn context` prints the same text from a shell.
 - `Sessions.save` goes through the same `reject_secrets` as `Store.save`.
 
 ## Personal scope (M7)
@@ -184,7 +193,11 @@ see `docs/features/s7-incremental-sync.md`.
 
 ## Commands
 
-`init · save · search · get · archive · check · render · rebuild · session · import · mcp`
+`init · save · search · get · context · archive · check · render · rebuild · session · import · mcp`
+
+`context` is the same text the MCP tool of that name returns (L0 plus the last project
+recap). A harness with only a shell has no other way to load the recap from the previous
+session: `session list` shows an 80-character preview and `render` never includes it.
 
 ## Out of v0.1 (backlog, only with evidence)
 

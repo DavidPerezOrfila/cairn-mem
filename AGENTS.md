@@ -5,7 +5,7 @@
 - **M6-M9 are closed; S1-S7.1 and S9 are implemented.** 0.9.1 is published (2026-11-10,
   tagged `v0.9.1`). `store.py`, `cli.py`, `anchor.py`,
   `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` and `legacy.py` are
-  implemented. `tests/` (197) covers the CLI, the store, the L0, anchors, MCP, sessions,
+  implemented. `tests/` (210) covers the CLI, the store, the L0, anchors, MCP, sessions,
   import, the JSONL tail repair, incremental sync, retrieval and the golden set.
 - **Keep this file current in the same change:** version and release state, test count,
   modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.
@@ -40,15 +40,18 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
 - `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` and `cairn-mem`, text and
   `--json`), `store.py` (core), `anchor.py` (hash and stale), `render.py` (L0),
   `paths.py` (`.cairn/` root and personal scope), `mcp.py` (stdio JSON-RPC), `sessions.py`
-  (recaps), `jsonl.py` (shared append) and `legacy.py` (importer).
+  (recaps plus the shared `context` text), `jsonl.py` (shared append) and `legacy.py`
+  (importer).
 - **Truth:** `.cairn/events.jsonl` (append-only, 2 operations: `save`, `archive`).
   `cairn.db` and `MEMORY.md` are derived and can be regenerated. Do not edit them by hand.
   `sessions.jsonl` is a separate append-only file and is not curated memory.
 - `Store(root)` must create `.cairn/` and the database if they do not exist. Tests
   instantiate it without `cairn init`.
-- IDs are 12 hex characters (`secrets.token_hex(6)`) plus a `ts` in `time_ns`. Apply
-  order is `(ts, line number)`. A `save` with `topic_key` marks the previous memory
-  `superseded` **before** the insert.
+- IDs are 12 hex characters (`secrets.token_hex(6)`) plus a `ts` in `time_ns`. Events are
+  replayed in **file order**, the order they were appended and the order `_catch_up` applies
+  a suffix in; `ts` decides which `save` wins a `topic_key`, not the order of the replay
+  (ordering by `ts` changed the active memory when an `archive` sat between two `save`s).
+  A `save` with `topic_key` marks the previous memory `superseded` **before** the insert.
 - Writes: `O_APPEND` plus **one** `os.write` per event. There is an in-process lock
   (`jsonl._LOCK`) because Windows `O_APPEND` is not atomic between threads.
 - When the database opens, it compares `(size, mtime_ns)` of the JSONL and
@@ -94,7 +97,10 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
   while it lives.
 - **Sessions:** `.cairn/sessions.jsonl` is local and does not enter FTS or the L0. A recap
   may exceed 500 characters. `context` injects only the last **project** recap; a personal
-  one belongs to another repo.
+  one belongs to another repo. One implementation (`sessions.context_text`) feeds both the
+  MCP tool and `cairn context`, and `last()` sizes its tail window in **bytes**: a valid
+  recap of 20,000 characters can occupy 80 KB, so a 64 KB window used to skip the newest
+  record and answer with the previous session.
 - **Importer:** idempotent through `sha1("<fixed salt>:<source id>")[:12]`. `What` →
   `body` (≤ 500) and the rest → `why`. `global/personal` goes to the personal scope, not
   to the current repo.

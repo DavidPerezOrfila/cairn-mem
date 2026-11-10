@@ -7,9 +7,15 @@ import time
 from pathlib import Path
 
 from cairn_mem.jsonl import append_jsonl
+from cairn_mem.render import render_l0
 from cairn_mem.store import reject_secrets
 
 MAX_SUMMARY = 20000
+LAST_SESSION_CHARS = 4000
+# Un recap válido se mide en caracteres, pero el fichero en bytes: hasta 4 por
+# carácter en UTF-8 y 6 si JSON tiene que escaparlo (`\u0001`). La ventana tiene
+# que caber el registro entero, no sus caracteres (20k emojis son 80 KB).
+RECORD_WINDOW = MAX_SUMMARY * 6 + 1024
 
 
 class Sessions:
@@ -47,19 +53,26 @@ class Sessions:
 
     def last(self):
         """Último recap escrito, leyendo solo la cola. `context` se llama al
-        empezar cada sesión, así que no debe parsear el fichero entero."""
+        empezar cada sesión, así que no debe parsear el fichero entero. La ventana
+        se ensancha cuando el registro más nuevo no cabe en ella: saltárselo
+        devolvería un recap viejo como si fuera la última sesión."""
         if not self.path.exists():
             return None
-        window = 64 * 1024  # MAX_SUMMARY (20000) siempre cabe en una ventana
-        with self.path.open("rb") as f:
-            end = f.seek(0, os.SEEK_END)
-            while end > 0:
+        with self.path.open("rb") as handle:
+            end = handle.seek(0, os.SEEK_END)
+            window = min(end, RECORD_WINDOW) or 1
+            while True:
                 start = max(0, end - window)
-                f.seek(start)
-                lines = f.read(end - start).split(b"\n")
+                handle.seek(start)
+                parts = handle.read(end - start).split(b"\n")
+                first = 0
                 if start > 0:
-                    lines = lines[1:]  # la primera puede venir partida
-                for raw in reversed(lines):
+                    # La primera línea puede venir partida por el corte: solo es
+                    # entera si el byte anterior al inicio es un salto de línea.
+                    handle.seek(start - 1)
+                    if handle.read(1) != b"\n":
+                        first = 1
+                for raw in reversed(parts[first:]):
                     line = raw.strip()
                     if not line:
                         continue
@@ -67,12 +80,21 @@ class Sessions:
                         event = json.loads(line.decode("utf-8"))
                     except (UnicodeDecodeError, json.JSONDecodeError):
                         continue  # cola rasgada por un crash
-                    if event.get("op") == "session" and event.get("id"):
+                    if (
+                        isinstance(event, dict)
+                        and event.get("op") == "session"
+                        and event.get("id")
+                    ):
                         return event
-                end = start
-        return None
+                if start == 0:
+                    return None
+                window = min(end, window * 2)
 
     def all(self, limit: int | None = None) -> list[dict]:
+        if limit is not None and limit < 1:
+            # `ordered[:0]` no devuelve nada y un límite negativo corta por el otro
+            # extremo: "las últimas 20" devolvería casi todas.
+            raise ValueError("limit debe ser 1 o más")
         records = sorted(
             self._records().values(),
             key=lambda item: (item[1].get("ts", 0), item[0]),
@@ -96,8 +118,33 @@ class Sessions:
                 if number == last:
                     continue  # escritura rasgada por un crash
                 raise
-            if event.get("op") == "session" and event.get("id"):
+            if (
+                isinstance(event, dict)
+                and event.get("op") == "session"
+                and event.get("id")
+            ):
                 # El nº de línea desempata: dos recaps en el mismo ns siguen el orden
                 # del append en vez de un id aleatorio.
                 records[event["id"]] = (number, event)
         return records
+
+
+def context_payload(store) -> dict:
+    """L0 y el último recap del proyecto: lo mismo que devuelve la tool `context`."""
+    return {"l0": render_l0(store), "last_session": Sessions(str(store.root)).last()}
+
+
+def context_text(store) -> str:
+    """Texto de `context`: L0 más el último recap, recortado a `LAST_SESSION_CHARS`.
+
+    Una sola implementación para el MCP y la CLI: el formato no puede divergir
+    entre el arnés que habla JSON-RPC y el que solo tiene una shell.
+    """
+    payload = context_payload(store)
+    record = payload["last_session"]
+    if not record:
+        return payload["l0"]
+    summary = record.get("summary", "")
+    if len(summary) > LAST_SESSION_CHARS:
+        summary = summary[:LAST_SESSION_CHARS] + "\n… (recortado)"
+    return f"{payload['l0']}\n## Última sesión ({record['id']})\n{summary}\n"
