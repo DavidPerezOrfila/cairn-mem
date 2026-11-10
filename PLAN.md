@@ -86,8 +86,9 @@ when reopened, `check` end-to-end 181 ms, `render` 135 ms)
 - [x] `docs/AGENT_SNIPPET.md` tested in **at least 2 harnesses** (for example Claude Code
   and OpenCode): save in one, recover in the other
 - [x] Install: `pipx install .` (Windows included), and check that `cairn` ends up on PATH
-- [ ] Optional: a Claude Code `Stop` hook that reminds the agent to save (only if we
-  measure that the agent does not save)
+- [x] Optional: a Claude Code `Stop` hook that reminds the agent to save (only if we
+  measure that the agent does not save) — measured 2026-11-10: 70 memories and 29 recaps in
+  this repo, so the agent does save. No hook
 
 **Acceptance:** save → new session → recover works in 2 harnesses.
 
@@ -215,7 +216,7 @@ Each round is a slice: tests first, gate, review and its own release.
 | S7 | Incremental sync: apply only the JSONL tail, guarded by the offset and the prefix sha1 | 0.9.0 | [`docs/features/s7-incremental-sync.md`](docs/features/s7-incremental-sync.md) |
 | S7.1 | Certification re-stat: a prefix replaced during the sha1 forces a rebuild | 0.9.1 | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
 | S9 | Audit fixes: one `_session_root`, anchor hash cache, anchor size cap, tail read for `context`, `search --personal` without side effects, `.MEMORY.md.*` ignored | 0.9.1 | `docs/DECISIONS.md` |
-| S8 | GitHub Sponsors metadata (`.github/FUNDING.yml` and the `Funding` URL) | pending | Deferred 2026-11-10: the GitHub listing must exist first |
+| S10 | `cairn verify <id>`: re-anchor a memory whose file changed, without touching its `ts` | 0.10.0 (pending) | Measured 2026-11-10: 8 of 8 anchored memories stale and no way to clear the flag |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -228,6 +229,11 @@ per-render anchor cache. Every gate in `AGENTS.md` is measured in
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 ## 5. Backlog (only with measured evidence)
+
+Measured on 2026-11-10 after 0.9.1 (`docs/BENCHMARKS.md`): Precision@3 30/30, retrieval
+Hit@3 0.97 / Recall@5 1.00 / MRR 0.96, `save` p95 324.7 ms end-to-end and 35.9 ms with two
+writers, 62 active memories and 8 anchored. None of the triggers below is met, so nothing
+here is implemented.
 
 - `hits` in a local, non-versioned table plus a ranking boost (if the golden set or the A/B
   shows bad prioritization)
@@ -258,3 +264,9 @@ Read AGENTS.md, PLAN.md and docs/DESIGN.md. Implement ONLY M1 with TDD
 (tests/test_store.py is already red). Standard library only. Show the real pytest
 output, tick the M1 checklist in PLAN.md and do not move on to M2.
 ```
+
+## 8. Deferred
+
+- **S8: GitHub Sponsors metadata.** `.github/FUNDING.yml` plus the `Funding` URL in
+  `pyproject.toml`. Deferred on 2026-11-10: it needs the GitHub Sponsors listing to exist
+  first (`https://github.com/sponsors/accounts`). Nothing else is blocked on it.

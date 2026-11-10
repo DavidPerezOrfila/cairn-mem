@@ -159,8 +159,8 @@ see `docs/features/s7-incremental-sync.md`.
 - `anchor_path` is a POSIX path relative to the root.
 - In `search` and `render`, only for returned results: if the file is missing or the hash
   differs, `stale=true` and the entry shows `⚠ revisar`. It is never hidden or deleted.
-- `cairn check` lists every stale memory. Re-anchoring means running `cairn save` with the
-  same `--topic` (or `--id`).
+- `cairn check` lists every stale memory. `cairn verify <id>` re-anchors one: it appends a
+  `save` event with the same id and the same `ts`, so the entry does not move in the L0.
 
 ## MCP (v0.2)
 
