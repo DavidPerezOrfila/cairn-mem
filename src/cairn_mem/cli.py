@@ -171,30 +171,6 @@ def _cmd_render(ns) -> int:
     return 0
 
 
-def _cmd_verify(ns) -> int:
-    """Re-ancla una memoria: el fichero cambió y el contenido sigue válido."""
-    store = _store(ns)
-    memory = store.get(ns.id)
-    if memory is None:
-        raise ValueError(f"no existe la memoria {ns.id}")
-    if not memory["anchor_path"]:
-        raise ValueError("la memoria no tiene ancla que revisar")
-    anchor_path, anchor_hash = resolve_anchor(memory["anchor_path"], store.root.parent)
-    store.save(
-        kind=memory["kind"],
-        title=memory["title"],
-        body=memory["body"],
-        why=memory["why"],
-        topic_key=memory["topic_key"],
-        anchor_path=anchor_path,
-        anchor_hash=anchor_hash,
-        id=memory["id"],
-        ts=memory["ts"],
-    )
-    _print_json({"id": memory["id"]}) if ns.json else print(memory["id"])
-    return 0
-
-
 def _cmd_check(ns) -> int:
     project_root = data_dir().parent
     stale = [
@@ -339,12 +315,6 @@ def _parser() -> argparse.ArgumentParser:
     check = sub.add_parser("check", help="lista memorias con ancla stale")
     check.add_argument("--json", action="store_true")
     check.set_defaults(handler=_cmd_check)
-
-    verify = sub.add_parser("verify", help="re-ancla una memoria cuyo fichero cambió")
-    verify.add_argument("id")
-    verify.add_argument("--personal", action="store_true", help="scope personal")
-    verify.add_argument("--json", action="store_true")
-    verify.set_defaults(handler=_cmd_verify)
 
     session = sub.add_parser("session", help="resúmenes de sesión")
     session_sub = session.add_subparsers(dest="session_command", required=True)

@@ -216,7 +216,6 @@ Each round is a slice: tests first, gate, review and its own release.
 | S7 | Incremental sync: apply only the JSONL tail, guarded by the offset and the prefix sha1 | 0.9.0 | [`docs/features/s7-incremental-sync.md`](docs/features/s7-incremental-sync.md) |
 | S7.1 | Certification re-stat: a prefix replaced during the sha1 forces a rebuild | 0.9.1 | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
 | S9 | Audit fixes: one `_session_root`, anchor hash cache, anchor size cap, tail read for `context`, `search --personal` without side effects, `.MEMORY.md.*` ignored | 0.9.1 | `docs/DECISIONS.md` |
-| S10 | `cairn verify <id>`: re-anchor a memory whose file changed, without touching its `ts` | 0.10.0 (pending) | Measured 2026-11-10: 8 of 8 anchored memories stale and no way to clear the flag |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
