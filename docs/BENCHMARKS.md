@@ -231,3 +231,36 @@ the alternation with an explicit `rebuild()` before each operation (10 repetitio
   a different prefix, `archive` and updates of an existing id still rebuild.
 - 190 tests pass; `ruff` is clean. Details and criteria:
   [`docs/features/s7-incremental-sync.md`](features/s7-incremental-sync.md).
+
+## 0.9.1: S7.1 and S9 verification (2026-11-10)
+
+The gates from `AGENTS.md` were run on the release commit, on the real Windows machine:
+`pytest -q` (197), `ruff check src tests bench`, `bench_cli.py --reps 20`,
+`bench_mcp.py --reps 20`, `bench_sync.py --reps 40`, `bench_retrieval.py` and the golden
+set.
+
+| Metric | SLO | Measured |
+|---|---|---|
+| `search` end-to-end p95, 10k idle | < 350 ms | **314.5 ms** |
+| `save` end-to-end p95, 10k idle (L0 included) | < 500 ms | **324.7 ms** |
+| Internal `search` p95, 10k | < 10 ms | **5.7 ms** |
+| MCP tool call p95, 10k (`search` / `save` / `context`) | < 50 ms | **8.3 / 21.8 / 14.8 ms** |
+| Two writers, 10k (`save` / `search`) p95 | < 50 ms | **35.9 / 12.7 ms** |
+| L0 `MEMORY.md` | <= 3000 chars | **2938** (1k) / **2962** (10k) |
+| Precision@3, golden set | >= 0.8 | **30/30** |
+| Retrieval Hit@3 / Recall@5 / MRR | report | **0.97 / 1.00 / 0.96** (grep: 0.97 / 0.95 / 0.95) |
+| Abstention, 8 no-answer queries | report | **5/8** (grep: 5/8) |
+| Rebuild, 10k | measure | **1.19 s** (`bench_cli`); 3.3 s on a second run under load |
+| Dependencies / LLM calls | 0 / 0 | **0 / 0** |
+
+- End-to-end at 1k: `search` p95 301.7 ms, `save` p95 336.3 ms. The floor is Python
+  startup, not the store.
+- **Regression found and fixed in this release:** the S9 anchor hash cache lived in the
+  process and keyed on `(size, mtime_ns)`. NTFS updates `mtime` late, so a file rewritten
+  with the same size reused the old hash and the L0 stopped marking it stale. The suite
+  caught it on `main`; the cache now lasts one render, which still avoids reading the same
+  anchor twice, and a regression test rewrites a file to the same size.
+- The S7.1 re-stat is covered by a test that replaces the JSONL between the append and the
+  prefix sha1: without the fix the index kept memories absent from the file.
+- Details: [`docs/features/s7-incremental-sync.md`](features/s7-incremental-sync.md) and
+  [`docs/DECISIONS.md`](DECISIONS.md).
