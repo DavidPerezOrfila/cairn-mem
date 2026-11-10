@@ -213,6 +213,8 @@ Each round is a slice: tests first, gate, review and its own release.
 | S6 | Honest retrieval benchmark (Hit@3/R@5/MRR/abstention, grep baseline) | — (no runtime change) | [`docs/features/s6-benchmark-retrieval.md`](docs/features/s6-benchmark-retrieval.md) |
 | S6.1 | Query-side plural stem and stopwords; two-root quorum measured and rejected | 0.8.0 | [`docs/features/query-stemming-stopwords.md`](docs/features/query-stemming-stopwords.md) |
 | S7 | Incremental sync: apply only the JSONL tail, guarded by the offset and the prefix sha1 | 0.9.0 | [`docs/features/s7-incremental-sync.md`](docs/features/s7-incremental-sync.md) |
+| S7.1 | Certification re-stat: a prefix replaced during the sha1 forces a rebuild | 0.9.1 (pending) | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
+| S8 | GitHub Sponsors metadata (`.github/FUNDING.yml` and the `Funding` URL) | pending | Deferred 2026-11-10: the GitHub listing must exist first |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
