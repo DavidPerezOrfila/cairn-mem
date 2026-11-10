@@ -62,22 +62,39 @@ def test_resolve_anchor_rejects_a_file_over_the_hash_limit(tmp_path, monkeypatch
         anchor.resolve_anchor(str(big), tmp_path)
 
 
-def test_stale_reuses_the_hash_while_the_file_does_not_change(tmp_path, monkeypatch):
-    """El L0 revisa todas las anclas tras cada save: sin caché cada una se relee."""
-    target = tmp_path / "a.py"
-    target.write_text("v1\n", encoding="utf-8")
-    digest = anchor.file_hash(target)
+def test_stale_reads_an_anchor_once_per_render(tmp_path, monkeypatch):
+    """El L0 revisa todas las anclas tras cada save: dos memorias sobre el mismo
+    fichero no deben hashearlo dos veces."""
+    from cairn_mem.render import render_l0
+    from cairn_mem.store import Store
+
+    store = Store(str(tmp_path / ".cairn"))
+    (tmp_path / "a.py").write_text("v1\n", encoding="utf-8")
+    digest = anchor.file_hash(tmp_path / "a.py")
+    store.save(
+        kind="fact", title="uno", body="a", anchor_path="a.py", anchor_hash=digest
+    )
+    store.save(
+        kind="fact", title="dos", body="b", anchor_path="a.py", anchor_hash=digest
+    )
     calls = []
     real = anchor.file_hash
 
     def counted(path):
-        calls.append(1)
+        calls.append(path)
         return real(path)
 
     monkeypatch.setattr(anchor, "file_hash", counted)
-    assert anchor.is_stale("a.py", digest, str(tmp_path)) is False
-    assert anchor.is_stale("a.py", digest, str(tmp_path)) is False
+
+    assert "⚠ revisar" not in render_l0(store)
     assert len(calls) == 1
-    target.write_text("v2\n", encoding="utf-8")
-    assert anchor.is_stale("a.py", digest, str(tmp_path)) is True
-    assert len(calls) == 2
+
+
+def test_stale_detects_a_same_size_rewrite(tmp_path):
+    """En NTFS la mtime se actualiza tarde: un hash viejo no se puede reutilizar
+    solo porque (size, mtime_ns) coincidan."""
+    target = tmp_path / "f.py"
+    target.write_text("v1\n", encoding="utf-8")
+    digest = anchor.file_hash(target)
+    target.write_text("v2\n", encoding="utf-8")  # mismo tamaño
+    assert anchor.is_stale("f.py", digest, str(tmp_path)) is True

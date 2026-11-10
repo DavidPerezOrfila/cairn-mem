@@ -5,12 +5,6 @@ from pathlib import Path
 
 MAX_HASH_BYTES = 2 * 1024 * 1024
 
-# sha1 por ruta: el L0 revisa todas las anclas tras cada save y un fichero sin
-# cambios no debe releerse. La entrada guarda (size, mtime_ns) para invalidarla.
-# shortcut: vive solo en memoria del proceso; si el CLI pasa de 500 ms en save por
-# anclas grandes, persistir (path, size, mtime_ns, sha1) en cairn.db.
-_HASHES: dict[str, tuple[int, int, str]] = {}
-
 
 def resolve_anchor(path: str, project_root) -> tuple[str, str]:
     """Devuelve (ruta POSIX relativa, hash) o falla si el ancla no es válida."""
@@ -36,16 +30,24 @@ def file_hash(path) -> str:
     return hashlib.sha1(data).hexdigest()
 
 
-def _cached_hash(path: Path, stat) -> str:
-    entry = _HASHES.get(str(path))
-    if entry and entry[0] == stat.st_size and entry[1] == stat.st_mtime_ns:
-        return entry[2]
+def _cached_hash(path: Path, stat, cache) -> str:
+    """`cache` dura lo que un render: dos memorias ancladas al mismo fichero no lo
+    leen dos veces. No se reutiliza entre comandos: en NTFS la mtime se actualiza
+    tarde y un fichero reescrito con el mismo tamaño parecería sin cambios."""
+    key = str(path)
+    if cache is not None:
+        entry = cache.get(key)
+        if entry and entry[0] == stat.st_size and entry[1] == stat.st_mtime_ns:
+            return entry[2]
     digest = file_hash(path)
-    _HASHES[str(path)] = (stat.st_size, stat.st_mtime_ns, digest)
+    if cache is not None:
+        cache[key] = (stat.st_size, stat.st_mtime_ns, digest)
     return digest
 
 
-def is_stale(anchor_path, anchor_hash, project_root, *, max_bytes=None) -> bool:
+def is_stale(
+    anchor_path, anchor_hash, project_root, *, max_bytes=None, cache=None
+) -> bool:
     if not anchor_path or not anchor_hash:
         return False
     path = Path(project_root) / anchor_path
@@ -55,7 +57,7 @@ def is_stale(anchor_path, anchor_hash, project_root, *, max_bytes=None) -> bool:
         stat = path.stat()
         if limit is not None and stat.st_size > limit:
             return True
-        return _cached_hash(path, stat) != anchor_hash
+        return _cached_hash(path, stat, cache) != anchor_hash
     except OSError:
         # No se pudo leer (falta, es carpeta o está bloqueado): no se puede
         # confirmar el hash, así que se avisa. Nunca se oculta la memoria.

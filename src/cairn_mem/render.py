@@ -14,16 +14,17 @@ def render_l0(store, max_chars: int = 3000, project_root=None) -> str:
     """Orden fijo por kind y ts desc, cortado al presupuesto."""
     root = Path(project_root) if project_root else Path(store.root).parent
     rows = store.active_ordered()
+    hashes: dict = {}  # dentro de un render, una lectura por fichero anclado
     lines = [TITLE]
     for row in rows:
-        line = _line(row, root)
+        line = _line(row, root, hashes)
         if len("\n".join([*lines, line])) + 1 > max_chars:
             break
         lines.append(line)
     return "\n".join(lines) + "\n"
 
 
-def _line(row: dict, root: Path) -> str:
+def _line(row: dict, root: Path, cache: dict | None = None) -> str:
     body = " ".join(row["body"].split())[:EXCERPT]
     # Un evento externo puede traer saltos de línea: el L0 no admite líneas inyectadas.
     mid = " ".join(str(row["id"]).split())
@@ -32,6 +33,6 @@ def _line(row: dict, root: Path) -> str:
     if row.get("topic_key"):
         topic = f"[{' '.join(str(row['topic_key']).split())[:MAX_TOPIC]}] "
     text = f"- [{mid}] {row['kind']}: {topic}{title} — {body}"
-    if is_stale(row["anchor_path"], row["anchor_hash"], root):
+    if is_stale(row["anchor_path"], row["anchor_hash"], root, cache=cache):
         text += " ⚠ revisar"
     return text
