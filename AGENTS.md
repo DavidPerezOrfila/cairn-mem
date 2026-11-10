@@ -2,10 +2,10 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1 are implemented.** 0.9.0 is published (2026-11-10, tagged
+- **M6-M9 are closed; S1-S7.1 and S9 are implemented.** 0.9.0 is published (2026-11-10, tagged
   `v0.9.0`). `store.py`, `cli.py`, `anchor.py`,
   `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` and `legacy.py` are
-  implemented. `tests/` (191) covers the CLI, the store, the L0, anchors, MCP, sessions,
+  implemented. `tests/` (196) covers the CLI, the store, the L0, anchors, MCP, sessions,
   import, the JSONL tail repair, incremental sync, retrieval and the golden set.
 - **Keep this file current in the same change:** version and release state, test count,
   modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.

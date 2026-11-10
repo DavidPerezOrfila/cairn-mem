@@ -13,7 +13,7 @@ from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.sessions import Sessions
 from cairn_mem.store import KINDS, Store, search_scopes
 
-GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", "sessions.jsonl")
+GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", ".MEMORY.md.*", "sessions.jsonl")
 
 
 def _store(ns) -> Store:
@@ -96,7 +96,7 @@ def _cmd_save(ns) -> int:
 
 def _cmd_search(ns) -> int:
     home = personal_dir()
-    personal = Store(str(home)) if ns.personal or home.exists() else None
+    personal = Store(str(home)) if home.exists() else None
     project = None
     if not ns.personal:
         try:
