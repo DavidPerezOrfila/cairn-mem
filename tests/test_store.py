@@ -2,6 +2,7 @@
 
 import json
 import os
+import random
 import threading
 from pathlib import Path
 
@@ -55,6 +56,68 @@ def test_rebuild_from_jsonl_is_identical(store):
     before = store.dump()
     store.rebuild()
     assert store.dump() == before
+
+
+def test_rebuild_keeps_the_memory_that_replaced_an_archived_topic(root):
+    """El rebuild no puede cambiar qué memoria está activa: el JSONL es la verdad.
+
+    A(1000) → B(3000) la supera → archive(B) → C(2000) la sustituye. C es la única
+    activa. Ordenar el rebuild por `ts` aplicaba B después de C y la archivaba, así
+    que el topic se quedaba sin memoria activa en el índice.
+    """
+    s = Store(root)
+    a = s.save(kind="decision", topic_key="k", title="A first", body="a", ts=1_000)
+    b = s.save(kind="decision", topic_key="k", title="B second", body="b", ts=3_000)
+    s.archive(b)
+    c = s.save(
+        kind="decision", topic_key="k", title="C replacement", body="c", ts=2_000
+    )
+    before = s.dump()
+    s.rebuild()
+    assert s.dump() == before
+    assert s.get(c)["status"] == "active"
+    assert s.get(a)["status"] == "superseded"
+    assert [row["id"] for row in s.search("replacement")] == [c]
+
+
+def test_a_new_clone_keeps_the_same_active_memory(root, tmp_path):
+    """Un clon nuevo (o `git pull`, o un `cairn.db` borrado) siempre reconstruye."""
+    s = Store(root)
+    s.save(kind="decision", topic_key="k", title="A first", body="a", ts=1_000)
+    b = s.save(kind="decision", topic_key="k", title="B second", body="b", ts=3_000)
+    s.archive(b)
+    c = s.save(
+        kind="decision", topic_key="k", title="C replacement", body="c", ts=2_000
+    )
+    clone = tmp_path / "clone"
+    clone.mkdir()
+    (clone / "events.jsonl").write_bytes((Path(root) / "events.jsonl").read_bytes())
+    fresh = Store(str(clone))
+    assert fresh.get(c)["status"] == "active"
+    assert "C replacement" in (clone / "MEMORY.md").read_text(encoding="utf-8")
+
+
+def test_rebuild_matches_the_live_state_after_any_save_archive_order(root):
+    """Barrido: el estado que deja la CLI tiene que sobrevivir a su propio rebuild."""
+    rng = random.Random(7)
+    s = Store(root)
+    ids = []
+    for step in range(40):
+        if rng.random() < 0.7 or not ids:
+            ids.append(
+                s.save(
+                    kind="fact",
+                    title=f"paso {step}",
+                    body=f"detalle {step}",
+                    topic_key=rng.choice(["t/a", "t/b", None]),
+                    ts=rng.choice([None, 1_000, 2_000, 3_000]),
+                )
+            )
+        else:
+            s.archive(rng.choice(ids))
+    live = s.dump()
+    s.rebuild()
+    assert s.dump() == live
 
 
 def test_search_returns_l1_shape(store):
