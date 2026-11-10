@@ -279,6 +279,47 @@ def test_check_hashes_large_anchors(capsys, in_tmp, monkeypatch):
     assert "sin memorias stale" in run(capsys, "check")[1]
 
 
+def test_verify_clears_a_stale_anchor_without_reordering(capsys, in_tmp):
+    run(capsys, "init")
+    (in_tmp / "a.py").write_text("v1\n", encoding="utf-8")
+    _, out, _ = run(
+        capsys,
+        "save",
+        "--kind",
+        "gotcha",
+        "--title",
+        "Anclada",
+        "--body",
+        "b",
+        "--anchor",
+        "a.py",
+        "--json",
+    )
+    mid = json.loads(out)["id"]
+    ts = json.loads(run(capsys, "get", mid, "--json")[1])["ts"]
+    (in_tmp / "a.py").write_text("v2\n", encoding="utf-8")
+    assert mid in run(capsys, "check")[1]
+
+    assert run(capsys, "verify", mid)[0] == 0
+    assert "sin memorias stale" in run(capsys, "check")[1]
+    assert json.loads(run(capsys, "get", mid, "--json")[1])["ts"] == ts
+
+
+def test_verify_rejects_a_memory_without_anchor(capsys):
+    run(capsys, "init")
+    mid = run(capsys, "save", "--kind", "fact", "--title", "Suelta", "--body", "b")[
+        1
+    ].strip()
+    code, _, err = run(capsys, "verify", mid)
+    assert code == 1 and "no tiene ancla" in err
+
+
+def test_verify_rejects_an_unknown_id(capsys):
+    run(capsys, "init")
+    code, _, err = run(capsys, "verify", "000000000000")
+    assert code == 1 and "no existe" in err
+
+
 def test_personal_scope_is_reachable_from_the_project(capsys, in_tmp):
     run(capsys, "init")
     _, out, _ = run(

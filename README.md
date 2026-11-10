@@ -203,15 +203,16 @@ why the agent believes something.
 | `cairn get <id>` | Full memory |
 | `cairn archive <id>` | Stop returning a memory |
 | `cairn check` | List memories whose anchor changed |
+| `cairn verify <id>` | Re-anchor a memory after reviewing it; keeps its timestamp |
 | `cairn render` | Regenerate and print `MEMORY.md` |
 | `cairn rebuild` | Rebuild the index from `events.jsonl` |
 | `cairn session save\|list\|get [--personal]` | Session recaps, separate from curated memory |
 | `cairn import legacy --db <path> [--dry-run]` | Migrate observations from another SQLite store |
 | `cairn mcp` | Serve MCP over stdio |
 
-`--json` is available on `save`, `search`, `get`, `check`, `session` and `import` for
-agent consumption. `save`, `search` and `archive` accept `--personal`. `search` spans both
-scopes by default, and `get` checks both stores.
+`--json` is available on `save`, `search`, `get`, `check`, `verify`, `session` and `import`
+for agent consumption. `save`, `search`, `archive` and `verify` accept `--personal`. `search`
+spans both scopes by default, and `get` checks both stores.
 
 ## Benchmarks
 
