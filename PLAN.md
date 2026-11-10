@@ -231,6 +231,9 @@ clean install from the public index (`init`, `save`, `search`).
 - `sqlite-vec` (if precision@3 is < 0.8 because of synonyms and titles do not fix it)
 - Passive capture through a git hook (only if the agent does not save and the noise is
   acceptable)
+- `anchor_cache` table in `cairn.db` (`path`, `size`, `mtime_ns`, `sha1`): the anchor hash
+  cache is in-process only, so a one-shot CLI command still hashes each anchored file once.
+  Only if `save` p95 passes 500 ms with many large anchors
 
 ## 6. Risks (the ones left)
 

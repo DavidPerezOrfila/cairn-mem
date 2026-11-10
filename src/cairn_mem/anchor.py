@@ -7,6 +7,8 @@ MAX_HASH_BYTES = 2 * 1024 * 1024
 
 # sha1 por ruta: el L0 revisa todas las anclas tras cada save y un fichero sin
 # cambios no debe releerse. La entrada guarda (size, mtime_ns) para invalidarla.
+# shortcut: vive solo en memoria del proceso; si el CLI pasa de 500 ms en save por
+# anclas grandes, persistir (path, size, mtime_ns, sha1) en cairn.db.
 _HASHES: dict[str, tuple[int, int, str]] = {}
 
 
