@@ -20,6 +20,12 @@ def store(root):
     return Store(root)
 
 
+def _append_event(root, **event):
+    """Escribe un evento por fuera del Store, como otro proceso o `git pull`."""
+    with open(Path(root) / "events.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
 def test_save_and_get(store):
     mid = store.save(
         kind="decision", title="Usar FTS5", body="BM25 sin vectores", why="latencia"
@@ -680,3 +686,148 @@ def test_version_0_does_not_drop_existing_tables(root):
     conn.close()
 
     assert Store(root).get(mid)["title"] == "viva"
+
+
+def test_external_append_is_applied_incrementally(root, monkeypatch):
+    """Con 10k el rebuild completo cuesta cientos de ms: un append ajeno solo
+    debe aplicar la cola nueva."""
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    _append_event(
+        root, op="save", id="bbbbbbbbbbbb", ts=2, kind="fact", title="externa", body="b"
+    )
+    monkeypatch.setattr(s, "rebuild", lambda: pytest.fail("rebuild inesperado"))
+
+    assert s.get("bbbbbbbbbbbb")["title"] == "externa"
+    assert s.search("externa")[0]["id"] == "bbbbbbbbbbbb"
+
+
+def test_catch_up_applies_several_events_at_once(root, monkeypatch):
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    _append_event(
+        root,
+        op="save",
+        id="aaaaaaaaaaaa",
+        ts=1,
+        kind="fact",
+        topic_key="t",
+        title="viejo",
+        body="b",
+    )
+    _append_event(
+        root,
+        op="save",
+        id="bbbbbbbbbbbb",
+        ts=2,
+        kind="fact",
+        topic_key="t",
+        title="nuevo",
+        body="b",
+    )
+    monkeypatch.setattr(s, "rebuild", lambda: pytest.fail("rebuild inesperado"))
+
+    assert s.get("aaaaaaaaaaaa")["status"] == "superseded"
+    assert s.get("bbbbbbbbbbbb")["status"] == "active"
+
+
+def test_external_update_of_existing_id_rebuilds(root, monkeypatch):
+    """Un update o un archive dependen del orden global por ts: rebuild."""
+    s = Store(root)
+    mid = s.save(kind="fact", title="v1", body="a")
+    calls = []
+    original = s.rebuild
+    monkeypatch.setattr(s, "rebuild", lambda: (calls.append(1), original())[1])
+    _append_event(
+        root,
+        op="save",
+        id=mid,
+        ts=9_999_999_999_999_999_999,
+        kind="fact",
+        title="v2",
+        body="b",
+    )
+
+    assert s.get(mid)["title"] == "v2"
+    assert calls == [1]
+
+
+def test_truncated_jsonl_triggers_rebuild(root, monkeypatch):
+    s = Store(root)
+    first = s.save(kind="fact", title="uno", body="a")
+    second = s.save(kind="fact", title="dos", body="b")
+    path = Path(root) / "events.jsonl"
+    path.write_bytes(path.read_bytes().splitlines(keepends=True)[0])
+    calls = []
+    original = s.rebuild
+    monkeypatch.setattr(s, "rebuild", lambda: (calls.append(1), original())[1])
+
+    assert s.get(first)["title"] == "uno"
+    assert s.get(second) is None
+    assert calls == [1]
+
+
+def test_catch_up_survives_torn_tail(root):
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    path = Path(root) / "events.jsonl"
+    path.write_bytes(path.read_bytes() + b'{"op":"save"')
+    assert s.search("local")[0]["title"] == "local"
+
+    second = Store(root).save(kind="fact", title="dos", body="b")
+
+    assert s.get(second)["title"] == "dos"
+
+
+def test_catch_up_matches_rebuild(root, monkeypatch):
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    for index in range(5):
+        _append_event(
+            root,
+            op="save",
+            id=f"{index + 1:012x}",
+            ts=10 + index,
+            kind="fact",
+            topic_key=f"t{index % 2}",
+            title=f"externa {index}",
+            body="b",
+        )
+    monkeypatch.setattr(s, "rebuild", lambda: pytest.fail("rebuild inesperado"))
+
+    s.search("local")
+
+    fresh = Store(root)
+    assert [(row["id"], row["status"]) for row in s.dump()] == [
+        (row["id"], row["status"]) for row in fresh.dump()
+    ]
+
+
+def test_catch_up_does_not_certify_events_written_during_it(root, monkeypatch):
+    """La huella se captura antes de leer: lo que llegue a mitad se aplica luego."""
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    _append_event(
+        root, op="save", id="aaaaaaaaaaaa", ts=2, kind="fact", title="primera", body="b"
+    )
+    original = s._apply
+    injected = []
+
+    def apply_then_inject(event):
+        original(event)
+        if not injected:
+            injected.append(True)
+            _append_event(
+                root,
+                op="save",
+                id="bbbbbbbbbbbb",
+                ts=3,
+                kind="fact",
+                title="segunda",
+                body="b",
+            )
+
+    monkeypatch.setattr(s, "_apply", apply_then_inject)
+    assert s.get("aaaaaaaaaaaa")["title"] == "primera"
+    monkeypatch.setattr(s, "_apply", original)
+    assert s.get("bbbbbbbbbbbb")["title"] == "segunda"

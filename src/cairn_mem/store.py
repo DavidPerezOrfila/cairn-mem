@@ -1,5 +1,6 @@
 """Store: events.jsonl (verdad) + SQLite FTS5 (derivado)."""
 
+import hashlib
 import json
 import os
 import re
@@ -296,13 +297,14 @@ class Store:
         ):
             if value is not None:
                 event[key] = value
+        self._sync()  # aplica primero la cola ajena: evita el rebuild completo
         fingerprint, unseen = self._append(event)
         if unseen:
             self.rebuild()  # llegaron eventos externos: reaplica todo
         else:
             with self._conn:
                 self._apply(event)
-            self._remember_fingerprint(fingerprint)
+            self._remember_fingerprint(fingerprint, int(fingerprint[0]))
             self.write_l0()
         return mid
 
@@ -320,7 +322,7 @@ class Store:
         else:
             with self._conn:
                 self._apply(event)
-            self._remember_fingerprint(fingerprint)
+            self._remember_fingerprint(fingerprint, int(fingerprint[0]))
             self.write_l0()
 
     # --- lectura ---
@@ -394,8 +396,9 @@ class Store:
         # guardara la huella final, se certificarían eventos que no se aplicaron.
         fingerprint = self._fingerprint()
         events = []
-        if self.events.exists():
-            lines = self.events.read_text(encoding="utf-8-sig").splitlines()
+        raw = self.events.read_bytes() if self.events.exists() else b""
+        if raw:
+            lines = raw.decode("utf-8-sig").splitlines()
             last = max((i for i, line in enumerate(lines) if line.strip()), default=-1)
             for number, line in enumerate(lines):
                 if not line.strip():
@@ -413,7 +416,7 @@ class Store:
             for _, _, event in events:
                 self._apply(event)
             self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        self._remember_fingerprint(fingerprint)
+        self._remember_fingerprint(fingerprint, len(raw), hashlib.sha1(raw).hexdigest())
         self.write_l0()
 
     # --- internos ---
@@ -470,12 +473,59 @@ class Store:
         `_syncing` corta un rebuild anidado si otro proceso escribe a mitad."""
         if self._syncing:
             return
-        if self._fingerprint() != self._stored_fingerprint():
-            self._syncing = True
-            try:
-                self.rebuild()
-            finally:
-                self._syncing = False
+        fingerprint = self._fingerprint()
+        if fingerprint == self._stored_fingerprint():
+            return
+        self._syncing = True
+        try:
+            self._catch_up(fingerprint)
+        finally:
+            self._syncing = False
+
+    def _catch_up(self, fingerprint: tuple[str, str]) -> None:
+        """Aplica solo la cola nueva. El rebuild completo (caro con 10k) queda
+        para cuando no se puede demostrar que el fichero solo creció: truncado,
+        replace del mismo tamaño, prefijo distinto, archive o update de un id
+        existente (su orden depende del ts global, no del orden de append)."""
+        offset, digest = self._progress()
+        size = int(fingerprint[0])
+        if offset is None or size <= offset or not self._prefix_matches(offset, digest):
+            self.rebuild()
+            return
+        with self.events.open("rb") as f:
+            f.seek(offset)
+            data = f.read()
+        end = data.rfind(b"\n") + 1
+        events = []
+        if end:
+            lines = data[:end].decode("utf-8-sig").splitlines()
+            last = max((i for i, line in enumerate(lines) if line.strip()), default=-1)
+            for number, line in enumerate(lines):
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    if number == last and end == len(data):
+                        continue  # misma tolerancia que rebuild con la última línea
+                    self.rebuild()
+                    return
+                events.append(event)
+        ids = [event.get("id") for event in events]
+        known = any(
+            event.get("op") == "archive"
+            or self._conn.execute("SELECT 1 FROM mem WHERE id = ?", (mid,)).fetchone()
+            for event, mid in zip(events, ids)
+        )
+        if known or len(set(ids)) != len(ids):
+            self.rebuild()
+            return
+        if events:
+            with self._conn:
+                for event in events:
+                    self._apply(event)
+            self.write_l0()
+        self._remember_fingerprint(fingerprint, offset + end)
 
     def _append(self, event: dict) -> tuple[tuple[str, str], bool]:
         stored = self._stored_fingerprint()
@@ -530,13 +580,55 @@ class Store:
         values = dict(self._conn.execute("SELECT key, value FROM meta").fetchall())
         return (values.get("jsonl_size", ""), values.get("jsonl_mtime_ns", ""))
 
-    def _remember_fingerprint(self, fingerprint=None) -> None:
+    def _progress(self) -> tuple[int | None, str | None]:
+        values = dict(self._conn.execute("SELECT key, value FROM meta").fetchall())
+        offset = values.get("jsonl_offset")
+        return (int(offset) if offset is not None else None, values.get("jsonl_hash"))
+
+    def _prefix_matches(self, offset: int, digest: str | None) -> bool:
+        """El prefijo aplicado debe ser byte a byte el mismo: un checkout de otra
+        rama que además creció no puede colarse como si fuera un append."""
+        if digest is None:
+            return False
+        return self._prefix_hash(offset) == digest
+
+    def _prefix_hash(self, offset: int) -> str:
+        hasher = hashlib.sha1()
+        if offset:
+            with self.events.open("rb") as f:
+                remaining = offset
+                while remaining:
+                    chunk = f.read(min(1 << 20, remaining))
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+                    remaining -= len(chunk)
+        return hasher.hexdigest()
+
+    def _remember_fingerprint(self, fingerprint=None, offset=None, digest=None) -> None:
+        """Guarda la huella y el prefijo aplicado. `rebuild` pasa el sha1 de los
+        bytes que ya leyó; el resto lo recalcula del fichero."""
         size, mtime = fingerprint or self._fingerprint()
+        offset = int(size) if offset is None else offset
+        if digest is None:
+            # shortcut: un replace que crezca entre el append y este sha1 puede
+            # certificar bytes no aplicados. Cerrarlo exige re-stat y reintento;
+            # la ventana es de ms, se mide si alguna vez aparece.
+            digest = (
+                self._prefix_hash(offset)
+                if self.events.exists()
+                else hashlib.sha1().hexdigest()
+            )
         with self._conn:
             self._conn.executemany(
                 "INSERT INTO meta (key, value) VALUES (?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (("jsonl_size", size), ("jsonl_mtime_ns", mtime)),
+                (
+                    ("jsonl_size", size),
+                    ("jsonl_mtime_ns", mtime),
+                    ("jsonl_offset", str(offset)),
+                    ("jsonl_hash", digest),
+                ),
             )
 
 
