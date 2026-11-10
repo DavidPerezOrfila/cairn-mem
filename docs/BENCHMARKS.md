@@ -205,3 +205,29 @@ stopwords before FTS5. No schema change, no rebuild. Same command and dataset:
   (idle), internal search p95 1.4 ms. SLOs unchanged.
 - Details and criteria:
   [`docs/features/query-stemming-stopwords.md`](features/query-stemming-stopwords.md).
+
+## S7: incremental sync (2026-11-09)
+
+Two `Store` instances alternate a save and a read over 10,000 seeded memories.
+`python bench/bench_sync.py --reps 40`:
+
+| Op | p50 | p95 | max |
+|---|---|---|---|
+| `save` | 11.6 ms | 13.6 ms | 30.6 ms |
+| `search` | 3.2 ms | 4.8 ms | 5.1 ms |
+
+Before S7, the second writer found an unseen fingerprint and ran a full rebuild. Re-running
+the alternation with an explicit `rebuild()` before each operation (10 repetitions):
+
+| Op | p50 | p95 |
+|---|---|---|
+| `save` | 3,294 ms | 3,773 ms |
+| `search` | 3,200 ms | 5,508 ms |
+
+- A rebuild alone with 10k measured 3.3-3.9 s in this run. The machine is slower than the
+  1.3 s pass above, so compare the two rows of this section, not against S2.
+- `save` syncs before appending and applies only the new JSONL suffix. The guard is
+  `jsonl_offset` plus the sha1 of the applied prefix; truncation, same-size replacement,
+  a different prefix, `archive` and updates of an existing id still rebuild.
+- 190 tests pass; `ruff` is clean. Details and criteria:
+  [`docs/features/s7-incremental-sync.md`](features/s7-incremental-sync.md).

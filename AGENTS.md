@@ -2,11 +2,11 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S6.1 are implemented.** 0.8.0 is published (2026-11-09, tagged
-  `v0.8.0`). `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`,
-  `sessions.py`, `jsonl.py` and `legacy.py` are implemented. `tests/` (183) covers the CLI,
-  the store, the L0, anchors, MCP, sessions, import, the JSONL tail repair, retrieval and
-  the golden set.
+- **M6-M9 are closed; S1-S7 are implemented.** 0.8.0 is published (2026-11-09, tagged
+  `v0.8.0`); S7 is pending release as 0.9.0. `store.py`, `cli.py`, `anchor.py`,
+  `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` and `legacy.py` are
+  implemented. `tests/` (190) covers the CLI, the store, the L0, anchors, MCP, sessions,
+  import, the JSONL tail repair, incremental sync, retrieval and the golden set.
 - **Keep this file current in the same change:** version and release state, test count,
   modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.
 - Implement **one round (S#) or milestone (M#) at a time**, and only that one. Read
@@ -24,6 +24,7 @@ pytest -q
 pytest tests/test_store.py::test_save_and_get -q   # one test
 ruff check src tests bench
 python bench/bench_mcp.py --reps 20                 # MCP tool-call latency (10k)
+python bench/bench_sync.py --reps 40                # 2 writers incremental sync (10k)
 ```
 
 - Before publishing: delete `dist/` **and** `build/`. `uv build` reuses `build/lib` and
@@ -53,6 +54,11 @@ python bench/bench_mcp.py --reps 20                 # MCP tool-call latency (10k
 - When the database opens, it compares `(size, mtime_ns)` of the JSONL and
   `PRAGMA user_version`. If they differ, it rebuilds automatically (this covers
   `git pull`).
+- **Sync:** after the fingerprint changes, `_sync` applies only the JSONL suffix when
+  `jsonl_offset` and the sha1 of the applied prefix match. It rebuilds on truncation, a
+  same-size replacement, a different prefix, `archive`, an update of an existing id or a
+  duplicate id in the batch: their result depends on the global `ts` order, not on append
+  order. `save` syncs before appending; never add a rebuild per append.
 - `stale` is calculated when reading. It is not persisted, and there is no verification
   event.
 - L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters. It goes round-robin by kind (each round:

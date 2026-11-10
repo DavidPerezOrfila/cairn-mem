@@ -58,14 +58,18 @@ portable to any harness with a shell**.
 
 ## Database and JSONL sync
 
-When the `Store` opens, it compares `(size, mtime_ns)` of the JSONL with `meta`. If they
-differ (for example after `git pull`), it runs a full `rebuild()` (ordered by `(ts, line
-number)`) and then `render()`. Own writes update the fingerprint in the same transaction
-and compare the fingerprint **before the append**, including `mtime`, not just the size,
-so an external replacement that keeps the size is still detected. A different
+When the `Store` opens, it compares `(size, mtime_ns)` of the JSONL with `meta`. A
+long-lived `Store` does the same on every read and write. If the file only grew and the
+applied prefix (`jsonl_offset` plus its sha1) is unchanged, it applies just the new suffix
+(`_catch_up`). Otherwise (for example after a `git pull`, a truncation, a same-size replace,
+an `archive` or an update of an existing id) it runs a full `rebuild()` ordered by
+`(ts, line number)` and then `render()`. Own writes update the fingerprint in the same
+transaction and compare the fingerprint **before the append**, including `mtime`, not just
+the size, so an external replacement that keeps the size is still detected. A different
 `PRAGMA user_version` drops the derived schema (`mem`, `mem_fts`, `meta`) and rebuilds it.
-Expected rebuild cost with 10k events: hundreds of milliseconds (measured: 570 ms when
-idle, S2).
+Expected full rebuild cost with 10k events: seconds on a busy machine (measured 3.3 s on
+2026-11-09; 570 ms when idle in S2). Incremental catch-up stays in the low milliseconds;
+see `docs/features/s7-incremental-sync.md`.
 
 ## Writing and security
 
