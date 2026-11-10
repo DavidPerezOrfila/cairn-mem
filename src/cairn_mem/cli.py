@@ -10,7 +10,7 @@ from pathlib import Path
 
 from cairn_mem.anchor import is_stale, resolve_anchor
 from cairn_mem.paths import data_dir, personal_dir
-from cairn_mem.sessions import Sessions
+from cairn_mem.sessions import Sessions, context_payload, context_text
 from cairn_mem.store import KINDS, Store, search_scopes
 
 GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", ".MEMORY.md.*", "sessions.jsonl")
@@ -27,6 +27,18 @@ def _date(ts) -> str:
 
 def _print_json(value) -> None:
     print(json.dumps(value, ensure_ascii=False))
+
+
+def _count(text: str) -> int:
+    """Límite de un listado: 0 devolvía nada y un negativo cortaba por el otro
+    extremo, así que el resultado mentía sin avisar."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"se esperaba un entero: {text}") from None
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"debe ser 1 o más: {value}")
+    return value
 
 
 def _write_gitignore(root: Path, share: bool) -> None:
@@ -171,6 +183,15 @@ def _cmd_render(ns) -> int:
     return 0
 
 
+def _cmd_context(ns) -> int:
+    store = Store(str(data_dir()))
+    if ns.json:
+        _print_json(context_payload(store))
+    else:
+        print(context_text(store), end="")
+    return 0
+
+
 def _cmd_check(ns) -> int:
     project_root = data_dir().parent
     stale = [
@@ -291,7 +312,7 @@ def _parser() -> argparse.ArgumentParser:
 
     search = sub.add_parser("search", help="busca memorias activas")
     search.add_argument("query")
-    search.add_argument("--limit", type=int, default=5)
+    search.add_argument("--limit", type=_count, default=5)
     search.add_argument("--personal", action="store_true", help="scope personal")
     search.add_argument("--json", action="store_true")
     search.set_defaults(handler=_cmd_search)
@@ -312,6 +333,12 @@ def _parser() -> argparse.ArgumentParser:
     render = sub.add_parser("render", help="regenera y muestra MEMORY.md (L0)")
     render.set_defaults(handler=_cmd_render)
 
+    context = sub.add_parser(
+        "context", help="L0 y el último recap de sesión (lo que da la tool context)"
+    )
+    context.add_argument("--json", action="store_true")
+    context.set_defaults(handler=_cmd_context)
+
     check = sub.add_parser("check", help="lista memorias con ancla stale")
     check.add_argument("--json", action="store_true")
     check.set_defaults(handler=_cmd_check)
@@ -324,7 +351,7 @@ def _parser() -> argparse.ArgumentParser:
     session_save.add_argument("--json", action="store_true")
     session_save.set_defaults(handler=_cmd_session_save)
     session_list = session_sub.add_parser("list", help="lista sesiones recientes")
-    session_list.add_argument("--limit", type=int, default=20)
+    session_list.add_argument("--limit", type=_count, default=20)
     session_list.add_argument("--personal", action="store_true", help="scope personal")
     session_list.add_argument("--json", action="store_true")
     session_list.set_defaults(handler=_cmd_session_list)
