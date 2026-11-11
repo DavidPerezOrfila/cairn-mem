@@ -51,6 +51,27 @@ def test_save_after_torn_tail_keeps_both_sessions(tmp_path):
     assert fresh.get(second)["summary"] == "segunda"
 
 
+def test_non_object_line_is_reported_with_its_line(tmp_path):
+    """`[1]` es JSON válido pero no un evento: debe fallar con la línea, no con
+    AttributeError (lo encontró la revisión de S10)."""
+    sessions = Sessions(str(tmp_path))
+    sessions.path.write_text(
+        '{"op":"session","id":"aaaaaaaaaaaa","ts":1,"summary":"ok"}\n[1]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="sessions.jsonl línea 2"):
+        sessions.all()
+
+
+def test_non_object_torn_tail_is_ignored(tmp_path):
+    sessions = Sessions(str(tmp_path))
+    sessions.path.write_text(
+        '{"op":"session","id":"aaaaaaaaaaaa","ts":1,"summary":"ok"}\n[1]',
+        encoding="utf-8",
+    )
+    assert [record["id"] for record in sessions.all()] == ["aaaaaaaaaaaa"]
+
+
 def test_empty_summary_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="vacío"):
         Sessions(str(tmp_path)).save("   ")

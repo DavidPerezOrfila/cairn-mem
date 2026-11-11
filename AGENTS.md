@@ -5,7 +5,7 @@
 - **M6-M9 are closed; S1-S7.1, S9, S9.1 and S10 are implemented.** 0.9.2 is published
   (2026-11-11, tagged `v0.9.2`). `store.py`, `cli.py`, `anchor.py`,
   `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and
-  `legacy.py` are implemented. `tests/` (221) covers the CLI, the store, the L0, anchors,
+  `legacy.py` are implemented. `tests/` (224) covers the CLI, the store, the L0, anchors,
   MCP, sessions, import, the JSONL tail repair, incremental sync, retrieval, the golden
   set, the integrity audit fixes and `doctor`.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -108,7 +108,9 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
   may exceed 500 characters (up to 20k). `context` injects only the last **project** recap;
   a personal one belongs to another repo. `Sessions.last` walks the tail backwards
   accumulating windows: one recap can exceed 64 KB with JSON escapes, and `MAX_FRAGMENT`
-  is 1 MiB so the tail repair does not truncate it.
+  is 1 MiB so the tail repair does not truncate it. `_records` rejects a line that is not
+  a JSON object or is invalid mid-file with `sessions.jsonl línea N`; only a torn tail (no
+  final `\n`) is skipped.
 - **Importer:** idempotent through `sha1("<fixed salt>:<source id>")[:12]`. `What` →
   `body` (≤ 500) and the rest → `why`. `global/personal` goes to the personal scope, not
   to the current repo.

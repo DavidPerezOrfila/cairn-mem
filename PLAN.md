@@ -218,6 +218,7 @@ Each round is a slice: tests first, gate, review and its own release.
 | S9 | Audit fixes: one `_session_root`, anchor hash cache, anchor size cap, tail read for `context`, `search --personal` without side effects, `.MEMORY.md.*` ignored | 0.9.1 | `docs/DECISIONS.md` |
 | S9.1 | Audit fixes, integrity: apply a JSONL tail without `\n`, torn-tail tolerance by the missing `\n`, `parse_event` with file and line, `Sessions.last` accumulates the window backwards, `MAX_FRAGMENT` 1 MiB, LF `.gitignore`, MCP `save` accepts `id` | 0.9.2 | `docs/DECISIONS.md` |
 | S10 | `cairn doctor`: Python/SQLite+FTS5, store root, `events.jsonl`/`sessions.jsonl` line validity, DB sync, L0 budget, stale anchors, `.gitignore` entries and duplicate `cairn` installs. Upgrade docs (no self-update command) | pending (0.10.0) | `docs/features/s10-doctor.md` |
+| S10.1 | `sessions.jsonl`: a line that is valid JSON but not an object fails with `sessions.jsonl línea N`; torn-tail tolerance requires the missing `\n` | pending (0.10.0) | `docs/DECISIONS.md` |
 | S11 | Sessions: one ordering for `last` and `all`, `id` validated; `context` keeps the head and the tail of long recaps | planned | — |
 | S12 | CLI/MCP symmetry: `search --project`, `--personal` on `rebuild/render/check`, `archive` across both scopes | planned | — |
 | S13 | Secret filter v2: `Bearer`, `ASIA`, `xox[baprs]-`, `sk_live_`/`rk_live_`, `npm_` | planned | — |
