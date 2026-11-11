@@ -2,12 +2,12 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9 and S9.1 are implemented.** 0.9.2 is published
+- **M6-M9 are closed; S1-S7.1, S9, S9.1 and S10 are implemented.** 0.9.2 is published
   (2026-11-11, tagged `v0.9.2`). `store.py`, `cli.py`, `anchor.py`,
-  `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` and `legacy.py` are
-  implemented. `tests/` (210) covers the CLI, the store, the L0, anchors, MCP, sessions,
-  import, the JSONL tail repair, incremental sync, retrieval, the golden set and the
-  integrity audit fixes.
+  `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and
+  `legacy.py` are implemented. `tests/` (221) covers the CLI, the store, the L0, anchors,
+  MCP, sessions, import, the JSONL tail repair, incremental sync, retrieval, the golden
+  set, the integrity audit fixes and `doctor`.
 - **Keep this file current in the same change:** version and release state, test count,
   modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.
 - Implement **one round (S#) or milestone (M#) at a time**, and only that one. Read
@@ -41,7 +41,7 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
 - `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` and `cairn-mem`, text and
   `--json`), `store.py` (core), `anchor.py` (hash and stale), `render.py` (L0),
   `paths.py` (`.cairn/` root and personal scope), `mcp.py` (stdio JSON-RPC), `sessions.py`
-  (recaps), `jsonl.py` (shared append) and `legacy.py` (importer).
+  (recaps), `jsonl.py` (shared append), `doctor.py` (diagnosis) and `legacy.py` (importer).
 - **Truth:** `.cairn/events.jsonl` (append-only, 2 operations: `save`, `archive`).
   `cairn.db` and `MEMORY.md` are derived and can be regenerated. Do not edit them by hand.
   `sessions.jsonl` is a separate append-only file and is not curated memory.
@@ -100,6 +100,10 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
 - **MCP:** stdout carries protocol only (NDJSON in binary, `\n`). Logs go to stderr. No
   asyncio and no signals. The process caches one `Store` per scope and is the only writer
   while it lives.
+- **Doctor:** `doctor.py` is imported lazily and is local: no network, no events written.
+  It parses `events.jsonl` with `parse_event` (line-numbered failures) and refreshes
+  `cairn.db`/`MEMORY.md` only because it opens the `Store`, like every other command.
+  Exit code 1 only on `fail`; `warn` keeps it 0.
 - **Sessions:** `.cairn/sessions.jsonl` is local and does not enter FTS or the L0. A recap
   may exceed 500 characters (up to 20k). `context` injects only the last **project** recap;
   a personal one belongs to another repo. `Sessions.last` walks the tail backwards

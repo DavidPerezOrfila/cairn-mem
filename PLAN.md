@@ -217,6 +217,13 @@ Each round is a slice: tests first, gate, review and its own release.
 | S7.1 | Certification re-stat: a prefix replaced during the sha1 forces a rebuild | 0.9.1 | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
 | S9 | Audit fixes: one `_session_root`, anchor hash cache, anchor size cap, tail read for `context`, `search --personal` without side effects, `.MEMORY.md.*` ignored | 0.9.1 | `docs/DECISIONS.md` |
 | S9.1 | Audit fixes, integrity: apply a JSONL tail without `\n`, torn-tail tolerance by the missing `\n`, `parse_event` with file and line, `Sessions.last` accumulates the window backwards, `MAX_FRAGMENT` 1 MiB, LF `.gitignore`, MCP `save` accepts `id` | 0.9.2 | `docs/DECISIONS.md` |
+| S10 | `cairn doctor`: Python/SQLite+FTS5, store root, `events.jsonl`/`sessions.jsonl` line validity, DB sync, L0 budget, stale anchors, `.gitignore` entries and duplicate `cairn` installs. Upgrade docs (no self-update command) | pending (0.10.0) | `docs/features/s10-doctor.md` |
+| S11 | Sessions: one ordering for `last` and `all`, `id` validated; `context` keeps the head and the tail of long recaps | planned | — |
+| S12 | CLI/MCP symmetry: `search --project`, `--personal` on `rebuild/render/check`, `archive` across both scopes | planned | — |
+| S13 | Secret filter v2: `Bearer`, `ASIA`, `xox[baprs]-`, `sk_live_`/`rk_live_`, `npm_` | planned | — |
+| S14 | Bench hygiene: clean `mkdtemp` dirs, exit 1 when an SLO fails | planned | — |
+| S15 | MCP annotations (`readOnlyHint`, `idempotentHint`), `search --kind/--topic/--stale`, `partial` flag on the OR fallback | planned | — |
+| S16 | Agent setup: `cairn setup <harness>` writes the snippet/MCP config; Markdown export | planned | — |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).

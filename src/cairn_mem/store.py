@@ -254,6 +254,17 @@ def parse_event(line: str, number: int) -> dict:
     return event
 
 
+def fingerprint(path: Path) -> tuple[str, str]:
+    """Huella barata del JSONL. Un fichero vacío no tiene contenido que comparar."""
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return ("0", "0")
+    if stat.st_size == 0:
+        return ("0", "0")
+    return (str(stat.st_size), str(stat.st_mtime_ns))
+
+
 class Store:
     def __init__(self, root: str):
         self.root = Path(root)
@@ -616,13 +627,7 @@ class Store:
         return [dict(r) for r in rows]
 
     def _fingerprint(self) -> tuple[str, str]:
-        try:
-            stat = self.events.stat()
-        except FileNotFoundError:
-            return ("0", "0")
-        if stat.st_size == 0:
-            return ("0", "0")  # vacío: no hay contenido que comparar
-        return (str(stat.st_size), str(stat.st_mtime_ns))
+        return fingerprint(self.events)
 
     def _stored_fingerprint(self) -> tuple[str, str]:
         values = dict(self._conn.execute("SELECT key, value FROM meta").fetchall())

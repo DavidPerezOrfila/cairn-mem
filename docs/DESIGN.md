@@ -186,9 +186,22 @@ milliseconds; see `docs/features/s7-incremental-sync.md`.
   Linux).
 - Tool errors return `isError: true` with text. Protocol errors return JSON-RPC errors.
 
+## Doctor (S10)
+
+- `cairn doctor [--json] [--personal]`, implemented in `doctor.py` and imported lazily.
+- Local only: no network, no events written. It checks Python, SQLite with FTS5, how many
+  `cairn` binaries resolve on `PATH`, the store root, `.gitignore` entries,
+  `events.jsonl` line validity (`parse_event`), `sessions.jsonl` replay, the DB
+  fingerprint against the JSONL, the L0 budget and stale anchors.
+- Exit code 1 only when a check is `fail`; `warn` (stale anchors, a missing DB, two
+  installs) keeps it 0. `MEMORY.md`/`cairn.db` are refreshed because opening the `Store`
+  does it, never the JSONL.
+- There is no `cairn update`: package managers upgrade in place, and a self-updater would
+  break the no-network guarantee. See `docs/DECISIONS.md`.
+
 ## Commands
 
-`init · save · search · get · archive · check · render · rebuild · session · import · mcp`
+`init · save · search · get · archive · check · render · rebuild · session · import · doctor · mcp`
 
 ## Out of v0.1 (backlog, only with evidence)
 

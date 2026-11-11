@@ -62,6 +62,18 @@ Cairn needs Python 3.10+ and no third-party runtime dependencies. The `dev` extr
 adds pytest and ruff. It also needs SQLite with FTS5, which ships with the usual CPython
 builds on Linux, macOS and Windows.
 
+### Upgrade
+
+```bash
+uv tool upgrade cairn-mem     # or: pipx upgrade cairn-mem
+pip install -U cairn-mem      # a plain pip install
+```
+
+Every package manager replaces the installed version in place; there is no uninstall
+step. Cairn has no self-update command on purpose: it would need network access and would
+have to guess which install to replace. `cairn doctor` reports when two `cairn` binaries
+are on `PATH`.
+
 ## Quickstart
 
 Create the store for the current repository:
@@ -207,11 +219,12 @@ why the agent believes something.
 | `cairn rebuild` | Rebuild the index from `events.jsonl` |
 | `cairn session save\|list\|get [--personal]` | Session recaps, separate from curated memory |
 | `cairn import legacy --db <path> [--dry-run]` | Migrate observations from another SQLite store |
+| `cairn doctor [--personal]` | Check SQLite/FTS5, JSONL lines, DB sync, L0 budget, stale anchors, `.gitignore` and duplicate installs |
 | `cairn mcp` | Serve MCP over stdio |
 
-`--json` is available on `save`, `search`, `get`, `check`, `session` and `import` for
-agent consumption. `save`, `search` and `archive` accept `--personal`. `search` spans both
-scopes by default, and `get` checks both stores.
+`--json` is available on `save`, `search`, `get`, `check`, `session`, `doctor` and
+`import` for agent consumption. `save`, `search` and `archive` accept `--personal`.
+`search` spans both scopes by default, and `get` checks both stores.
 
 ## Benchmarks
 

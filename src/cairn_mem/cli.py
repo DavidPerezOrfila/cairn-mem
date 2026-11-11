@@ -269,6 +269,29 @@ def _cmd_mcp(ns) -> int:
     return serve()
 
 
+def _cmd_doctor(ns) -> int:
+    from cairn_mem.doctor import run
+
+    root = None
+    if ns.personal:
+        # Igual que `search --personal`: leer no crea el scope personal.
+        root = personal_dir() if personal_dir().exists() else None
+    else:
+        try:
+            candidate = data_dir()
+        except FileNotFoundError:
+            candidate = None
+        # `CAIRN_DIR` no comprueba existencia: diagnosticar no puede crear el store.
+        root = candidate if candidate is not None and candidate.exists() else None
+    checks = run(root)
+    if ns.json:
+        _print_json(checks)
+    else:
+        for item in checks:
+            print(f"{item['status']:<4}  {item['check']:<10}  {item['detail']}")
+    return 1 if any(item["status"] == "fail" for item in checks) else 0
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="cairn", description="Memoria persistente para agentes"
@@ -345,6 +368,11 @@ def _parser() -> argparse.ArgumentParser:
 
     mcp = sub.add_parser("mcp", help="sirve MCP por stdio (JSON-RPC)")
     mcp.set_defaults(handler=_cmd_mcp)
+
+    doctor = sub.add_parser("doctor", help="diagnostica el store y la instalación")
+    doctor.add_argument("--personal", action="store_true", help="scope personal")
+    doctor.add_argument("--json", action="store_true")
+    doctor.set_defaults(handler=_cmd_doctor)
     return p
 
 
