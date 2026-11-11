@@ -43,7 +43,7 @@ def _write_gitignore(root: Path, share: bool) -> None:
     lines = [*kept, *GITIGNORE]
     if not share:
         lines.append("events.jsonl")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
 def _cmd_init(ns) -> int:
@@ -208,7 +208,9 @@ def _ignore_sessions(root) -> None:
         return
     lines = path.read_text(encoding="utf-8").splitlines()
     if "sessions.jsonl" not in lines:
-        path.write_text("\n".join([*lines, "sessions.jsonl"]) + "\n", encoding="utf-8")
+        path.write_text(
+            "\n".join([*lines, "sessions.jsonl"]) + "\n", encoding="utf-8", newline="\n"
+        )
 
 
 def _cmd_session_save(ns) -> int:

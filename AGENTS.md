@@ -2,11 +2,12 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1 and S9 are implemented.** 0.9.1 is published (2026-11-10,
-  tagged `v0.9.1`). `store.py`, `cli.py`, `anchor.py`,
+- **M6-M9 are closed; S1-S7.1, S9 and S9.1 are implemented.** 0.9.1 is published
+  (2026-11-10, tagged `v0.9.1`). `store.py`, `cli.py`, `anchor.py`,
   `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py` and `legacy.py` are
-  implemented. `tests/` (197) covers the CLI, the store, the L0, anchors, MCP, sessions,
-  import, the JSONL tail repair, incremental sync, retrieval and the golden set.
+  implemented. `tests/` (210) covers the CLI, the store, the L0, anchors, MCP, sessions,
+  import, the JSONL tail repair, incremental sync, retrieval, the golden set and the
+  integrity audit fixes.
 - **Keep this file current in the same change:** version and release state, test count,
   modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.
 - Implement **one round (S#) or milestone (M#) at a time**, and only that one. Read
@@ -60,9 +61,14 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
   duplicate id in the batch: their result depends on the global `ts` order, not on append
   order. `save` syncs before appending; never add a rebuild per append. The prefix is
   certified only if a re-stat after its sha1 still matches the fingerprint; otherwise the
-  read rebuilds (S7.1).
+  read rebuilds (S7.1). A **complete** JSON line without the final `\n` (another writer,
+  a `git checkout`) is applied and certified; certifying it unapplied lost it forever.
 - `stale` is calculated when reading. It is not persisted, and there is no verification
   event.
+- Every JSONL line goes through `store.parse_event` before it reaches SQLite: a bad `op`,
+  `id`, `kind`, `title` or `body` fails naming the file and the line, never with a
+  `KeyError` or a CHECK `IntegrityError`. Only a torn tail (the file does not end in `\n`)
+  is tolerated.
 - L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters. It goes round-robin by kind (each round:
   `convention > decision > gotcha > fact`) and newest `ts` first inside each kind. Output
   is deterministic (prompt cache).
@@ -75,8 +81,10 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
 - **Windows first:** every file uses `encoding="utf-8"` and JSON uses
   `ensure_ascii=False`. Anchor paths are POSIX paths relative to the root. The sha1 hash
   normalizes CRLF to LF; otherwise you get false stale flags between OSes. `os.open` for
-  the JSONL needs `O_BINARY`; otherwise Windows turns `\n` into `\r\n`. Commits use LF:
-  `.gitattributes` sets `eol=lf`, so do not rely on the clone's `core.autocrlf`.
+  the JSONL needs `O_BINARY`; otherwise Windows turns `\n` into `\r\n`. `Path.write_text`
+  always passes `newline="\n"` (`.gitignore` included): the default writes CRLF on
+  Windows. Commits use LF: `.gitattributes` sets `eol=lf`, so do not rely on the clone's
+  `core.autocrlf`.
 - **FTS5:** never pass raw text to `MATCH`. Sanitize it (`\w+` → `"t"*`, stopwords
   out, plural trimmed to 5+ characters, prefix), use AND and fall back to OR when there
   are no results. Raw queries fail with `-`, `:` and `"`.
@@ -93,8 +101,10 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
   asyncio and no signals. The process caches one `Store` per scope and is the only writer
   while it lives.
 - **Sessions:** `.cairn/sessions.jsonl` is local and does not enter FTS or the L0. A recap
-  may exceed 500 characters. `context` injects only the last **project** recap; a personal
-  one belongs to another repo.
+  may exceed 500 characters (up to 20k). `context` injects only the last **project** recap;
+  a personal one belongs to another repo. `Sessions.last` walks the tail backwards
+  accumulating windows: one recap can exceed 64 KB with JSON escapes, and `MAX_FRAGMENT`
+  is 1 MiB so the tail repair does not truncate it.
 - **Importer:** idempotent through `sha1("<fixed salt>:<source id>")[:12]`. `What` →
   `body` (≤ 500) and the rest → `why`. `global/personal` goes to the personal scope, not
   to the current repo.

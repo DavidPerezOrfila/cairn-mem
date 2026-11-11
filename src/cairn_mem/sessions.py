@@ -10,6 +10,21 @@ from cairn_mem.jsonl import append_jsonl
 from cairn_mem.store import reject_secrets
 
 MAX_SUMMARY = 20000
+WINDOW = 64 * 1024
+LONGEST_LINE = 1 << 20  # un recap de MAX_SUMMARY con escapes se queda muy abajo
+
+
+def _session_record(raw: bytes):
+    line = raw.strip()
+    if not line:
+        return None
+    try:
+        event = json.loads(line.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if isinstance(event, dict) and event.get("op") == "session" and event.get("id"):
+        return event
+    return None
 
 
 class Sessions:
@@ -47,28 +62,27 @@ class Sessions:
 
     def last(self):
         """Último recap escrito, leyendo solo la cola. `context` se llama al
-        empezar cada sesión, así que no debe parsear el fichero entero."""
+        empezar cada sesión, así que no debe parsear el fichero entero. La
+        ventana se acumula hacia atrás: un recap de 20k con escapes supera los
+        64 KB y cabía partido en dos ventanas."""
         if not self.path.exists():
             return None
-        window = 64 * 1024  # MAX_SUMMARY (20000) siempre cabe en una ventana
         with self.path.open("rb") as f:
             end = f.seek(0, os.SEEK_END)
+            buffer = b""
             while end > 0:
-                start = max(0, end - window)
+                start = max(0, end - WINDOW)
                 f.seek(start)
-                lines = f.read(end - start).split(b"\n")
-                if start > 0:
-                    lines = lines[1:]  # la primera puede venir partida
-                for raw in reversed(lines):
-                    line = raw.strip()
-                    if not line:
-                        continue
-                    try:
-                        event = json.loads(line.decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError):
-                        continue  # cola rasgada por un crash
-                    if event.get("op") == "session" and event.get("id"):
-                        return event
+                buffer = f.read(end - start) + buffer
+                parts = buffer.split(b"\n")
+                complete = parts[1:] if start > 0 else parts
+                for raw in reversed(complete):
+                    record = _session_record(raw)
+                    if record is not None:
+                        return record
+                buffer = parts[0]
+                if len(buffer) > LONGEST_LINE:
+                    buffer = b""  # línea corrupta gigante: sigue hacia atrás
                 end = start
         return None
 

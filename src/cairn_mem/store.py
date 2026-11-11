@@ -221,6 +221,39 @@ def validate_topic(topic_key):
     return topic_key or None
 
 
+def parse_event(line: str, number: int) -> dict:
+    """Valida una línea del JSONL antes de aplicarla. Un evento inventado o
+    incompleto debe fallar nombrando el fichero y la línea, no con un KeyError
+    ni con un IntegrityError del CHECK de SQLite."""
+    where = f"events.jsonl línea {number + 1}"
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"{where}: JSON inválido") from error
+    if not isinstance(event, dict) or event.get("op") not in ("save", "archive"):
+        raise ValueError(f"{where}: evento sin 'op' save/archive")
+    mid = event.get("id")
+    if not isinstance(mid, str) or ID_PATTERN.fullmatch(mid) is None:
+        raise ValueError(f"{where}: id inválido")
+    try:
+        int(event.get("ts", 0))
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError(f"{where}: ts inválido") from error
+    for key in ("why", "topic_key", "anchor_path", "anchor_hash"):
+        value = event.get(key)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{where}: {key} inválido")
+    if event["op"] == "save":
+        if event.get("kind") not in KINDS:
+            raise ValueError(f"{where}: kind inválido")
+        title, body = event.get("title"), event.get("body")
+        if not isinstance(title, str) or len(title) > MAX_TITLE:
+            raise ValueError(f"{where}: title inválido o supera {MAX_TITLE}")
+        if not isinstance(body, str) or len(body) > MAX_BODY:
+            raise ValueError(f"{where}: body inválido o supera {MAX_BODY}")
+    return event
+
+
 class Store:
     def __init__(self, root: str):
         self.root = Path(root)
@@ -402,15 +435,22 @@ class Store:
         events = []
         raw = self.events.read_bytes() if self.events.exists() else b""
         if raw:
-            lines = raw.decode("utf-8-sig").splitlines()
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError as error:
+                raise ValueError("events.jsonl no es UTF-8 válido") from error
+            lines = text.splitlines()
             last = max((i for i, line in enumerate(lines) if line.strip()), default=-1)
+            # Solo un write interrumpido (sin '\n' final) se tolera: un evento
+            # inventado con JSON válido sigue fallando, como manda S5.
+            torn_tail = not raw.endswith(b"\n")
             for number, line in enumerate(lines):
                 if not line.strip():
                     continue
                 try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    if number == last:
+                    event = parse_event(line, number)
+                except ValueError:
+                    if number == last and torn_tail:
                         continue  # escritura rasgada por un crash
                     raise
                 events.append((min(int(event.get("ts", 0)), MAX_TS), number, event))
@@ -500,21 +540,24 @@ class Store:
             f.seek(offset)
             data = f.read()
         end = data.rfind(b"\n") + 1
+        consumed = end
         events = []
-        if end:
-            lines = data[:end].decode("utf-8-sig").splitlines()
-            last = max((i for i, line in enumerate(lines) if line.strip()), default=-1)
-            for number, line in enumerate(lines):
-                if not line.strip():
-                    continue
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    if number == last and end == len(data):
-                        continue  # misma tolerancia que rebuild con la última línea
-                    self.rebuild()
-                    return
-                events.append(event)
+        try:
+            if end:
+                for number, line in enumerate(
+                    data[:end].decode("utf-8-sig").splitlines()
+                ):
+                    if line.strip():
+                        events.append(parse_event(line, number))
+            tail = data[end:]
+            if tail.strip():
+                # Línea completa a la que solo le falta el '\n' (otro escritor o
+                # un checkout). Certificarla sin aplicarla la perdería para siempre.
+                events.append(parse_event(tail.decode("utf-8-sig"), 0))
+                consumed = len(data)
+        except (UnicodeDecodeError, ValueError):
+            self.rebuild()
+            return
         ids = [event.get("id") for event in events]
         known = any(
             event.get("op") == "archive"
@@ -529,7 +572,7 @@ class Store:
                 for event in events:
                     self._apply(event)
             self.write_l0()
-        if not self._remember_fingerprint(fingerprint, offset + end):
+        if not self._remember_fingerprint(fingerprint, offset + consumed):
             self.rebuild()  # otro proceso cambió el fichero durante el catch-up
 
     def _append(self, event: dict) -> tuple[tuple[str, str], bool]:

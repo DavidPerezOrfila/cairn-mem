@@ -8,7 +8,9 @@ from pathlib import Path
 # El O_APPEND de Windows no es atómico entre hilos: serializa dentro del proceso.
 _LOCK = threading.Lock()
 TAIL_CHUNK = 8192
-MAX_FRAGMENT = 64 * 1024
+# Un recap puede superar 120 KB con escapes JSON: truncarlo borraría la última
+# sesión. El tope sigue acotando basura sin '\n' a lo largo de un fichero.
+MAX_FRAGMENT = 1024 * 1024
 
 
 def append_jsonl(

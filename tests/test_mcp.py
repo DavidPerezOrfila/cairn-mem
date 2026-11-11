@@ -197,6 +197,16 @@ def test_save_uses_topic_and_anchor(in_tmp):
     assert rows[second]["anchor_path"] == "a.py"
 
 
+def test_save_with_id_updates_in_place():
+    """Re-anclar por MCP necesita `id`: con `topic` pasaría, sin topic crearía
+    una memoria nueva en vez de reescribir la que quedó stale."""
+    server = Server()
+    memory_id = text(call(server, "save", kind="fact", title="A", body="v1"))
+    same = text(call(server, "save", kind="fact", title="A", body="v2", id=memory_id))
+    assert same == memory_id
+    assert server.store().get(memory_id)["body"] == "v2"
+
+
 def test_archive_tool_archives_memory():
     server = Server()
     memory_id = text(
