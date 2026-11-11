@@ -263,9 +263,3 @@ Read AGENTS.md, PLAN.md and docs/DESIGN.md. Implement ONLY M1 with TDD
 (tests/test_store.py is already red). Standard library only. Show the real pytest
 output, tick the M1 checklist in PLAN.md and do not move on to M2.
 ```
-
-## 8. Deferred
-
-- **S8: GitHub Sponsors metadata.** `.github/FUNDING.yml` plus the `Funding` URL in
-  `pyproject.toml`. Deferred on 2026-11-10: it needs the GitHub Sponsors listing to exist
-  first (`https://github.com/sponsors/accounts`). Nothing else is blocked on it.
