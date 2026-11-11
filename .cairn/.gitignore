@@ -1,5 +1,6 @@
 cairn.db
 cairn.db-*
 MEMORY.md
+.MEMORY.md.*
 sessions.jsonl
 events.jsonl
