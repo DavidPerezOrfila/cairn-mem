@@ -228,6 +228,10 @@ clean install from the public index (`init`, `save`, `search`).
 per-render anchor cache. Every gate in `AGENTS.md` is measured in
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
+**0.9.2 release:** 2026-11-11 on PyPI (wheel and sdist) and tag `v0.9.2`. S9.1 closes the
+five integrity bugs from the audit. Verified with a clean install from the public index
+(`init`, `save`, `search`, version 0.9.2).
+
 ## 5. Backlog (only with measured evidence)
 
 Measured on 2026-11-10 after 0.9.1 (`docs/BENCHMARKS.md`): Precision@3 30/30, retrieval
