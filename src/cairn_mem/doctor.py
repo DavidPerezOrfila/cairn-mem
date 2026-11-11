@@ -4,7 +4,6 @@ No sale a la red. Los ficheros derivados (`cairn.db`, `MEMORY.md`) se refrescan 
 cualquier otro comando; el JSONL no se toca.
 """
 
-import json
 import os
 import sqlite3
 import sys
@@ -126,8 +125,8 @@ def _sessions(root: Path) -> dict:
         return _check("ok", "sessions", "sin fichero (se crea al guardar)")
     try:
         records = sessions.all()
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return _check("fail", "sessions", "JSON inválido a mitad de sessions.jsonl")
+    except ValueError as error:
+        return _check("fail", "sessions", str(error))
     except OSError as error:
         return _check("fail", "sessions", f"no se pudo leer: {error}")
     return _check("ok", "sessions", f"{len(records)} recaps")

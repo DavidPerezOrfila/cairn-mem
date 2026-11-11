@@ -83,6 +83,17 @@ def test_doctor_does_not_create_a_missing_cairn_dir(capsys, in_tmp, monkeypatch)
     assert not target.exists()
 
 
+def test_doctor_reports_a_non_object_session_line(capsys, in_tmp):
+    run(capsys, "init")
+    run(capsys, "session", "save", "--summary", "recap")
+    path = in_tmp / ".cairn" / "sessions.jsonl"
+    path.write_text(path.read_text(encoding="utf-8") + "[1]\n", encoding="utf-8")
+
+    code, out, _ = run(capsys, "doctor")
+
+    assert code == 1 and "sessions.jsonl línea 2" in out
+
+
 def test_doctor_warns_on_an_outdated_schema(capsys, in_tmp):
     run(capsys, "init")
     conn = sqlite3.connect(str(in_tmp / ".cairn" / "cairn.db"))

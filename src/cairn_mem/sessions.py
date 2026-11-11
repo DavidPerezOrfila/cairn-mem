@@ -98,18 +98,25 @@ class Sessions:
     def _records(self) -> dict[str, tuple[int, dict]]:
         if not self.path.exists():
             return {}
-        lines = self.path.read_text(encoding="utf-8-sig").splitlines()
+        text = self.path.read_text(encoding="utf-8-sig")
+        torn_tail = not text.endswith("\n")
+        lines = text.splitlines()
         last = max((i for i, line in enumerate(lines) if line.strip()), default=-1)
         records = {}
         for number, line in enumerate(lines):
             if not line.strip():
                 continue
+            where = f"sessions.jsonl línea {number + 1}"
             try:
                 event = json.loads(line)
-            except json.JSONDecodeError:
-                if number == last:
+            except json.JSONDecodeError as error:
+                if number == last and torn_tail:
                     continue  # escritura rasgada por un crash
-                raise
+                raise ValueError(f"{where}: JSON inválido") from error
+            if not isinstance(event, dict):
+                if number == last and torn_tail:
+                    continue
+                raise ValueError(f"{where}: evento inválido")
             if event.get("op") == "session" and event.get("id"):
                 # El nº de línea desempata: dos recaps en el mismo ns siguen el orden
                 # del append en vez de un id aleatorio.

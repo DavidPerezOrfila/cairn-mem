@@ -33,3 +33,11 @@ which of several installs to replace. The real failure mode is two binaries, whi
 - `cairn doctor` on this repo exits 0 after `cairn init` refreshes `.cairn/.gitignore`.
 - README documents the upgrade commands; `docs/DECISIONS.md` records why the command does
   not exist.
+
+## Pre-release review (2026-11-11)
+
+13 adversarial scenarios outside the suite passed (torn tails, desynced DB, two installs,
+`CAIRN_DIR` pointing nowhere, `events.jsonl` byte-identical). It found one real bug, fixed
+as S10.1: a `sessions.jsonl` line that is valid JSON but not an object (`[1]`) raised
+`AttributeError` and crashed `doctor` with a traceback. `Sessions._records` now rejects it
+with `sessions.jsonl línea N`, and `doctor` reports it as a failed check.
