@@ -287,3 +287,25 @@ could not re-anchor a memory without `topic_key`, and a malformed event surfaced
   and certifies only the bytes it applied, so the incremental path keeps its cost.
 - `Sessions.last` accumulates 64 KB windows backwards: a 20k recap with escapes reaches
   ~120 KB, and returning an older recap as "the last session" broke `context`.
+
+## S10: doctor (2026-11-11)
+
+`cairn doctor` adds no latency to other commands (the module is imported lazily). Gates
+re-run on the release commit of 0.10.0:
+
+| Metric | SLO | Measured |
+|---|---|---|
+| `search` end-to-end p95, 10k | < 350 ms | **308.4 ms** |
+| `save` end-to-end p95, 10k (L0 included) | < 500 ms | **330.0 ms** |
+| Internal `search` p95, 10k | < 10 ms | **4.3 ms** |
+| MCP tool call p95, 10k (`search` / `save` / `context`) | < 50 ms | **7.0 / 28.1 / 16.2 ms** |
+| Rebuild, 10k | measure | **1.31 s** |
+| `cairn doctor` end-to-end, this repo (79 events, 9 stale anchors) | — | **379 ms** |
+| Tests / ruff | — | **224 passed / clean** |
+
+- The machine was busier than in the S9.1 pass (same search p50, higher p95); every SLO
+  still holds with margin.
+- Doctor cost is dominated by hashing the 9 anchored files once.
+- 13 adversarial scenarios outside the suite passed: torn tails in both JSONL files,
+  desynced DB, two installs, `CAIRN_DIR` pointing nowhere, `events.jsonl` byte-identical
+  before/after, valid `--json`.
