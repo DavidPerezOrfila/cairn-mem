@@ -240,6 +240,10 @@ per-render anchor cache. Every gate in `AGENTS.md` is measured in
 five integrity bugs from the audit. Verified with a clean install from the public index
 (`init`, `save`, `search`, version 0.9.2).
 
+**0.10.0 release:** 2026-11-12 on PyPI (wheel and sdist) and tag `v0.10.0`. S10 adds
+`cairn doctor`; S10.1 validates `sessions.jsonl` events. Verified with a clean install from
+the public index (`init`, `save`, `doctor` exit 0, version 0.10.0).
+
 ## 5. Backlog (only with measured evidence)
 
 Measured on 2026-11-10 after 0.9.1 (`docs/BENCHMARKS.md`): Precision@3 30/30, retrieval
