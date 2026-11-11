@@ -767,6 +767,57 @@ def test_truncated_jsonl_triggers_rebuild(root, monkeypatch):
     assert calls == [1]
 
 
+def test_catch_up_applies_a_tail_without_newline(root):
+    """Una línea JSON completa sin `\\n` final (otro escritor, `git checkout`) no
+    puede certificarse sin aplicarse: quedaría fuera de la DB para siempre."""
+    s = Store(root)
+    s.save(kind="fact", title="local", body="a")
+    line = json.dumps(
+        {
+            "op": "save",
+            "id": "ffffffffffff",
+            "ts": 2,
+            "kind": "fact",
+            "title": "externa",
+            "body": "b",
+        },
+        ensure_ascii=False,
+    )
+    with open(f"{root}/events.jsonl", "ab") as f:
+        f.write(line.encode("utf-8"))
+
+    assert s.get("ffffffffffff")["title"] == "externa"
+    s.save(kind="fact", title="despues", body="c")
+    assert Store(root).get("ffffffffffff")["title"] == "externa"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '{"op":"save"}',
+        "[]",
+        '{"op":"nope","id":"ffffffffffff","ts":1}',
+        '{"op":"save","id":"ffffffffffff","ts":1,"kind":"fact","title":"t","body":"'
+        + "x" * 501
+        + '"}',
+        '{"op":"save","id":"ffffffffffff","ts":1,"kind":"fact","title":"t","body":"b","why":{}}',
+        '{"op":"save","id":"ffffffffffff","ts":1e999,"kind":"fact","title":"t","body":"b"}',
+    ],
+)
+def test_invalid_external_event_names_the_line(root, line):
+    """Un evento inventado en el JSONL debe fallar nombrando la línea, no con
+    KeyError ni con un IntegrityError de SQLite."""
+    Path(root).mkdir(parents=True, exist_ok=True)
+    (Path(root) / "events.jsonl").write_text(
+        '{"op":"save","id":"aaaaaaaaaaaa","ts":1,"kind":"fact","title":"ok","body":"b"}\n'
+        + line
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="línea 2"):
+        Store(root)
+
+
 def test_catch_up_survives_torn_tail(root):
     s = Store(root)
     s.save(kind="fact", title="local", body="a")

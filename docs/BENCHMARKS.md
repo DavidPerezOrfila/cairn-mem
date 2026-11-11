@@ -264,3 +264,26 @@ set.
   prefix sha1: without the fix the index kept memories absent from the file.
 - Details: [`docs/features/s7-incremental-sync.md`](features/s7-incremental-sync.md) and
   [`docs/DECISIONS.md`](DECISIONS.md).
+
+## S9.1: integrity audit fixes (2026-11-11)
+
+The audit found and this round fixes five integrity bugs: an unterminated JSONL tail was
+certified without being applied (the event was lost forever), a valid session recap over
+64 KB was skipped or truncated, `cairn init` wrote CRLF into `.cairn/.gitignore`, MCP `save`
+could not re-anchor a memory without `topic_key`, and a malformed event surfaced as a
+`KeyError` or as a CHECK `IntegrityError`. Gates re-run on the fix commit:
+
+| Metric | SLO | Measured |
+|---|---|---|
+| `search` end-to-end p95, 10k idle | < 350 ms | **133.9 ms** |
+| `save` end-to-end p95, 10k idle (L0 included) | < 500 ms | **141.7 ms** |
+| Internal `search` p95, 10k | < 10 ms | **1.9 ms** |
+| MCP tool call p95, 10k (`search` / `save` / `context`) | < 50 ms | **3.6 / 12.7 / 6.5 ms** |
+| Two writers, 10k (`save` / `search`) p95 | < 50 ms | **12.6 / 4.0 ms** |
+| Rebuild, 10k | measure | **565 ms** |
+| Tests / ruff | — | **210 passed / clean** |
+
+- `_catch_up` now applies a complete tail without `\n` (another writer, a `git checkout`)
+  and certifies only the bytes it applied, so the incremental path keeps its cost.
+- `Sessions.last` accumulates 64 KB windows backwards: a 20k recap with escapes reaches
+  ~120 KB, and returning an older recap as "the last session" broke `context`.

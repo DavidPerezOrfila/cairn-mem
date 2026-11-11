@@ -279,6 +279,27 @@ def test_check_hashes_large_anchors(capsys, in_tmp, monkeypatch):
     assert "sin memorias stale" in run(capsys, "check")[1]
 
 
+def test_init_writes_gitignore_with_lf(capsys, in_tmp):
+    """Windows: `write_text` sin `newline` convierte a CRLF y ensucia el archivo."""
+    run(capsys, "init")
+    raw = (in_tmp / ".cairn" / ".gitignore").read_bytes()
+    assert b"\r" not in raw
+
+
+def test_session_save_appends_to_gitignore_with_lf(capsys, in_tmp):
+    run(capsys, "init")
+    run(capsys, "session", "save", "--summary", "resumen")
+    raw = (in_tmp / ".cairn" / ".gitignore").read_bytes()
+    assert b"\r" not in raw and b"sessions.jsonl" in raw
+
+
+def test_bad_event_line_is_reported_without_traceback(capsys, in_tmp):
+    (in_tmp / ".cairn").mkdir()
+    (in_tmp / ".cairn" / "events.jsonl").write_text('{"op":"save"}\n', encoding="utf-8")
+    code, _, err = run(capsys, "search", "x")
+    assert code == 1 and "línea 1" in err
+
+
 def test_personal_scope_is_reachable_from_the_project(capsys, in_tmp):
     run(capsys, "init")
     _, out, _ = run(

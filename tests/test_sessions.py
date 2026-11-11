@@ -1,5 +1,7 @@
 """Tests de sesiones (M6): append-only, lectura y tolerancia a línea rasgada."""
 
+import json
+
 import pytest
 
 from cairn_mem.sessions import Sessions
@@ -71,6 +73,31 @@ def test_last_reads_a_long_file_without_loading_it(tmp_path):
         sessions.save("linea " * 100, ts=number)
     last = sessions.save("última", ts=10_000)
     assert sessions.last()["id"] == last
+
+
+def test_last_finds_a_recap_longer_than_the_read_window(tmp_path):
+    """MAX_SUMMARY (20k) con escapes JSON supera los 64 KB: el último recap no
+    puede perderse por tamaño de ventana."""
+    sessions = Sessions(str(tmp_path))
+    sessions.save("primera", ts=1)
+    big = sessions.save("\x01" * 19_999, ts=2)
+    assert sessions.last()["id"] == big
+
+
+def test_save_repairs_a_long_unterminated_tail(tmp_path):
+    """La reparación de cola no puede truncar un recap válido de más de 64 KB."""
+    sessions = Sessions(str(tmp_path))
+    raw = json.dumps(
+        {"op": "session", "id": "ffffffffffff", "ts": 1, "summary": "\x01" * 19_999}
+    ).encode("utf-8")
+    assert len(raw) > 64 * 1024
+    sessions.path.parent.mkdir(parents=True, exist_ok=True)
+    sessions.path.write_bytes(raw)  # sin '\n' final
+
+    second = sessions.save("segunda")
+
+    assert sessions.get("ffffffffffff")["summary"].startswith("\x01")
+    assert sessions.get(second)["summary"] == "segunda"
 
 
 def test_unknown_session_returns_none(tmp_path):
