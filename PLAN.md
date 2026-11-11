@@ -216,7 +216,7 @@ Each round is a slice: tests first, gate, review and its own release.
 | S7 | Incremental sync: apply only the JSONL tail, guarded by the offset and the prefix sha1 | 0.9.0 | [`docs/features/s7-incremental-sync.md`](docs/features/s7-incremental-sync.md) |
 | S7.1 | Certification re-stat: a prefix replaced during the sha1 forces a rebuild | 0.9.1 | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
 | S9 | Audit fixes: one `_session_root`, anchor hash cache, anchor size cap, tail read for `context`, `search --personal` without side effects, `.MEMORY.md.*` ignored | 0.9.1 | `docs/DECISIONS.md` |
-| S9.1 | Audit fixes, integrity: apply a JSONL tail without `\n`, torn-tail tolerance by the missing `\n`, `parse_event` with file and line, `Sessions.last` accumulates the window backwards, `MAX_FRAGMENT` 1 MiB, LF `.gitignore`, MCP `save` accepts `id` | pending (0.9.2) | `docs/DECISIONS.md` |
+| S9.1 | Audit fixes, integrity: apply a JSONL tail without `\n`, torn-tail tolerance by the missing `\n`, `parse_event` with file and line, `Sessions.last` accumulates the window backwards, `MAX_FRAGMENT` 1 MiB, LF `.gitignore`, MCP `save` accepts `id` | 0.9.2 | `docs/DECISIONS.md` |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
