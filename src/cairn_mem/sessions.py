@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from cairn_mem.jsonl import append_jsonl
-from cairn_mem.store import reject_secrets
+from cairn_mem.store import ID_PATTERN, reject_secrets
 
 MAX_SUMMARY = 20000
 WINDOW = 64 * 1024
@@ -27,6 +27,12 @@ def _session_record(raw: bytes):
     return None
 
 
+def _valid_id(sid: str) -> str:
+    if not isinstance(sid, str) or not ID_PATTERN.fullmatch(sid):
+        raise ValueError(f"id de sesión inválido: {sid!r}; se esperan 12 hex")
+    return sid
+
+
 class Sessions:
     def __init__(self, root: str):
         self.path = Path(root) / "sessions.jsonl"
@@ -34,7 +40,7 @@ class Sessions:
 
     def save(self, summary: str, id=None, ts=None) -> str:
         summary = self.validate(summary)
-        sid = id or secrets.token_hex(6)
+        sid = _valid_id(id) if id is not None else secrets.token_hex(6)
         append_jsonl(
             self.path,
             {
@@ -57,14 +63,14 @@ class Sessions:
         return summary
 
     def get(self, id: str):
-        record = self._records().get(id)
+        record = self._records().get(_valid_id(id))
         return record[1] if record else None
 
     def last(self):
         """Último recap escrito, leyendo solo la cola. `context` se llama al
         empezar cada sesión, así que no debe parsear el fichero entero. La
         ventana se acumula hacia atrás: un recap de 20k con escapes supera los
-        64 KB y cabía partido en dos ventanas."""
+        64 KB y cabía partido en dos ventanas. Mismo orden que `all`: append."""
         if not self.path.exists():
             return None
         with self.path.open("rb") as f:
@@ -87,10 +93,10 @@ class Sessions:
         return None
 
     def all(self, limit: int | None = None) -> list[dict]:
+        # el nº de línea es el orden del append, el mismo que usa `last`:
+        # `ts` no ordena porque un escritor con reloj atrasado lo rompería.
         records = sorted(
-            self._records().values(),
-            key=lambda item: (item[1].get("ts", 0), item[0]),
-            reverse=True,
+            self._records().values(), key=lambda item: item[0], reverse=True
         )
         ordered = [record for _, record in records]
         return ordered[:limit] if limit is not None else ordered

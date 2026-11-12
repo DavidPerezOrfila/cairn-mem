@@ -297,7 +297,8 @@ def _context(server, args):
         return text
     summary = record.get("summary", "")
     if len(summary) > LAST_SESSION_CHARS:
-        summary = summary[:LAST_SESSION_CHARS] + "\n… (recortado)"
+        half = LAST_SESSION_CHARS // 2
+        summary = f"{summary[:half]}\n… (recortado)\n{summary[-half:]}"
     return f"{text}\n## Última sesión ({record['id']})\n{summary}\n"
 
 

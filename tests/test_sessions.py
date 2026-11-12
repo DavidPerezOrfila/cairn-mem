@@ -125,6 +125,33 @@ def test_unknown_session_returns_none(tmp_path):
     assert Sessions(str(tmp_path)).get("000000000000") is None
 
 
+def test_all_uses_append_order_not_timestamps(tmp_path):
+    sessions = Sessions(str(tmp_path))
+    first = sessions.save("primera", ts=2)
+    second = sessions.save("segunda", ts=1)
+    assert [record["id"] for record in sessions.all()] == [second, first]
+
+
+def test_last_and_all_agree_when_the_appended_ts_is_older(tmp_path):
+    sessions = Sessions(str(tmp_path))
+    sessions.save("primera", ts=2)
+    second = sessions.save("segunda", ts=1)
+    assert sessions.last()["id"] == sessions.all()[0]["id"] == second
+
+
+@pytest.mark.parametrize(
+    "sid", ["", "nope", "FFFFFFFFFFFF", "fffffffffff", "fffffffffffff"]
+)
+def test_save_rejects_a_malformed_id(tmp_path, sid):
+    with pytest.raises(ValueError, match="id"):
+        Sessions(str(tmp_path)).save("uno", id=sid)
+
+
+def test_get_rejects_a_malformed_id(tmp_path):
+    with pytest.raises(ValueError, match="id"):
+        Sessions(str(tmp_path)).get("NO-ES-UN-ID")
+
+
 @pytest.mark.parametrize("secret", ["password = hunter2", "AKIAIOSFODNN7EXAMPLE"])
 def test_secret_in_summary_is_rejected(tmp_path, secret):
     sessions = Sessions(str(tmp_path))
