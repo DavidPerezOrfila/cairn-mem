@@ -2,10 +2,10 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10 and S10.1 are implemented.** 0.10.0 is
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1 and S13 are implemented.** 0.10.0 is
   published (2026-11-12, tagged `v0.10.0`). `store.py`, `cli.py`, `anchor.py`,
   `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and
-  `legacy.py` are implemented. `tests/` (224) covers the CLI, the store, the L0, anchors,
+  `legacy.py` are implemented. `tests/` (236) covers the CLI, the store, the L0, anchors,
   MCP, sessions, import, the JSONL tail repair, incremental sync, retrieval, the golden
   set, the integrity audit fixes and `doctor`.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -89,9 +89,11 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
   out, plural trimmed to 5+ characters, prefix), use AND and fall back to OR when there
   are no results. Raw queries fail with `-`, `:` and `"`.
   Ranking: `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)`.
-- **Security:** reject (do not redact) secrets before writing: cloud keys,
+- **Security:** reject (do not redact) secrets before writing: cloud keys (`AKIA`, `ASIA`),
   `BEGIN ... PRIVATE KEY`, JWTs `eyJ...`, provider tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`,
-  `ghr_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza`),
+  `ghr_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza`, Slack `xox[baprs]-`,
+  Stripe `sk_live_`/`rk_live_`, `npm_`), `Bearer <token>` with at least one digit (prose
+  like "Bearer authentication" must pass),
   `password|secret|token|api_key` with `=` or `:` (JSON/YAML), and URLs `://user:pass@`.
   A `body` over 500 characters or a `title` over 200 is an error. `id` must be 12 lowercase
   hex, and `topic_key` is ≤ 100 characters with no control characters.
