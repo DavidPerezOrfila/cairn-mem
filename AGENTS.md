@@ -2,10 +2,11 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1 and S13 are implemented.** 0.10.0 is
-  published (2026-11-12, tagged `v0.10.0`). `store.py`, `cli.py`, `anchor.py`,
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11 and S13 are implemented.** 0.11.0 is
+  ready to publish (not on PyPI yet); 0.10.0 was published (2026-11-12, tagged
+  `v0.10.0`). `store.py`, `cli.py`, `anchor.py`,
   `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and
-  `legacy.py` are implemented. `tests/` (236) covers the CLI, the store, the L0, anchors,
+  `legacy.py` are implemented. `tests/` (245) covers the CLI, the store, the L0, anchors,
   MCP, sessions, import, the JSONL tail repair, incremental sync, retrieval, the golden
   set, the integrity audit fixes and `doctor`.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -112,7 +113,9 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
   accumulating windows: one recap can exceed 64 KB with JSON escapes, and `MAX_FRAGMENT`
   is 1 MiB so the tail repair does not truncate it. `_records` rejects a line that is not
   a JSON object or is invalid mid-file with `sessions.jsonl línea N`; only a torn tail (no
-  final `\n`) is skipped.
+  final `\n`) is skipped. `last` and `all` share one order: the append (line number), not
+  `ts`; a duplicate `id` keeps its last line. `id` must be 12 lowercase hex in `save` and
+  `get`. `context` keeps the head and the tail (2000 + 2000 characters) of a long recap.
 - **Importer:** idempotent through `sha1("<fixed salt>:<source id>")[:12]`. `What` →
   `body` (≤ 500) and the rest → `why`. `global/personal` goes to the personal scope, not
   to the current repo.

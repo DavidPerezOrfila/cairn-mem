@@ -321,6 +321,14 @@ def test_context_truncates_long_session_summary():
     assert "… (recortado)" in body and len(body) < 9000
 
 
+def test_context_keeps_the_tail_of_a_long_session_summary():
+    server = Server()
+    summary = "inicio del recap\n" + "x" * 8000 + "\nla última línea FIN"
+    call(server, "save_session", summary=summary)
+    body = text(call(server, "context"))
+    assert "inicio del recap" in body and "la última línea FIN" in body
+
+
 def test_tool_errors_are_structured():
     server = Server()
     response = call(server, "save", kind="fact", title="t", body="password = hunter2")
