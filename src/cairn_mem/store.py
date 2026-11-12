@@ -23,12 +23,18 @@ ID_PATTERN = re.compile(r"[0-9a-f]{12}")
 
 SECRET_PATTERNS = (
     re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"ASIA[0-9A-Z]{16}"),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),
     re.compile(
         r"(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|glpat-|sk-proj-|sk-ant-|AIza)"
         r"[A-Za-z0-9_-]{8,}"
     ),
+    re.compile(r"xox[baprs]-[A-Za-z0-9-]{8,}"),
+    re.compile(r"(?<![A-Za-z])(?:sk|rk)_live_[A-Za-z0-9]{8,}"),
+    re.compile(r"npm_[A-Za-z0-9_-]{20,}"),
+    # Bearer con un valor opaco: exige al menos un dígito para no cazar prosa.
+    re.compile(r"(?i)\bbearer\s+(?=[\w.~+/-]*\d)[\w.~+/-]{8,}"),
     re.compile(
         r"(?i)(?<![a-z0-9])"
         r"(password|passwd|secret|token|api[-_]?key|access[-_]?key|private_key"

@@ -132,6 +132,13 @@ def test_body_over_500_chars_rejected(store):
         "private_key: abc",
         "postgres://user:pass@host/db",
         "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc",
+        "ASIAIOSFODNN7EXAMPLE",
+        "xoxb-123456789012-abcdefghij",
+        "sk_live_51H8xyzabc123",
+        "rk_live_51H8xyzabc123",
+        "npm_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789",
+        "npm_aBcDeFg-HiJkLm_NoPqRsTuVwXyZ012345",
+        "Authorization: Bearer 8f3kd92ldkq1",
     ],
 )
 def test_secret_rejected_and_not_written(store, root, secret):
@@ -145,6 +152,20 @@ def test_secret_rejected_and_not_written(store, root, secret):
         with open(p, encoding="utf-8") as f:
             content = f.read()
     assert secret not in content
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "el bearer of the token no es un secreto",
+        "Bearer authentication en la cabecera",
+        "task_live_ no es una clave de Stripe",
+        "task_live_abcdef123456 es una convencion de ids",
+        "npm_run_build es un script",
+    ],
+)
+def test_prose_near_secret_words_is_accepted(store, text):
+    assert store.save(kind="fact", title="t", body=text)
 
 
 def test_external_append_is_picked_up(root):
