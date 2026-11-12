@@ -2,8 +2,9 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11 and S13 are implemented.** 0.10.0 is
-  published (2026-11-12, tagged `v0.10.0`). `store.py`, `cli.py`, `anchor.py`,
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11 and S13 are implemented.** 0.11.0 is
+  ready to publish (not on PyPI yet); 0.10.0 was published (2026-11-12, tagged
+  `v0.10.0`). `store.py`, `cli.py`, `anchor.py`,
   `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and
   `legacy.py` are implemented. `tests/` (245) covers the CLI, the store, the L0, anchors,
   MCP, sessions, import, the JSONL tail repair, incremental sync, retrieval, the golden
