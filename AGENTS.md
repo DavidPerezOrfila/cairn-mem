@@ -32,8 +32,12 @@ python bench/bench_retrieval.py --distractors 10000 # ranking al crecer el índi
 python bench/bench_anchors.py --reps 30             # coste de los anclas en save
 ```
 
-- Before publishing: delete `dist/` **and** `build/`. `uv build` reuses `build/lib` and
-  packages modules you already deleted from the tree. One wheel included the old importer
+- Publishing goes through `.github/workflows/publish.yml` (Trusted Publishing,
+  OIDC, attestations PEP 740): push a tag `v*` and it builds and publishes; no PyPI
+  token in the repo. The PyPI pending publisher (owner/repo/workflow
+  `publish.yml`) must be registered once before the first tag. Still delete `dist/`
+  **and** `build/` when building locally: `uv build` reuses `build/lib` and packages
+  modules you already deleted from the tree. One wheel included the old importer
   because of an orphan `build/lib/`.
 - CI lives in `.github/workflows/ci.yml`: ubuntu/macos/windows × Python 3.10 and 3.14
   (tests and ruff). There is no ruff config and no pre-commit, so also verify locally
