@@ -24,12 +24,31 @@ INTERNAL_ERROR = -32603
 LAST_SESSION_CHARS = 4000
 SCOPES = ("project", "personal", "all")
 
+# Anotaciones MCP: los clientes que las respetan auto-aprueban lo seguro y
+# piden confirmación para lo demás.
+READ_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+}
+WRITE_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+}
+DESTRUCTIVE_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": True,
+}
+
 TOOLS = [
     {
         "name": "save",
         "description": (
             "Guarda una memoria del proyecto. Mismo topic reemplaza la anterior."
         ),
+        "annotations": WRITE_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -49,6 +68,7 @@ TOOLS = [
     {
         "name": "search",
         "description": "Busca memorias activas por texto (BM25) en proyecto y scope personal.",
+        "annotations": READ_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -63,6 +83,7 @@ TOOLS = [
     {
         "name": "get",
         "description": "Devuelve una memoria completa por id.",
+        "annotations": READ_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {"id": {"type": "string"}},
@@ -76,11 +97,13 @@ TOOLS = [
             "Memoria del proyecto (L0) y el último resumen de sesión del proyecto, "
             "para cargar al empezar."
         ),
+        "annotations": READ_ANNOTATIONS,
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "save_session",
         "description": "Guarda el resumen de la sesión actual (continuidad, no memoria).",
+        "annotations": WRITE_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -94,6 +117,7 @@ TOOLS = [
     {
         "name": "archive",
         "description": "Archiva una memoria: deja de salir en search y en el L0.",
+        "annotations": DESTRUCTIVE_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -107,6 +131,7 @@ TOOLS = [
     {
         "name": "session_list",
         "description": "Lista las sesiones recientes más nuevas primero (preview).",
+        "annotations": READ_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -119,6 +144,7 @@ TOOLS = [
     {
         "name": "session_get",
         "description": "Devuelve el resumen completo de una sesión por id.",
+        "annotations": READ_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -138,8 +164,12 @@ INSTRUCTIONS = (
 )
 
 
+READ_TOOLS = frozenset({"search", "get", "context", "session_list", "session_get"})
+
+
 class Server:
-    def __init__(self):
+    def __init__(self, read_only: bool = False):
+        self.read_only = read_only
         self._store = None
         self._personal = None
 
@@ -186,7 +216,12 @@ class Server:
         if method == "ping":
             return _result(request_id, {})
         if method == "tools/list":
-            return _result(request_id, {"tools": TOOLS})
+            tools = [
+                tool
+                for tool in TOOLS
+                if not self.read_only or tool["name"] in READ_TOOLS
+            ]
+            return _result(request_id, {"tools": tools})
         if method == "tools/call":
             return self._call_tool(request_id, params)
         return _error(request_id, METHOD_NOT_FOUND, f"método desconocido: {method}")
@@ -201,6 +236,12 @@ class Server:
         tool = _TOOL_HANDLERS.get(name)
         if tool is None:
             return _error(request_id, INVALID_PARAMS, f"tool desconocida: {name}")
+        if self.read_only and name not in READ_TOOLS:
+            return _error(
+                request_id,
+                INVALID_PARAMS,
+                f"tool no disponible en modo read-only: {name}",
+            )
         try:
             text = tool(self, arguments)
         except (ValueError, TypeError, FileNotFoundError, OSError) as error:
@@ -388,11 +429,11 @@ def _write(stream, message) -> bool:
     return True
 
 
-def serve(stdin=None, stdout=None) -> int:
+def serve(stdin=None, stdout=None, read_only: bool = False) -> int:
     """Lee NDJSON de stdin y responde por stdout hasta EOF."""
     source = stdin if stdin is not None else sys.stdin.buffer
     target = stdout if stdout is not None else sys.stdout.buffer
-    server = Server()
+    server = Server(read_only=read_only)
     for raw in source:
         line = raw.strip()
         if not line:

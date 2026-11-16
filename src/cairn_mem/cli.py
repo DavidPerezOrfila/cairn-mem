@@ -285,7 +285,7 @@ def _cmd_import(ns) -> int:
 def _cmd_mcp(ns) -> int:
     from cairn_mem.mcp import serve
 
-    return serve()
+    return serve(read_only=ns.read_only)
 
 
 def _cmd_doctor(ns) -> int:
@@ -390,6 +390,11 @@ def _parser() -> argparse.ArgumentParser:
     importer.set_defaults(handler=_cmd_import)
 
     mcp = sub.add_parser("mcp", help="sirve MCP por stdio (JSON-RPC)")
+    mcp.add_argument(
+        "--read-only",
+        action="store_true",
+        help="solo expone las tools de lectura; rechaza save/save_session/archive",
+    )
     mcp.set_defaults(handler=_cmd_mcp)
 
     doctor = sub.add_parser("doctor", help="diagnostica el store y la instalación")

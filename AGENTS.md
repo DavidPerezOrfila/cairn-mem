@@ -2,12 +2,14 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12 and S13 are implemented.**
-  0.12.0 is published (2026-11-16, tagged `v0.12.0`); no round is pending. `store.py`,
-  `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`,
-  `doctor.py` and `legacy.py` are implemented. `tests/` (261) covers the CLI, the store,
-  the L0, anchors, MCP, sessions, import, the JSONL tail repair, incremental sync,
-  retrieval, the golden set, the integrity audit fixes, `doctor` and the backlog benches.
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13 and S15 (partial:
+  annotations and `--read-only`) are implemented.** 0.12.0 is published (2026-11-16,
+  tagged `v0.12.0`); S14 is merged separately (bench-only). `store.py`, `cli.py`,
+  `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py`
+  and `legacy.py` are implemented. `tests/` (264) covers the CLI, the store, the L0,
+  anchors, MCP (annotations and read-only mode), sessions, import, the JSONL tail repair,
+  incremental sync, retrieval, the golden set, the integrity audit fixes, `doctor` and the
+  backlog benches.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -111,7 +113,10 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   500 ms, startup included. In-process MCP tool call: < 50 ms.
 - **MCP:** stdout carries protocol only (NDJSON in binary, `\n`). Logs go to stderr. No
   asyncio and no signals. The process caches one `Store` per scope and is the only writer
-  while it lives.
+  while it lives. Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+  `idempotentHint`): the 5 read tools are read-only, `archive` is destructive and
+  idempotent, `save`/`save_session` are writes. `cairn mcp --read-only` serves only the
+  5 read tools and rejects the write tools at the protocol edge.
 - **Doctor:** `doctor.py` is imported lazily and is local: no network, no events written.
   It parses `events.jsonl` with `parse_event` (line-numbered failures) and refreshes
   `cairn.db`/`MEMORY.md` only because it opens the `Store`, like every other command.
