@@ -19,3 +19,8 @@
   Results are in [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md).
 - `ab_protocol.md`: the small paired A/B test (see PLAN.md). `ab.py` runs it with
   OpenCode. Results are in [`docs/AB_RESULTS.md`](../docs/AB_RESULTS.md).
+
+Every bench measures inside a `TemporaryDirectory` and closes its `Store` on every path
+(`closing`), so no directory is left behind (`Windows` keeps an open SQLite file
+undeletable). `bench_cli.py`, `bench_mcp.py` and `bench_sync.py` exit with 1 when an SLO
+fails, with and without `--json`, so a release script can just check the exit code.

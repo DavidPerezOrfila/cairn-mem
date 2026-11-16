@@ -2,14 +2,15 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S15 (partial:
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (partial:
   annotations and `--read-only`) and S18 (`source`) are implemented.** 0.12.0 is
-  published (2026-11-16, tagged `v0.12.0`); S15 remainder, S14 (bench-only, separate PR)
-  and S18 are unreleased. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`,
-  `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and `legacy.py` are implemented.
-  `tests/` (275) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
+  published (2026-11-16, tagged `v0.12.0`); the S15 remainder and S18 are unreleased.
+  `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
+  `jsonl.py`, `doctor.py` and `legacy.py` are implemented.
+  `tests/` (282) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
   mode and `source`), sessions, import, the JSONL tail repair, incremental sync,
-  retrieval, the golden set, the integrity audit fixes, `doctor` and the backlog benches.
+  retrieval, the golden set, the integrity audit fixes, `doctor`, the backlog benches and
+  the bench hygiene.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -33,6 +34,11 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
 python bench/bench_retrieval.py --distractors 10000 # ranking al crecer el índice
 python bench/bench_anchors.py --reps 30             # coste de los anclas en save
 ```
+
+- Benches: each one measures in a `TemporaryDirectory` and closes its `Store` in every
+  path (`closing`), because Windows cannot delete an open SQLite file. The three with an
+  SLO (`bench_cli`, `bench_mcp`, `bench_sync`) exit 1 when it fails, in the text and
+  `--json` paths.
 
 - Publishing goes through `.github/workflows/publish.yml` (Trusted Publishing,
   OIDC, attestations PEP 740): push a tag `v*` and it builds and publishes; no PyPI

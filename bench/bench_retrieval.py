@@ -13,6 +13,7 @@ import json
 import re
 import tempfile
 from collections import Counter
+from contextlib import closing
 from pathlib import Path
 
 from cairn_mem.store import Store
@@ -149,9 +150,7 @@ def grep_rank(corpus: list[dict], query: str, limit: int) -> list[str]:
 
 
 def cairn_ranks(corpus: list[dict], queries: list[dict], limit: int) -> list[list[str]]:
-    with tempfile.TemporaryDirectory(
-        prefix="cairn-retrieval-", ignore_cleanup_errors=True
-    ) as tmp:
+    with tempfile.TemporaryDirectory(prefix="cairn-retrieval-") as tmp:
         root = Path(tmp) / ".cairn"
         root.mkdir()
         # Siembra por JSONL y un solo rebuild: con 10k memorias, save() por memoria
@@ -172,11 +171,11 @@ def cairn_ranks(corpus: list[dict], queries: list[dict], limit: int) -> list[lis
         (root / "events.jsonl").write_text(
             "\n".join(lines) + "\n", encoding="utf-8", newline="\n"
         )
-        store = Store(str(root))
-        return [
-            [row["title"] for row in store.search(query["query"], limit=limit)]
-            for query in queries
-        ]
+        with closing(Store(str(root))) as store:
+            return [
+                [row["title"] for row in store.search(query["query"], limit=limit)]
+                for query in queries
+            ]
 
 
 def evaluate(queries: list[dict], rankings: list[list[str]]) -> list[dict]:

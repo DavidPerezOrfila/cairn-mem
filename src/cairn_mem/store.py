@@ -325,6 +325,10 @@ class Store:
         ):
             self.rebuild()
 
+    def close(self) -> None:
+        """Cierra la conexión: sin esto Windows no deja borrar `.cairn/`."""
+        self._conn.close()
+
     # --- escritura ---
 
     def save(

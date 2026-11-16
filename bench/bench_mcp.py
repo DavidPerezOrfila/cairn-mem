@@ -9,6 +9,7 @@ import json
 import os
 import tempfile
 import time
+from contextlib import closing
 from pathlib import Path
 
 from bench_cli import _seed, _stats
@@ -33,28 +34,44 @@ def _call(server: Server, name: str, arguments: dict) -> None:
 
 
 def bench(reps: int) -> dict:
-    root = Path(tempfile.mkdtemp(prefix="cairn-bench-mcp-")) / ".cairn"
-    root.mkdir(parents=True)
-    _seed(root, COUNT)
-    os.environ["CAIRN_DIR"] = str(root)
-    server = Server()
-    server.store()  # pagar el rebuild fuera de la medición
+    with tempfile.TemporaryDirectory(prefix="cairn-bench-mcp-") as tmp:
+        root = Path(tmp) / ".cairn"
+        root.mkdir(parents=True)
+        _seed(root, COUNT)
+        previous = os.environ.get("CAIRN_DIR")
+        os.environ["CAIRN_DIR"] = str(root)
+        try:
+            server = Server()
+            # pagar el rebuild fuera de la medición
+            with closing(server.store()):
+                timings = {"search": [], "save": [], "context": []}
+                for index in range(reps):
+                    start = time.perf_counter()
+                    _call(server, "search", {"query": "oauth", "limit": 5})
+                    timings["search"].append((time.perf_counter() - start) * 1000)
 
-    timings = {"search": [], "save": [], "context": []}
-    for index in range(reps):
-        start = time.perf_counter()
-        _call(server, "search", {"query": "oauth", "limit": 5})
-        timings["search"].append((time.perf_counter() - start) * 1000)
+                    start = time.perf_counter()
+                    _call(
+                        server,
+                        "save",
+                        {"kind": "fact", "title": f"bench {index}", "body": "b"},
+                    )
+                    timings["save"].append((time.perf_counter() - start) * 1000)
 
-        start = time.perf_counter()
-        _call(server, "save", {"kind": "fact", "title": f"bench {index}", "body": "b"})
-        timings["save"].append((time.perf_counter() - start) * 1000)
+                    start = time.perf_counter()
+                    _call(server, "context", {})
+                    timings["context"].append((time.perf_counter() - start) * 1000)
+        finally:
+            if previous is None:
+                os.environ.pop("CAIRN_DIR", None)
+            else:
+                os.environ["CAIRN_DIR"] = previous
 
-        start = time.perf_counter()
-        _call(server, "context", {})
-        timings["context"].append((time.perf_counter() - start) * 1000)
+        return {"records": COUNT, **{k: _stats(v) for k, v in timings.items()}}
 
-    return {"records": COUNT, **{key: _stats(value) for key, value in timings.items()}}
+
+def slo_ok(result: dict) -> bool:
+    return all(result[key]["p95_ms"] < SLO_MS for key in ("search", "save", "context"))
 
 
 def main(argv=None) -> int:
@@ -63,18 +80,18 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true")
     ns = parser.parse_args(argv)
     result = bench(ns.reps)
+    ok = slo_ok(result)
     if ns.json:
         print(json.dumps(result, indent=2))
-        return 0
+        return 0 if ok else 1
     print(f"{result['records']} registros (tool call en proceso)")
     for key in ("search", "save", "context"):
         stats = result[key]
         print(
             f"  {key:<8} p50 {stats['p50_ms']:>6.1f} ms  p95 {stats['p95_ms']:>6.1f} ms"
         )
-    worst = max(result[key]["p95_ms"] for key in ("search", "save", "context"))
-    print(f"  SLO (p95 < {SLO_MS} ms): {'OK' if worst < SLO_MS else 'FALLA'}")
-    return 0
+    print(f"  SLO (p95 < {SLO_MS} ms): {'OK' if ok else 'FALLA'}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
