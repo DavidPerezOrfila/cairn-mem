@@ -225,6 +225,32 @@ def test_absolute_anchor_is_stored_relative(capsys, in_tmp):
     assert json.loads(out)["anchor_path"] == "src/a.py"
 
 
+def test_save_with_source_shows_provenance(capsys, in_tmp):
+    run(capsys, "init")
+    _, out, _ = run(
+        capsys,
+        "save",
+        "--kind",
+        "fact",
+        "--title",
+        "x",
+        "--body",
+        "y",
+        "--source",
+        "opencode/glm-4.7",
+        "--json",
+    )
+    mid = json.loads(out)["id"]
+    _, out, _ = run(capsys, "search", "x", "--json")
+    assert json.loads(out)[0]["source"] == "opencode/glm-4.7"
+    _, out, _ = run(capsys, "get", mid, "--json")
+    assert json.loads(out)["source"] == "opencode/glm-4.7"
+    _, out, _ = run(capsys, "search", "x")
+    assert "(opencode/glm-4.7)" in out
+    _, out, _ = run(capsys, "search", "sin-fuente-xyz")
+    assert out.strip() == "sin resultados"
+
+
 def test_save_regenerates_l0_and_render_matches(capsys, in_tmp):
     run(capsys, "init")
     run(capsys, "save", "--kind", "decision", "--title", "Usar FTS5", "--body", "bm25")

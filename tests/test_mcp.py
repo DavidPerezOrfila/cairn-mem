@@ -349,6 +349,127 @@ def test_unknown_method_and_bad_request():
     assert response["error"]["code"] == -32602
 
 
+def test_tools_carry_annotations():
+    response = Server().handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    tools = {t["name"]: t["annotations"] for t in response["result"]["tools"]}
+    for name in ("search", "get", "context", "session_list", "session_get"):
+        assert tools[name] == {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+        }, name
+    for name in ("save", "save_session"):
+        assert tools[name] == {
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+        }, name
+    assert tools["archive"] == {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+    }
+
+
+def test_read_only_server_exposes_and_allows_only_read_tools(in_tmp):
+    server = Server(read_only=True)
+    response = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    names = {tool["name"] for tool in response["result"]["tools"]}
+    assert names == {"search", "get", "context", "session_list", "session_get"}
+    response = call(server, "save", kind="fact", title="T", body="B")
+    assert response["error"]["code"] == -32602
+    assert "read-only" in response["error"]["message"]
+    # la denegación no escribe nada en events.jsonl
+    assert (in_tmp / ".cairn" / "events.jsonl").read_text(encoding="utf-8") == ""
+
+
+def test_mcp_read_only_flag_subprocess(in_tmp):
+    messages = [
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "save",
+                "arguments": {"kind": "fact", "title": "T", "body": "B"},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "archive",
+                "arguments": {"id": "000000000000"},
+            },
+        },
+    ]
+    payload = "\n".join(json.dumps(m) for m in messages) + "\n"
+    process = subprocess.run(
+        [sys.executable, "-m", "cairn_mem.cli", "mcp", "--read-only"],
+        input=payload.encode("utf-8"),
+        capture_output=True,
+        cwd=in_tmp,
+        check=False,
+    )
+    assert process.returncode == 0, process.stderr
+    responses = [
+        json.loads(line) for line in process.stdout.decode("utf-8").splitlines()
+    ]
+    assert {tool["name"] for tool in responses[0]["result"]["tools"]} == {
+        "search",
+        "get",
+        "context",
+        "session_list",
+        "session_get",
+    }
+    assert responses[1]["error"]["code"] == -32602  # save
+    assert responses[2]["error"]["code"] == -32602  # archive
+
+
+def test_save_accepts_source():
+    server = Server()
+    memory_id = text(
+        call(
+            server,
+            "save",
+            kind="fact",
+            title="T",
+            body="B",
+            source="claude/review",
+        )
+    )
+    memory = json.loads(text(call(server, "get", id=memory_id)))
+    assert memory["source"] == "claude/review"
+
+
+def test_save_source_is_validated():
+    response = call(
+        Server(),
+        "save",
+        kind="fact",
+        title="T",
+        body="B",
+        source="s" * 101,
+    )
+    assert response["result"]["isError"] is True
+
+
+def test_save_rejects_non_string_why():
+    """Un `why` no-string llegaba a reject_secrets y fallaba con TypeError crudo."""
+    response = call(
+        Server(),
+        "save",
+        kind="fact",
+        title="T",
+        body="B",
+        why=5,
+    )
+    assert response["result"]["isError"] is True
+    assert "why" in text(response)
+
+
 def test_initialize_falls_back_to_supported_version():
     server = Server()
     response = server.handle(

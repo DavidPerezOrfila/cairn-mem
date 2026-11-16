@@ -1,0 +1,37 @@
+name: publish
+
+# Trusted Publishing (OIDC): sin token de API. El publisher debe estar dado de
+# alta en PyPI (Settings -> Publishing) con este workflow antes del primer tag.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: Build wheel and sdist
+        run: uv build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # Permiso obligatorio para Trusted Publishing; solo en este job.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      # attestations PEP 740 se generan por defecto en el flujo de Trusted Publishing.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

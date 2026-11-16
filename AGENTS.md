@@ -2,13 +2,15 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13 and S14 are
-  implemented.** 0.12.0 is published (2026-11-16, tagged `v0.12.0`); S14 is unreleased
-  (bench-only plus `Store.close()`). `store.py`, `cli.py`, `anchor.py`, `render.py`,
-  `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and `legacy.py` are
-  implemented. `tests/` (268) covers the CLI, the store, the L0, anchors, MCP, sessions,
-  import, the JSONL tail repair, incremental sync, retrieval, the golden set, the
-  integrity audit fixes, `doctor`, the backlog benches and the bench hygiene.
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (partial:
+  annotations and `--read-only`) and S18 (`source`) are implemented.** 0.12.0 is
+  published (2026-11-16, tagged `v0.12.0`); the S15 remainder and S18 are unreleased.
+  `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
+  `jsonl.py`, `doctor.py` and `legacy.py` are implemented.
+  `tests/` (282) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
+  mode and `source`), sessions, import, the JSONL tail repair, incremental sync,
+  retrieval, the golden set, the integrity audit fixes, `doctor`, the backlog benches and
+  the bench hygiene.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -38,8 +40,12 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   SLO (`bench_cli`, `bench_mcp`, `bench_sync`) exit 1 when it fails, in the text and
   `--json` paths.
 
-- Before publishing: delete `dist/` **and** `build/`. `uv build` reuses `build/lib` and
-  packages modules you already deleted from the tree. One wheel included the old importer
+- Publishing goes through `.github/workflows/publish.yml` (Trusted Publishing,
+  OIDC, attestations PEP 740): push a tag `v*` and it builds and publishes; no PyPI
+  token in the repo. The PyPI pending publisher (owner/repo/workflow
+  `publish.yml`) must be registered once before the first tag. Still delete `dist/`
+  **and** `build/` when building locally: `uv build` reuses `build/lib` and packages
+  modules you already deleted from the tree. One wheel included the old importer
   because of an orphan `build/lib/`.
 - CI lives in `.github/workflows/ci.yml`: ubuntu/macos/windows × Python 3.10 and 3.14
   (tests and ruff). There is no ruff config and no pre-commit, so also verify locally
@@ -59,7 +65,10 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   instantiate it without `cairn init`.
 - IDs are 12 hex characters (`secrets.token_hex(6)`) plus a `ts` in `time_ns`. Apply
   order is `(ts, line number)`. A `save` with `topic_key` marks the previous memory
-  `superseded` **before** the insert.
+  `superseded` **before** the insert. A `save` may carry an optional `source`
+  (provenance: agent, model or session; ≤ 100 chars, no control characters, same
+  treatment as `topic_key`; `SCHEMA_VERSION = 4`). There is deliberately **no**
+  "unreviewed" state: with `--share`, the PR over `events.jsonl` is the human review.
 - Writes: `O_APPEND` plus **one** `os.write` per event. There is an in-process lock
   (`jsonl._LOCK`) because Windows `O_APPEND` is not atomic between threads.
 - When the database opens, it compares `(size, mtime_ns)` of the JSONL and
@@ -113,7 +122,10 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   500 ms, startup included. In-process MCP tool call: < 50 ms.
 - **MCP:** stdout carries protocol only (NDJSON in binary, `\n`). Logs go to stderr. No
   asyncio and no signals. The process caches one `Store` per scope and is the only writer
-  while it lives.
+  while it lives. Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+  `idempotentHint`): the 5 read tools are read-only, `archive` is destructive and
+  idempotent, `save`/`save_session` are writes. `cairn mcp --read-only` serves only the
+  5 read tools and rejects the write tools at the protocol edge.
 - **Doctor:** `doctor.py` is imported lazily and is local: no network, no events written.
   It parses `events.jsonl` with `parse_event` (line-numbered failures) and refreshes
   `cairn.db`/`MEMORY.md` only because it opens the `Store`, like every other command.

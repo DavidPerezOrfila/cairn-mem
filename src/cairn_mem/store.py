@@ -15,10 +15,11 @@ from cairn_mem.anchor import is_stale
 from cairn_mem.jsonl import append_jsonl
 from cairn_mem.render import KIND_PRIORITY, MAX_TOPIC, render_l0
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 KINDS = tuple(KIND_PRIORITY)
 MAX_BODY = 500
 MAX_TITLE = 200
+MAX_SOURCE = 100
 ID_PATTERN = re.compile(r"[0-9a-f]{12}")
 
 SECRET_PATTERNS = (
@@ -177,6 +178,7 @@ CREATE TABLE IF NOT EXISTS mem (
   title       TEXT NOT NULL,
   body        TEXT NOT NULL CHECK (length(body) <= 500),
   why         TEXT,
+  source      TEXT,
   anchor_path TEXT,
   anchor_hash TEXT,
   status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','superseded','archived'))
@@ -227,6 +229,20 @@ def validate_topic(topic_key):
     return topic_key or None
 
 
+def validate_source(source):
+    """Procedencia opcional (S18): quien escribió la memoria. Mismo tratamiento
+    que el topic: sin saltos de línea ni controles, y corto."""
+    if source is None:
+        return None
+    source = str(source)
+    if any(ord(char) < 32 or ord(char) == 127 for char in source):
+        raise ValueError("source no puede contener saltos de línea ni controles")
+    source = source.strip()
+    if len(source) > MAX_SOURCE:
+        raise ValueError(f"source supera {MAX_SOURCE} caracteres")
+    return source or None
+
+
 def parse_event(line: str, number: int) -> dict:
     """Valida una línea del JSONL antes de aplicarla. Un evento inventado o
     incompleto debe fallar nombrando el fichero y la línea, no con un KeyError
@@ -245,7 +261,7 @@ def parse_event(line: str, number: int) -> dict:
         int(event.get("ts", 0))
     except (TypeError, ValueError, OverflowError) as error:
         raise ValueError(f"{where}: ts inválido") from error
-    for key in ("why", "topic_key", "anchor_path", "anchor_hash"):
+    for key in ("why", "source", "topic_key", "anchor_path", "anchor_hash"):
         value = event.get(key)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"{where}: {key} inválido")
@@ -257,6 +273,14 @@ def parse_event(line: str, number: int) -> dict:
             raise ValueError(f"{where}: title inválido o supera {MAX_TITLE}")
         if not isinstance(body, str) or len(body) > MAX_BODY:
             raise ValueError(f"{where}: body inválido o supera {MAX_BODY}")
+        source = event.get("source")
+        if source is not None and (
+            len(source) > MAX_SOURCE
+            or any(ord(char) < 32 or ord(char) == 127 for char in source)
+        ):
+            # Defensa extra sobre el topic_key: un source con '\n' se imprime
+            # tal cual en `cairn get`.
+            raise ValueError(f"{where}: source inválido")
     return event
 
 
@@ -318,6 +342,7 @@ class Store:
         anchor_hash=None,
         id=None,
         ts=None,
+        source=None,
     ) -> str:
         if kind not in KINDS:
             raise ValueError(f"kind inválido: {kind}")
@@ -331,10 +356,11 @@ class Store:
                 f"body supera {MAX_BODY} caracteres; divídelo en dos memorias"
             )
         topic_key = validate_topic(topic_key)
+        source = validate_source(source)
         mid = id or secrets.token_hex(6)
         if ID_PATTERN.fullmatch(mid) is None:
             raise ValueError("id debe ser 12 caracteres hex en minúscula")
-        reject_secrets(title, body, why, topic_key, anchor_path)
+        reject_secrets(title, body, why, topic_key, anchor_path, source)
         event = {
             "op": "save",
             "id": mid,
@@ -346,6 +372,7 @@ class Store:
         for key, value in (
             ("topic_key", topic_key),
             ("why", why),
+            ("source", source),
             ("anchor_path", anchor_path),
             ("anchor_hash", anchor_hash),
         ):
@@ -425,6 +452,9 @@ class Store:
         root = self.root.parent
         for row in rows:
             row["stale"] = is_stale(row["anchor_path"], row["anchor_hash"], root)
+            if not row["source"]:
+                # Sin procedencia no se ruido de tokens en el JSON.
+                del row["source"]
         return rows
 
     def dump(self) -> list[dict]:
@@ -507,13 +537,13 @@ class Store:
                         (topic_key, mid),
                     )
             self._conn.execute(
-                """INSERT INTO mem (id, ts, kind, topic_key, title, body, why, anchor_path, anchor_hash, status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO mem (id, ts, kind, topic_key, title, body, why, source, anchor_path, anchor_hash, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(id) DO UPDATE SET
                      ts = excluded.ts, kind = excluded.kind, topic_key = excluded.topic_key,
                      title = excluded.title, body = excluded.body, why = excluded.why,
-                     anchor_path = excluded.anchor_path, anchor_hash = excluded.anchor_hash,
-                     status = excluded.status""",
+                     source = excluded.source, anchor_path = excluded.anchor_path,
+                     anchor_hash = excluded.anchor_hash, status = excluded.status""",
                 (
                     mid,
                     ts,
@@ -522,6 +552,7 @@ class Store:
                     event["title"],
                     event["body"],
                     event.get("why"),
+                    event.get("source"),
                     event.get("anchor_path"),
                     event.get("anchor_hash"),
                     status,
@@ -627,7 +658,7 @@ class Store:
 
     def _search(self, match: str, limit: int) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT m.id, m.kind, m.topic_key, m.title, m.anchor_path, m.anchor_hash,
+            """SELECT m.id, m.kind, m.topic_key, m.title, m.source, m.anchor_path, m.anchor_hash,
                       snippet(mem_fts, 1, '', '', '…', 12) AS snippet
                FROM mem_fts JOIN mem m ON m.rowid = mem_fts.rowid
                WHERE mem_fts MATCH ? AND m.status = 'active'
