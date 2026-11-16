@@ -10,6 +10,7 @@ import argparse
 import json
 import tempfile
 import time
+from contextlib import closing
 from pathlib import Path
 
 from bench_cli import _seed, _stats
@@ -21,22 +22,29 @@ COUNT = 10000
 
 
 def bench(reps: int) -> dict:
-    root = Path(tempfile.mkdtemp(prefix="cairn-bench-sync-")) / ".cairn"
-    root.mkdir(parents=True)
-    _seed(root, COUNT)
-    writers = [Store(str(root)), Store(str(root))]
+    with tempfile.TemporaryDirectory(prefix="cairn-bench-sync-") as tmp:
+        root = Path(tmp) / ".cairn"
+        root.mkdir(parents=True)
+        _seed(root, COUNT)
+        timings = {"save": [], "search": []}
+        with closing(Store(str(root))) as first, closing(Store(str(root))) as second:
+            writers = [first, second]
+            for index in range(reps):
+                start = time.perf_counter()
+                writers[index % 2].save(
+                    kind="fact", title=f"sync {index} oauth", body="b"
+                )
+                timings["save"].append((time.perf_counter() - start) * 1000)
 
-    timings = {"save": [], "search": []}
-    for index in range(reps):
-        start = time.perf_counter()
-        writers[index % 2].save(kind="fact", title=f"sync {index} oauth", body="b")
-        timings["save"].append((time.perf_counter() - start) * 1000)
+                start = time.perf_counter()
+                writers[(index + 1) % 2].search("oauth", limit=5)
+                timings["search"].append((time.perf_counter() - start) * 1000)
 
-        start = time.perf_counter()
-        writers[(index + 1) % 2].search("oauth", limit=5)
-        timings["search"].append((time.perf_counter() - start) * 1000)
+        return {"records": COUNT, **{k: _stats(v) for k, v in timings.items()}}
 
-    return {"records": COUNT, **{key: _stats(value) for key, value in timings.items()}}
+
+def slo_ok(result: dict) -> bool:
+    return all(result[key]["p95_ms"] < SLO_MS for key in ("save", "search"))
 
 
 def main(argv=None) -> int:
@@ -45,6 +53,7 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true")
     ns = parser.parse_args(argv)
     result = bench(ns.reps)
+    ok = slo_ok(result)
     if ns.json:
         print(json.dumps(result, indent=2))
     else:
@@ -56,9 +65,8 @@ def main(argv=None) -> int:
                 f"  p95 {stats['p95_ms']:>8.1f} ms"
                 f"  max {stats['max_ms']:>8.1f} ms"
             )
-    verdict = all(result[key]["p95_ms"] < SLO_MS for key in ("save", "search"))
-    print(f"  SLO (<{SLO_MS} ms p95): {'OK' if verdict else 'FALLA'}")
-    return 0 if verdict else 1
+        print(f"  SLO (<{SLO_MS} ms p95): {'OK' if ok else 'FALLA'}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
