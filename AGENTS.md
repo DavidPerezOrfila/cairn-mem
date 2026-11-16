@@ -2,12 +2,12 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11 and S13 are implemented.** 0.11.0 is
-  published (2026-11-12, tagged `v0.11.0`). `store.py`, `cli.py`, `anchor.py`,
-  `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and
-  `legacy.py` are implemented. `tests/` (245) covers the CLI, the store, the L0, anchors,
-  MCP, sessions, import, the JSONL tail repair, incremental sync, retrieval, the golden
-  set, the integrity audit fixes and `doctor`.
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12 and S13 are implemented.**
+  0.11.0 is published (2026-11-12, tagged `v0.11.0`); S12 is unreleased. `store.py`,
+  `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`,
+  `doctor.py` and `legacy.py` are implemented. `tests/` (251) covers the CLI, the store,
+  the L0, anchors, MCP, sessions, import, the JSONL tail repair, incremental sync,
+  retrieval, the golden set, the integrity audit fixes and `doctor`.
 - **Keep this file current in the same change:** version and release state, test count,
   modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.
 - Implement **one round (S#) or milestone (M#) at a time**, and only that one. Read
