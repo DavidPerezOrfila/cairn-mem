@@ -391,6 +391,15 @@ def test_mcp_read_only_flag_subprocess(in_tmp):
             "id": 2,
             "method": "tools/call",
             "params": {
+                "name": "save",
+                "arguments": {"kind": "fact", "title": "T", "body": "B"},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
                 "name": "archive",
                 "arguments": {"id": "000000000000"},
             },
@@ -415,7 +424,8 @@ def test_mcp_read_only_flag_subprocess(in_tmp):
         "session_list",
         "session_get",
     }
-    assert responses[1]["error"]["code"] == -32602
+    assert responses[1]["error"]["code"] == -32602  # save
+    assert responses[2]["error"]["code"] == -32602  # archive
 
 
 def test_save_accepts_source():
@@ -444,6 +454,20 @@ def test_save_source_is_validated():
         source="s" * 101,
     )
     assert response["result"]["isError"] is True
+
+
+def test_save_rejects_non_string_why():
+    """Un `why` no-string llegaba a reject_secrets y fallaba con TypeError crudo."""
+    response = call(
+        Server(),
+        "save",
+        kind="fact",
+        title="T",
+        body="B",
+        why=5,
+    )
+    assert response["result"]["isError"] is True
+    assert "why" in text(response)
 
 
 def test_initialize_falls_back_to_supported_version():

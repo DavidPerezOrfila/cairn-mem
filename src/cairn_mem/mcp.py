@@ -274,6 +274,10 @@ def _save(server, args):
     ]
     if missing:
         raise ValueError(f"faltan argumentos: {', '.join(missing)}")
+    why = args.get("why")
+    if why is not None and not isinstance(why, str):
+        # un `why` no-string llegaría a reject_secrets y fallaría con TypeError
+        raise TypeError("why debe ser texto")
     scope = _scope(args)
     anchor_path = anchor_hash = None
     if args.get("anchor"):
@@ -284,7 +288,7 @@ def _save(server, args):
         kind=kind,
         title=title,
         body=body,
-        why=args.get("why"),
+        why=why,
         topic_key=args.get("topic"),
         anchor_path=anchor_path,
         anchor_hash=anchor_hash,

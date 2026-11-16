@@ -11,7 +11,7 @@ que mira quien evalúa el paquete.
 
 - `.github/workflows/publish.yml` nuevo: se dispara con un push de tag `v*`.
 - Job `build`: `uv build` (fresh checkout, no hay `dist/` ni `build/` huérfanos)
-  y sube el artefacto. Sin permisos especiales.
+  y sube el artefacto. Permisos: solo `contents: read`.
 - Job `publish`: baja el artefacto y publica con `pypa/gh-action-pypi-publish`
   (`id-token: write` solo en este job). Las attestations PEP 740 se generan por
   defecto en el flujo de Trusted Publishing; no se configuran aparte.

@@ -1000,8 +1000,34 @@ def test_parse_event_rejects_non_string_source(root):
     os.makedirs(root, exist_ok=True)
     (Path(root) / "events.jsonl").touch()
     _append_event(
-        root, op="save", id="aaaaaaaabbbb", ts=1, kind="fact",
-        title="t", body="b", source=7,
+        root,
+        op="save",
+        id="aaaaaaaabbbb",
+        ts=1,
+        kind="fact",
+        title="t",
+        body="b",
+        source=7,
+    )
+    with pytest.raises(ValueError):
+        Store(root)
+
+
+@pytest.mark.parametrize("bad", ["a\nb", "s" * 101])
+def test_parse_event_rejects_source_beyond_write_limits(root, bad):
+    """Un evento externo con un source enorme o con '\n' no entra en la DB:
+    `cairn get` lo imprimiría tal cual (defensa extra sobre topic_key)."""
+    os.makedirs(root, exist_ok=True)
+    (Path(root) / "events.jsonl").touch()
+    _append_event(
+        root,
+        op="save",
+        id="aaaaaaaabbbb",
+        ts=1,
+        kind="fact",
+        title="t",
+        body="b",
+        source=bad,
     )
     with pytest.raises(ValueError):
         Store(root)

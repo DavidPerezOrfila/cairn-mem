@@ -7,7 +7,7 @@
   published (2026-11-16, tagged `v0.12.0`); S15 remainder, S14 (bench-only, separate PR)
   and S18 are unreleased. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`,
   `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and `legacy.py` are implemented.
-  `tests/` (272) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
+  `tests/` (275) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
   mode and `source`), sessions, import, the JSONL tail repair, incremental sync,
   retrieval, the golden set, the integrity audit fixes, `doctor` and the backlog benches.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has

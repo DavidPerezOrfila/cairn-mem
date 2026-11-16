@@ -22,6 +22,7 @@ solo responde "quién lo escribió", que es lo que esa revisión necesita.
   se reconstruyen al abrir, sin migración manual).
 - `Store.save(source=...)`: normalizado como el `topic_key` (sin saltos de
   línea ni controles, ≤ 100 caracteres, strip) y pasado por `reject_secrets`.
+  `parse_event` lo valida también al leer (tipo, longitud y controles).
 - `parse_event`: `source` debe ser string o estar ausente; un valor no string
   falla con `events.jsonl línea N`.
 - CLI: `cairn save --source`; el texto de `search` añade `(source)` cuando

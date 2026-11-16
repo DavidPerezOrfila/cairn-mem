@@ -273,6 +273,14 @@ def parse_event(line: str, number: int) -> dict:
             raise ValueError(f"{where}: title inválido o supera {MAX_TITLE}")
         if not isinstance(body, str) or len(body) > MAX_BODY:
             raise ValueError(f"{where}: body inválido o supera {MAX_BODY}")
+        source = event.get("source")
+        if source is not None and (
+            len(source) > MAX_SOURCE
+            or any(ord(char) < 32 or ord(char) == 127 for char in source)
+        ):
+            # Defensa extra sobre el topic_key: un source con '\n' se imprime
+            # tal cual en `cairn get`.
+            raise ValueError(f"{where}: source inválido")
     return event
 
 
