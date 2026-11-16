@@ -18,6 +18,7 @@ import json
 import statistics
 import tempfile
 import time
+from contextlib import closing
 from pathlib import Path
 
 from cairn_mem.anchor import file_hash
@@ -54,17 +55,17 @@ def _seed(root: Path, count: int, anchors: int, anchor_kb: int) -> None:
 
 def measure(root: Path, count: int, anchors: int, anchor_kb: int, reps: int) -> dict:
     _seed(root, count, anchors, anchor_kb)
-    store = Store(str(root))
-    store.write_l0()  # primera pasada fuera de la medida
     render = []
     save = []
-    for index in range(reps):
-        start = time.perf_counter()
-        store.write_l0()
-        render.append((time.perf_counter() - start) * 1000)
-        start = time.perf_counter()
-        store.save(kind="fact", title=f"bench {index}", body="bench")
-        save.append((time.perf_counter() - start) * 1000)
+    with closing(Store(str(root))) as store:
+        store.write_l0()  # primera pasada fuera de la medida
+        for index in range(reps):
+            start = time.perf_counter()
+            store.write_l0()
+            render.append((time.perf_counter() - start) * 1000)
+            start = time.perf_counter()
+            store.save(kind="fact", title=f"bench {index}", body="bench")
+            save.append((time.perf_counter() - start) * 1000)
     return {
         "memories": count,
         "anchors": anchors,
@@ -82,9 +83,7 @@ def main(argv=None) -> int:
     ns = parser.parse_args(argv)
 
     results = []
-    with tempfile.TemporaryDirectory(
-        prefix="cairn-anchors-", ignore_cleanup_errors=True
-    ) as tmp:
+    with tempfile.TemporaryDirectory(prefix="cairn-anchors-") as tmp:
         base = Path(tmp) / "base" / ".cairn"
         base.mkdir(parents=True)
         baseline = measure(base, ns.count, 0, 0, ns.reps)

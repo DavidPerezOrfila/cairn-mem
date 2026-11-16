@@ -310,6 +310,32 @@ re-run on the release commit of 0.10.0:
   desynced DB, two installs, `CAIRN_DIR` pointing nowhere, `events.jsonl` byte-identical
   before/after, valid `--json`.
 
+## S14: bench hygiene (2026-11-16)
+
+The benches used `mkdtemp` and never removed their store; `bench_retrieval` and
+`bench_anchors` used `ignore_cleanup_errors=True`, which swallowed the failure because
+Windows keeps an open SQLite file undeletable. `%TEMP%` had **224 `cairn-*` directories**
+(68 `cairn-bench-*`, 22 `cairn-anchors-*`, 134 `cairn-retrieval-*`). After the change the
+same runs add zero: every bench measures inside a `TemporaryDirectory` and closes its
+`Store`.
+
+`bench_cli`, `bench_mcp` and `bench_sync` now exit 1 when their SLO fails, in the text and
+`--json` paths. Observed on the same machine:
+
+| Bench | Exit | p95 |
+|---|---|---|
+| `bench_cli --reps 20` | **1** | 1k: search 350.4 / save 464.5 ms (FALLA); 10k: search 310.1 / save 355.5 ms |
+| `bench_mcp --reps 20` | 0 | search 3.4 / save 12.3 / context 5.1 ms |
+| `bench_sync --reps 20` | 0 | save 19.8 / search 5.9 ms |
+
+The 1k failure is machine load (p50 297-410 ms across three runs while the 10k case passed
+twice; internal query 4.1 ms p95). No product code path changed, so the SLO numbers are the
+same as 0.12.0; only `Store.close()` was added. `pytest -q` 268 passed, `ruff` clean.
+A second pass of the four other benches (mcp, sync, retrieval, anchors) left the `%TEMP%`
+count at 272 before and after: `ignore_cleanup_errors=True` is gone, the directories are
+really deleted.
+Details: [`docs/features/s14-bench-hygiene.md`](features/s14-bench-hygiene.md).
+
 ## Backlog triggers (2026-11-16)
 
 Measured on Windows 11, Python 3.14.10, machine not idle (the SLO-e2e numbers of this

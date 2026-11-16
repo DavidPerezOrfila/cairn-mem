@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import closing
 from pathlib import Path
 
 from cairn_mem.store import Store
@@ -67,35 +68,43 @@ def _cli_ms(root: Path, args: list[str], reps: int) -> list[float]:
 
 
 def bench_size(count: int, reps: int) -> dict:
-    root = Path(tempfile.mkdtemp(prefix=f"cairn-bench-{count}-")) / ".cairn"
-    root.mkdir(parents=True)
+    with tempfile.TemporaryDirectory(prefix=f"cairn-bench-{count}-") as tmp:
+        root = Path(tmp) / ".cairn"
+        root.mkdir()
 
-    start = time.perf_counter()
-    _seed(root, count)
-    store = Store(str(root))
-    rebuild_ms = (time.perf_counter() - start) * 1000
-
-    searches = _cli_ms(root, ["search", "oauth", "--limit", "5"], reps)
-    saves = _cli_ms(
-        root,
-        ["save", "--kind", "fact", "--title", "bench", "--body", "bench"],
-        reps,
-    )
-
-    store = Store(str(root))
-    internal = []
-    for _ in range(20):
         start = time.perf_counter()
-        store.search("oauth")
-        internal.append((time.perf_counter() - start) * 1000)
+        _seed(root, count)
+        with closing(Store(str(root))) as store:
+            rebuild_ms = (time.perf_counter() - start) * 1000
 
-    return {
-        "records": count,
-        "rebuild_ms": round(rebuild_ms, 1),
-        "search": _stats(searches),
-        "save": _stats(saves),
-        "internal_search": _stats(internal),
-    }
+        searches = _cli_ms(root, ["search", "oauth", "--limit", "5"], reps)
+        saves = _cli_ms(
+            root,
+            ["save", "--kind", "fact", "--title", "bench", "--body", "bench"],
+            reps,
+        )
+
+        with closing(Store(str(root))) as store:
+            internal = []
+            for _ in range(20):
+                start = time.perf_counter()
+                store.search("oauth")
+                internal.append((time.perf_counter() - start) * 1000)
+
+        return {
+            "records": count,
+            "rebuild_ms": round(rebuild_ms, 1),
+            "search": _stats(searches),
+            "save": _stats(saves),
+            "internal_search": _stats(internal),
+        }
+
+
+def slo_ok(result: dict) -> bool:
+    return (
+        result["search"]["p95_ms"] < SEARCH_SLO_MS
+        and result["save"]["p95_ms"] < SAVE_SLO_MS
+    )
 
 
 def main(argv=None) -> int:
@@ -104,9 +113,10 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true")
     ns = parser.parse_args(argv)
     results = [bench_size(count, ns.reps) for count in SIZES]
+    ok = all(slo_ok(result) for result in results)
     if ns.json:
         print(json.dumps(results, indent=2))
-        return 0
+        return 0 if ok else 1
     for result in results:
         print(f"{result['records']} registros")
         print(f"  rebuild:        {result['rebuild_ms']:>8.1f} ms")
@@ -120,15 +130,11 @@ def main(argv=None) -> int:
                 f"  {label:<15} p50 {stats['p50_ms']:>7.1f} ms"
                 f"  p95 {stats['p95_ms']:>7.1f} ms"
             )
-        verdict = (
-            result["search"]["p95_ms"] < SEARCH_SLO_MS
-            and result["save"]["p95_ms"] < SAVE_SLO_MS
-        )
         print(
             f"  SLO (search<{SEARCH_SLO_MS}, save<{SAVE_SLO_MS}): "
-            f"{'OK' if verdict else 'FALLA'}"
+            f"{'OK' if slo_ok(result) else 'FALLA'}"
         )
-    return 0
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
