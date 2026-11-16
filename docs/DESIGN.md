@@ -107,14 +107,16 @@ milliseconds; see `docs/features/s7-incremental-sync.md`.
 ## Personal scope (M7)
 
 - Directory: `CAIRN_HOME` or `~/.cairn`. `CAIRN_DIR` still wins for the project.
-- `save --personal` uses that `Store`. `get` looks in the project first and then in the
-  personal scope.
+- `save --personal` uses that `Store`. `get` and `archive` look in the project first and
+  then in the personal scope: the id decides the store.
 - `search` is **cross-scope**: it queries both stores and interleaves results by ranking
   position (BM25 scores from different databases are not comparable), starting with the
   project. Each result carries `scope`; in text, personal results are marked `[personal]`.
-  `--personal` or `scope=personal` restricts the search to the personal scope. If there
-  is no project `.cairn/` but there is a personal scope, the search returns personal
-  results only.
+  `--project` / `scope=project` and `--personal` / `scope=personal` restrict the search
+  to one scope and are mutually exclusive in the CLI. If there is no project `.cairn/`
+  but there is a personal scope, the search returns personal results only.
+- `rebuild`, `render` and `check` accept `--personal` and operate on that store; anchors
+  resolve against its parent directory, like `save --personal`.
 - MCP: `scope` in `save` (`project|personal`) and in `search` (`project|personal|all`,
   default `all`).
 - The L0 is always the project L0. Personal memory does not mix into it.

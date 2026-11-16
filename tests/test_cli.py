@@ -474,3 +474,142 @@ def test_search_by_topic_shows_it_in_text_and_json(capsys):
     assert code == 0 and "[storage/fts5]" in out
     code, out, _ = run(capsys, "search", "storage/fts5", "--json")
     assert code == 0 and json.loads(out)[0]["topic_key"] == "storage/fts5"
+
+
+def test_search_project_restricts_to_the_project(capsys):
+    run(capsys, "init")
+    _, out, _ = run(
+        capsys,
+        "save",
+        "--kind",
+        "decision",
+        "--title",
+        "Pipeline de commits",
+        "--body",
+        "validar en CI",
+        "--json",
+    )
+    project_id = json.loads(out)["id"]
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "convention",
+        "--title",
+        "Commits en LF",
+        "--body",
+        "todos los repos",
+        "--personal",
+    )
+    rows = json.loads(run(capsys, "search", "commits", "--project", "--json")[1])
+    assert [(row["id"], row["scope"]) for row in rows] == [(project_id, "project")]
+
+
+def test_search_project_without_a_project_store_fails(capsys, in_tmp):
+    code, _, err = run(capsys, "search", "x", "--project")
+    assert code == 1 and "no se encontró .cairn/" in err
+    assert not (in_tmp / "home").exists()
+
+
+def test_search_rejects_project_and_personal_together(capsys):
+    with pytest.raises(SystemExit) as error:
+        run(capsys, "search", "x", "--project", "--personal")
+    assert error.value.code == 2
+
+
+def test_rebuild_render_and_check_accept_personal(capsys, in_tmp):
+    run(capsys, "init")
+    (in_tmp / "notes.md").write_text("v1\n", encoding="utf-8")
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "convention",
+        "--title",
+        "Commits en LF",
+        "--body",
+        "todos los repos",
+        "--anchor",
+        "notes.md",
+        "--personal",
+    )
+    assert "Commits en LF" not in run(capsys, "render")[1]
+    assert "Commits en LF" in run(capsys, "render", "--personal")[1]
+    assert "Commits en LF" not in run(capsys, "check")[1]
+    (in_tmp / "notes.md").write_text("v2\n", encoding="utf-8")
+    assert "Commits en LF" in run(capsys, "check", "--personal")[1]
+    code, out, _ = run(capsys, "rebuild", "--personal")
+    assert code == 0 and "reconstruida: 1" in out
+
+
+def test_archive_finds_the_personal_scope_without_the_flag(capsys):
+    run(capsys, "init")
+    _, out, _ = run(
+        capsys,
+        "save",
+        "--kind",
+        "convention",
+        "--title",
+        "Commits en LF",
+        "--body",
+        "todos los repos",
+        "--personal",
+        "--json",
+    )
+    mid = json.loads(out)["id"]
+    code, out, _ = run(capsys, "archive", mid)
+    assert code == 0 and mid in out
+    rows = json.loads(run(capsys, "search", "commits", "--personal", "--json")[1])
+    assert rows == []
+
+
+def test_archive_without_any_store_fails(capsys):
+    code, _, err = run(capsys, "archive", "000000000000")
+    assert code == 1 and "no se encontró .cairn/" in err
+
+
+def test_archive_unknown_id_with_a_store_fails(capsys):
+    run(capsys, "init")
+    code, _, err = run(capsys, "archive", "000000000000")
+    assert code == 1 and "no existe la memoria" in err
+
+
+def test_personal_read_commands_do_not_create_the_scope(capsys, in_tmp):
+    run(capsys, "init")
+    for command in ("check", "render", "rebuild"):
+        code, _, err = run(capsys, command, "--personal")
+        assert code == 1 and "scope personal" in err
+    assert not (in_tmp / "home").exists()
+
+
+def test_archive_prefers_the_project_when_both_scopes_share_an_id(capsys):
+    run(capsys, "init")
+    mid = "abcdefabcdef"
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "fact",
+        "--title",
+        "memoria proyecto",
+        "--body",
+        "x",
+        "--id",
+        mid,
+    )
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "fact",
+        "--title",
+        "memoria personal",
+        "--body",
+        "x",
+        "--id",
+        mid,
+        "--personal",
+    )
+    assert run(capsys, "archive", mid)[0] == 0
+    assert "sin resultados" in run(capsys, "search", "proyecto", "--project")[1]
+    assert "memoria personal" in run(capsys, "search", "personal", "--personal")[1]

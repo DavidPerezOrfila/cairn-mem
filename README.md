@@ -110,7 +110,8 @@ cairn save --kind convention --title "Commits in LF" --body "every repo" --perso
 ```
 
 `search` covers the project and your personal scope at once and tags each result with
-`scope` (`[personal]` in text). Add `--personal` to search only that scope.
+`scope` (`[personal]` in text). Add `--project` or `--personal` to restrict it to one
+scope.
 
 Anything you would otherwise repeat in the next session belongs here. Task state, logs
 and chat transcripts do not.
@@ -211,20 +212,22 @@ why the agent believes something.
 |---|---|
 | `cairn init [--share]` | Create `.cairn/`; `--share` versions `events.jsonl` |
 | `cairn save` | Store a decision, convention, gotcha or fact |
-| `cairn search "terms"` | Ranked active memories from project and personal scope |
+| `cairn search "terms"` | Ranked active memories from project and personal scope (`--project`/`--personal`) |
 | `cairn get <id>` | Full memory |
-| `cairn archive <id>` | Stop returning a memory |
-| `cairn check` | List memories whose anchor changed |
-| `cairn render` | Regenerate and print `MEMORY.md` |
-| `cairn rebuild` | Rebuild the index from `events.jsonl` |
+| `cairn archive <id>` | Stop returning a memory (either scope) |
+| `cairn check [--personal]` | List memories whose anchor changed |
+| `cairn render [--personal]` | Regenerate and print `MEMORY.md` |
+| `cairn rebuild [--personal]` | Rebuild the index from `events.jsonl` |
 | `cairn session save\|list\|get [--personal]` | Session recaps, separate from curated memory |
 | `cairn import legacy --db <path> [--dry-run]` | Migrate observations from another SQLite store |
 | `cairn doctor [--personal]` | Check SQLite/FTS5, JSONL lines, DB sync, L0 budget, stale anchors, `.gitignore` and duplicate installs |
 | `cairn mcp` | Serve MCP over stdio |
 
 `--json` is available on `save`, `search`, `get`, `check`, `session`, `doctor` and
-`import` for agent consumption. `save`, `search` and `archive` accept `--personal`.
-`search` spans both scopes by default, and `get` checks both stores.
+`import` for agent consumption. `--personal` selects the personal scope on `save`,
+`search`, `rebuild`, `render`, `check`, `session` and `doctor`; `search` also takes
+`--project`. `search` spans both scopes by default, and `get` and `archive` check both
+stores.
 
 ## Benchmarks
 

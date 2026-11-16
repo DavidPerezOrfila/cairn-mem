@@ -16,9 +16,38 @@ from cairn_mem.store import KINDS, Store, search_scopes
 GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", ".MEMORY.md.*", "sessions.jsonl")
 
 
+def _root(ns) -> Path:
+    return personal_dir() if getattr(ns, "personal", False) else data_dir()
+
+
 def _store(ns) -> Store:
-    root = personal_dir() if getattr(ns, "personal", False) else data_dir()
+    return Store(str(_root(ns)))
+
+
+def _existing_store(ns) -> Store:
+    """Leer o regenerar no crea el scope personal."""
+    root = personal_dir() if ns.personal else data_dir()
+    if not root.exists():
+        raise FileNotFoundError(
+            "no existe el scope personal; crea una memoria con 'cairn save --personal'"
+        )
     return Store(str(root))
+
+
+def _scopes() -> list[Store]:
+    """Proyecto primero y luego el scope personal, como `get` y `archive`."""
+    stores = []
+    try:
+        stores.append(Store(str(data_dir())))
+    except FileNotFoundError:
+        pass
+    if personal_dir().exists():
+        stores.append(Store(str(personal_dir())))
+    if not stores:
+        raise FileNotFoundError(
+            "no se encontró .cairn/ en este árbol; ejecuta 'cairn init'"
+        )
+    return stores
 
 
 def _date(ts) -> str:
@@ -77,8 +106,8 @@ def _cmd_init(ns) -> int:
 
 def _cmd_save(ns) -> int:
     anchor_path = anchor_hash = None
+    root = _root(ns)
     if ns.anchor:
-        root = personal_dir() if ns.personal else data_dir()
         anchor_path, anchor_hash = resolve_anchor(ns.anchor, root.parent)
     mid = _store(ns).save(
         kind=ns.kind,
@@ -95,14 +124,15 @@ def _cmd_save(ns) -> int:
 
 
 def _cmd_search(ns) -> int:
-    home = personal_dir()
-    personal = Store(str(home)) if home.exists() else None
+    personal = None
+    if not ns.project and personal_dir().exists():
+        personal = Store(str(personal_dir()))
     project = None
     if not ns.personal:
         try:
             project = Store(str(data_dir()))
         except FileNotFoundError:
-            if personal is None:
+            if ns.project or personal is None:
                 raise  # sin proyecto ni scope personal no hay nada que buscar
     results = search_scopes(project, personal, ns.query, limit=ns.limit)
     if ns.json:
@@ -122,24 +152,12 @@ def _cmd_search(ns) -> int:
 
 
 def _cmd_get(ns) -> int:
-    stores = []
-    try:
-        stores.append(Store(str(data_dir())))
-    except FileNotFoundError:
-        pass
-    home = personal_dir()
-    if home.exists():
-        stores.append(Store(str(home)))
     memory = None
-    for store in stores:
+    for store in _scopes():
         memory = store.get(ns.id)
         if memory is not None:
             break
     if memory is None:
-        if not stores:
-            raise FileNotFoundError(
-                "no se encontró .cairn/ en este árbol; ejecuta 'cairn init'"
-            )
         raise ValueError(f"no existe la memoria {ns.id}")
     if ns.json:
         _print_json(memory)
@@ -151,31 +169,32 @@ def _cmd_get(ns) -> int:
 
 
 def _cmd_archive(ns) -> int:
-    store = _store(ns)
-    if store.get(ns.id) is None:
-        raise ValueError(f"no existe la memoria {ns.id}")
-    store.archive(ns.id)
-    print(f"archivada {ns.id}")
-    return 0
+    for store in _scopes():
+        if store.get(ns.id) is not None:
+            store.archive(ns.id)
+            print(f"archivada {ns.id}")
+            return 0
+    raise ValueError(f"no existe la memoria {ns.id}")
 
 
 def _cmd_rebuild(ns) -> int:
-    store = Store(str(data_dir()))
+    store = _existing_store(ns)
     store.rebuild()
     print(f"reconstruida: {len(store.dump())} memorias")
     return 0
 
 
 def _cmd_render(ns) -> int:
-    print(Store(str(data_dir())).write_l0(), end="")
+    print(_existing_store(ns).write_l0(), end="")
     return 0
 
 
 def _cmd_check(ns) -> int:
-    project_root = data_dir().parent
+    store = _existing_store(ns)
+    project_root = store.root.parent
     stale = [
         row
-        for row in Store(str(data_dir())).dump()
+        for row in store.dump()
         if row["status"] == "active"
         and is_stale(
             row["anchor_path"], row["anchor_hash"], project_root, max_bytes=float("inf")
@@ -317,7 +336,9 @@ def _parser() -> argparse.ArgumentParser:
     search = sub.add_parser("search", help="busca memorias activas")
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=5)
-    search.add_argument("--personal", action="store_true", help="scope personal")
+    scope = search.add_mutually_exclusive_group()
+    scope.add_argument("--project", action="store_true", help="solo el proyecto")
+    scope.add_argument("--personal", action="store_true", help="scope personal")
     search.add_argument("--json", action="store_true")
     search.set_defaults(handler=_cmd_search)
 
@@ -328,16 +349,18 @@ def _parser() -> argparse.ArgumentParser:
 
     archive = sub.add_parser("archive", help="archiva una memoria")
     archive.add_argument("id")
-    archive.add_argument("--personal", action="store_true", help="scope personal")
     archive.set_defaults(handler=_cmd_archive)
 
     rebuild = sub.add_parser("rebuild", help="reconstruye la DB desde events.jsonl")
+    rebuild.add_argument("--personal", action="store_true", help="scope personal")
     rebuild.set_defaults(handler=_cmd_rebuild)
 
     render = sub.add_parser("render", help="regenera y muestra MEMORY.md (L0)")
+    render.add_argument("--personal", action="store_true", help="scope personal")
     render.set_defaults(handler=_cmd_render)
 
     check = sub.add_parser("check", help="lista memorias con ancla stale")
+    check.add_argument("--personal", action="store_true", help="scope personal")
     check.add_argument("--json", action="store_true")
     check.set_defaults(handler=_cmd_check)
 
