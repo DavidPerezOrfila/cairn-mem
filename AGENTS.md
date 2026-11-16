@@ -2,14 +2,14 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13 and S15 (partial:
-  annotations and `--read-only`) are implemented.** 0.12.0 is published (2026-11-16,
-  tagged `v0.12.0`); S14 is merged separately (bench-only). `store.py`, `cli.py`,
-  `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py`
-  and `legacy.py` are implemented. `tests/` (264) covers the CLI, the store, the L0,
-  anchors, MCP (annotations and read-only mode), sessions, import, the JSONL tail repair,
-  incremental sync, retrieval, the golden set, the integrity audit fixes, `doctor` and the
-  backlog benches.
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S15 (partial:
+  annotations and `--read-only`) and S18 (`source`) are implemented.** 0.12.0 is
+  published (2026-11-16, tagged `v0.12.0`); S15 remainder, S14 (bench-only, separate PR)
+  and S18 are unreleased. `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`,
+  `mcp.py`, `sessions.py`, `jsonl.py`, `doctor.py` and `legacy.py` are implemented.
+  `tests/` (272) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
+  mode and `source`), sessions, import, the JSONL tail repair, incremental sync,
+  retrieval, the golden set, the integrity audit fixes, `doctor` and the backlog benches.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -59,7 +59,10 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   instantiate it without `cairn init`.
 - IDs are 12 hex characters (`secrets.token_hex(6)`) plus a `ts` in `time_ns`. Apply
   order is `(ts, line number)`. A `save` with `topic_key` marks the previous memory
-  `superseded` **before** the insert.
+  `superseded` **before** the insert. A `save` may carry an optional `source`
+  (provenance: agent, model or session; ≤ 100 chars, no control characters, same
+  treatment as `topic_key`; `SCHEMA_VERSION = 4`). There is deliberately **no**
+  "unreviewed" state: with `--share`, the PR over `events.jsonl` is the human review.
 - Writes: `O_APPEND` plus **one** `os.write` per event. There is an in-process lock
   (`jsonl._LOCK`) because Windows `O_APPEND` is not atomic between threads.
 - When the database opens, it compares `(size, mtime_ns)` of the JSONL and

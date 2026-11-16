@@ -966,3 +966,42 @@ def test_save_does_not_certify_a_prefix_replaced_while_hashing(root, monkeypatch
         (row["id"], row["title"]) for row in Store(str(mirror)).dump()
     ]
     assert s.get("bbbbbbbbbbbb")["title"] == "cola"
+
+
+def test_save_with_source_roundtrip(store):
+    """S18: procedencia opcional de la memoria, quien la escribio."""
+    mid = store.save(kind="fact", title="x", body="y", source="opencode/glm-4.7")
+    assert store.get(mid)["source"] == "opencode/glm-4.7"
+    assert store.search("x")[0]["source"] == "opencode/glm-4.7"
+
+
+def test_save_without_source_leaves_the_field_out(store):
+    mid = store.save(kind="fact", title="x", body="y")
+    assert store.get(mid)["source"] is None
+    assert "source" not in store.search("x")[0]
+
+
+def test_source_survives_rebuild(store):
+    store.save(kind="fact", title="x", body="y", source="cli/manual")
+    store.save(kind="fact", title="sin fuente", body="z")
+    before = store.dump()
+    store.rebuild()
+    assert store.dump() == before
+
+
+def test_source_is_validated_at_write(store):
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body="y", source="a\nb")
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body="y", source="s" * 101)
+
+
+def test_parse_event_rejects_non_string_source(root):
+    os.makedirs(root, exist_ok=True)
+    (Path(root) / "events.jsonl").touch()
+    _append_event(
+        root, op="save", id="aaaaaaaabbbb", ts=1, kind="fact",
+        title="t", body="b", source=7,
+    )
+    with pytest.raises(ValueError):
+        Store(root)

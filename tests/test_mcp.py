@@ -418,6 +418,34 @@ def test_mcp_read_only_flag_subprocess(in_tmp):
     assert responses[1]["error"]["code"] == -32602
 
 
+def test_save_accepts_source():
+    server = Server()
+    memory_id = text(
+        call(
+            server,
+            "save",
+            kind="fact",
+            title="T",
+            body="B",
+            source="claude/review",
+        )
+    )
+    memory = json.loads(text(call(server, "get", id=memory_id)))
+    assert memory["source"] == "claude/review"
+
+
+def test_save_source_is_validated():
+    response = call(
+        Server(),
+        "save",
+        kind="fact",
+        title="T",
+        body="B",
+        source="s" * 101,
+    )
+    assert response["result"]["isError"] is True
+
+
 def test_initialize_falls_back_to_supported_version():
     server = Server()
     response = server.handle(

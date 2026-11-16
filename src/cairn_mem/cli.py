@@ -118,6 +118,7 @@ def _cmd_save(ns) -> int:
         anchor_path=anchor_path,
         anchor_hash=anchor_hash,
         id=ns.id,
+        source=ns.source,
     )
     _print_json({"id": mid}) if ns.json else print(mid)
     return 0
@@ -144,9 +145,11 @@ def _cmd_search(ns) -> int:
             snippet = " ".join(r["snippet"].split())
             topic = f"  [{r['topic_key']}]" if r.get("topic_key") else ""
             scope = "  [personal]" if r["scope"] == "personal" else ""
+            source = f"  ({r['source']})" if r.get("source") else ""
             stale = "  ⚠ revisar" if r["stale"] else ""
             print(
-                f"{r['id']}  {r['kind']}{topic}{scope}  {r['title']} — {snippet}{stale}"
+                f"{r['id']}  {r['kind']}{topic}{scope}  {r['title']} — {snippet}"
+                f"{source}{stale}"
             )
     return 0
 
@@ -327,6 +330,7 @@ def _parser() -> argparse.ArgumentParser:
     save.add_argument("--body", required=True)
     save.add_argument("--why")
     save.add_argument("--topic", dest="topic")
+    save.add_argument("--source", help="procedencia: agente, modelo o sesión")
     save.add_argument("--anchor")
     save.add_argument("--id")
     save.add_argument("--personal", action="store_true", help="scope personal")

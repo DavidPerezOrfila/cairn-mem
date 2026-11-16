@@ -57,6 +57,7 @@ TOOLS = [
                 "body": {"type": "string", "maxLength": 500},
                 "why": {"type": "string"},
                 "topic": {"type": "string"},
+                "source": {"type": "string", "maxLength": 100},
                 "anchor": {"type": "string"},
                 "id": {"type": "string"},
                 "scope": {"type": "string", "enum": ["project", "personal"]},
@@ -288,6 +289,7 @@ def _save(server, args):
         anchor_path=anchor_path,
         anchor_hash=anchor_hash,
         id=args.get("id"),
+        source=args.get("source"),
     )
     return memory_id
 
