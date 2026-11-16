@@ -232,7 +232,7 @@ Each round is a slice: tests first, gate, review and its own release.
 | S10   | `cairn doctor`: Python/SQLite+FTS5, store root, `events.jsonl`/`sessions.jsonl` line validity, DB sync, L0 budget, stale anchors, `.gitignore` entries and duplicate `cairn` installs. Upgrade docs (no self-update command)                         | 0.10.0                | `docs/features/s10-doctor.md`                                                                  |
 | S10.1 | `sessions.jsonl`: a line that is valid JSON but not an object fails with `sessions.jsonl línea N`; torn-tail tolerance requires the missing `\n`                                                                                                     | 0.10.0                | `docs/DECISIONS.md`                                                                            |
 | S11   | Sessions: one ordering for `last` and `all`, `id` validated; `context` keeps the head and the tail of long recaps                                                                                                                                    | 0.11.0                | `tests/test_sessions.py`, `docs/DECISIONS.md`                                                  |
-| S12   | CLI/MCP symmetry: `search --project`, `--personal` on `rebuild/render/check`, `archive` across both scopes                                                                                                                                           | 0.12.0 (pending)      | [`docs/features/s12-cli-mcp-symmetry.md`](docs/features/s12-cli-mcp-symmetry.md)               |
+| S12   | CLI/MCP symmetry: `search --project`, `--personal` on `rebuild/render/check`, `archive` across both scopes                                                                                                                                           | 0.12.0                | [`docs/features/s12-cli-mcp-symmetry.md`](docs/features/s12-cli-mcp-symmetry.md)               |
 | S13   | Secret filter v2: `Bearer`, `ASIA`, `xox[baprs]-`, `sk_live_`/`rk_live_`, `npm_`                                                                                                                                                                     | 0.11.0                | `tests/test_store.py` (reject + prose cases)                                                   |
 | S14   | Bench hygiene: clean `mkdtemp` dirs, exit 1 when an SLO fails                                                                                                                                                                                        | planned               | —                                                                                              |
 | S15   | MCP annotations (`readOnlyHint`, `idempotentHint`), `search --kind/--topic/--stale`, `partial` flag on the OR fallback                                                                                                                               | planned               | —                                                                                              |
@@ -260,6 +260,12 @@ the public index (`init`, `save`, `doctor` exit 0, version 0.10.0).
 S11 unifies the session order and keeps the tail of a long recap; S13 widens the secret
 filter. Verified with a clean install from the public index in an empty venv (`init`,
 `save`, `search`, `doctor` exit 0, version 0.11.0).
+
+**0.12.0 release:** 2026-11-16 on PyPI (wheel 36.175 B, sdist 60.986 B) and tag `v0.12.0`.
+S12 gives the CLI the scopes the MCP tools already had (`search --project`, `--personal`
+on `rebuild/render/check`, `archive` across both scopes). Verified with a clean install
+from the public index in an empty venv (`init`, `save`, `search`, `doctor` exit 0,
+version 0.12.0).
 
 ## 5. Backlog (closed with evidence, 2026-11-16)
 

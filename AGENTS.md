@@ -3,7 +3,7 @@
 ## State and scope
 
 - **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12 and S13 are implemented.**
-  0.11.0 is published (2026-11-12, tagged `v0.11.0`); S12 is unreleased. `store.py`,
+  0.12.0 is published (2026-11-16, tagged `v0.12.0`); no round is pending. `store.py`,
   `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`,
   `doctor.py` and `legacy.py` are implemented. `tests/` (261) covers the CLI, the store,
   the L0, anchors, MCP, sessions, import, the JSONL tail repair, incremental sync,
