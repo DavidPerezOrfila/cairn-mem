@@ -4,7 +4,8 @@ Metrics: Hit@3, Recall@5 and MRR over answerable queries, plus how often the
 system abstains when nothing is stored for the query. Each metric is compared
 against a literal grep baseline (term count over title, body and why).
 
-Usage: python bench/bench_retrieval.py [--file bench/retrieval.jsonl] [--json]
+Usage: python bench/bench_retrieval.py [--file bench/retrieval.jsonl]
+                                          [--distractors N] [--json]
 """
 
 import argparse
@@ -50,6 +51,24 @@ STOPWORDS = frozenset(
         "y",
     }
 )
+
+
+KINDS = ("decision", "convention", "gotcha", "fact")
+FILLER = ("archivo", "informe", "reunion", "oficina", "calendario")
+
+
+def distractors(count: int) -> list[dict]:
+    """Memorias sin relación con las consultas: mide si el tamaño del índice,
+    por sí solo, degrada el ranking (trigger de compact/decay)."""
+    return [
+        {
+            "id": f"d{index:05d}",
+            "kind": KINDS[index % len(KINDS)],
+            "title": f"Nota de relleno {index}",
+            "body": f"{FILLER[index % len(FILLER)]} numero {index} sin relacion",
+        }
+        for index in range(count)
+    ]
 
 
 def load(path: Path) -> tuple[list[dict], list[dict]]:
@@ -133,14 +152,27 @@ def cairn_ranks(corpus: list[dict], queries: list[dict], limit: int) -> list[lis
     with tempfile.TemporaryDirectory(
         prefix="cairn-retrieval-", ignore_cleanup_errors=True
     ) as tmp:
-        store = Store(str(Path(tmp) / ".cairn"))
-        for memory in corpus:
-            store.save(
-                kind=memory["kind"],
-                title=memory["title"],
-                body=memory["body"],
-                why=memory.get("why"),
-            )
+        root = Path(tmp) / ".cairn"
+        root.mkdir()
+        # Siembra por JSONL y un solo rebuild: con 10k memorias, save() por memoria
+        # regenera el L0 en cada paso y convierte el montaje en O(n²).
+        lines = []
+        for index, memory in enumerate(corpus):
+            event = {
+                "op": "save",
+                "id": f"{index:012x}",
+                "ts": 1_700_000_000_000_000_000 + index,
+                "kind": memory["kind"],
+                "title": memory["title"],
+                "body": memory["body"],
+            }
+            if memory.get("why"):
+                event["why"] = memory["why"]
+            lines.append(json.dumps(event, ensure_ascii=False))
+        (root / "events.jsonl").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8", newline="\n"
+        )
+        store = Store(str(root))
         return [
             [row["title"] for row in store.search(query["query"], limit=limit)]
             for query in queries
@@ -201,10 +233,17 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     default = Path(__file__).resolve().parent / "retrieval.jsonl"
     parser.add_argument("--file", type=Path, default=default)
+    parser.add_argument(
+        "--distractors",
+        type=int,
+        default=0,
+        help="memorias de relleno sin relación: mide el ranking al crecer el índice",
+    )
     parser.add_argument("--json", action="store_true")
     ns = parser.parse_args(argv)
 
     corpus, queries = load(ns.file)
+    corpus = [*corpus, *distractors(ns.distractors)]
     cairn_rows = evaluate(queries, cairn_ranks(corpus, queries, LIMIT))
     grep_rows = evaluate(
         queries,

@@ -5,9 +5,11 @@
 - **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12 and S13 are implemented.**
   0.11.0 is published (2026-11-12, tagged `v0.11.0`); S12 is unreleased. `store.py`,
   `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`, `jsonl.py`,
-  `doctor.py` and `legacy.py` are implemented. `tests/` (251) covers the CLI, the store,
+  `doctor.py` and `legacy.py` are implemented. `tests/` (261) covers the CLI, the store,
   the L0, anchors, MCP, sessions, import, the JSONL tail repair, incremental sync,
-  retrieval, the golden set, the integrity audit fixes and `doctor`.
+  retrieval, the golden set, the integrity audit fixes, `doctor` and the backlog benches.
+- **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
+  the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
   modules, commands and rules. A stale `AGENTS.md` is a defect, not a chore.
 - Implement **one round (S#) or milestone (M#) at a time**, and only that one. Read
@@ -26,6 +28,8 @@ pytest tests/test_store.py::test_save_and_get -q   # one test
 ruff check src tests bench
 python bench/bench_mcp.py --reps 20                 # MCP tool-call latency (10k)
 python bench/bench_sync.py --reps 40                # 2 writers incremental sync (10k)
+python bench/bench_retrieval.py --distractors 10000 # ranking al crecer el índice
+python bench/bench_anchors.py --reps 30             # coste de los anclas en save
 ```
 
 - Before publishing: delete `dist/` **and** `build/`. `uv build` reuses `build/lib` and
@@ -71,7 +75,9 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
   is tolerated.
 - L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters. It goes round-robin by kind (each round:
   `convention > decision > gotcha > fact`) and newest `ts` first inside each kind. Output
-  is deterministic (prompt cache).
+  is deterministic (prompt cache). The anchor hashes of the candidate rows are read in an
+  **8-thread pool**; the hash is never reused across commands (`anchor._cached_hash`):
+  NTFS updates `mtime` late, so a same-size rewrite would hide a stale anchor.
 - Project root: search for `.cairn/` upward from the cwd, or use `CAIRN_DIR`. The search
   excludes `~/.cairn` and `CAIRN_HOME` (the personal scope). Personal scope:
   `CAIRN_HOME` or `~/.cairn`.

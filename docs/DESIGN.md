@@ -147,7 +147,9 @@ milliseconds; see `docs/features/s7-incremental-sync.md`.
   deterministic: round-robin by `kind` (each round goes convention > decision > gotcha >
   fact), newest `ts` first inside each kind, until the budget is full. That way a kind
   with many entries cannot push the others out. `[topic]` only appears when the memory has
-  one.
+  one. Anchors of the candidate rows are hashed in an 8-thread pool (a render with tens of
+  large anchors dominated `save`); the hash is never kept across commands, because NTFS
+  updates `mtime` late.
 - **Search:** stopwords dropped and the plural trimmed before FTS5 (`\w+` → `"t"*`,
   prefix); the stem keeps at least 5 characters (`redis` must not become `redi`).
   **AND first and OR if there are no results**, with no quorum: requiring two roots cut

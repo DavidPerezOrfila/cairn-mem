@@ -98,3 +98,38 @@ def test_stale_detects_a_same_size_rewrite(tmp_path):
     digest = anchor.file_hash(target)
     target.write_text("v2\n", encoding="utf-8")  # mismo tamaño
     assert anchor.is_stale("f.py", digest, str(tmp_path)) is True
+
+
+def test_parallel_prewarm_hashes_each_anchor_once_per_render(tmp_path, monkeypatch):
+    """Con varias anclas, el render las lee en paralelo: una vez por fichero y
+    render, nunca entre comandos (la mtime de NTFS llega tarde)."""
+    import cairn_mem.render as render_module
+    from cairn_mem.render import render_l0
+    from cairn_mem.store import Store
+
+    store = Store(str(tmp_path / ".cairn"))
+    for name in ("a.py", "b.py"):
+        (tmp_path / name).write_text(f"{name} v1\n", encoding="utf-8")
+        store.save(
+            kind="fact",
+            title=f"memoria {name}",
+            body="x",
+            anchor_path=name,
+            anchor_hash=anchor.file_hash(tmp_path / name),
+        )
+    calls = []
+    real = render_module.file_hash
+
+    def counted(path):
+        calls.append(str(path))
+        return real(path)
+
+    monkeypatch.setattr(render_module, "file_hash", counted)
+    (tmp_path / "b.py").write_text("b.py v2\n", encoding="utf-8")
+
+    out = render_l0(store)
+    assert out.count("⚠ revisar") == 1
+    assert len(calls) == 2
+
+    render_l0(store)
+    assert len(calls) == 4  # sin caché entre renders

@@ -261,22 +261,32 @@ S11 unifies the session order and keeps the tail of a long recap; S13 widens the
 filter. Verified with a clean install from the public index in an empty venv (`init`,
 `save`, `search`, `doctor` exit 0, version 0.11.0).
 
-## 5. Backlog (only with measured evidence)
+## 5. Backlog (closed with evidence, 2026-11-16)
 
-Measured on 2026-11-10 after 0.9.1 (`docs/BENCHMARKS.md`): Precision@3 30/30, retrieval
-Hit@3 0.97 / Recall@5 1.00 / MRR 0.96, `save` p95 324.7 ms end-to-end and 35.9 ms with two
-writers, 62 active memories and 8 anchored. None of the triggers below is met, so nothing
-here is implemented.
+Every item was measured on 2026-11-10 and 2026-11-16 (numbers in
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md), rationale in
+[`docs/features/backlog-triggers.md`](docs/features/backlog-triggers.md)). Nothing is
+pending a measurement any more: each item is closed and carries the condition that
+reopens it.
 
-- `hits` in a local, non-versioned table plus a ranking boost (if the golden set or the A/B
-  shows bad prioritization)
-- `compact`/decay (if the number of active memories hurts precision)
-- `sqlite-vec` (if precision@3 is < 0.8 because of synonyms and titles do not fix it)
-- Passive capture through a git hook (only if the agent does not save and the noise is
-  acceptable)
-- `anchor_cache` table in `cairn.db`: the anchor hash cache lives only for one render, so a
-  command still hashes each anchored file once. Only if `save` p95 passes 500 ms with many
-  large anchors, and never keyed by `(size, mtime_ns)` alone: NTFS updates `mtime` late
+- `hits` in a local, non-versioned table plus a ranking boost. **Closed:** golden
+  Precision@3 30/30, honest retrieval Hit@3 0.97, A/B 16/16. Reopen if a real corpus puts
+  the right memory outside the top 3 while the query terms match it.
+- `compact`/decay. **Closed:** 52 → 10,052 memories without relation keeps Hit@3 0.97 and
+  Recall@5 1.00 (MRR 0.96 → 0.94), and the L0 already truncates at 3000 characters.
+  Reopen only with real near-duplicate memories that drop Precision@3 below 0.8; synthetic
+  duplicates would measure the fixture.
+- `sqlite-vec`. **Closed:** paraphrase Hit@3 0.90 ≥ 0.8 at 52 and 10,052 memories.
+  Reopen if paraphrase Hit@3 falls below 0.8 on the dataset or a real corpus.
+- Passive capture through a git hook. **Closed:** in the A/B the agent saved without a hook
+  (16/16). Reopen if sessions show the agent not saving and the snippet rule is not enough.
+- `anchor_cache` table in `cairn.db`. **Closed after its trigger fired:** 200 anchors of
+  256 KiB (50 MB) added 81 ms to the p50 of `save`. The safe part is applied instead
+  (`render_l0` hashes the candidate anchors in 8 threads: 81 → 58 ms), because reusing a
+  hash across commands by `(size, mtime_ns)` is exactly what the stale guarantee forbids
+  (NTFS updates `mtime` late) and a content-verified identity means reading the file again.
+  Reopen only with a stdlib file identity that changes with the content without reading
+  it, or if a real repo exceeds `save` p95 500 ms at 10k.
 
 ## 6. Risks (the ones left)
 
