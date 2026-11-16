@@ -309,3 +309,42 @@ re-run on the release commit of 0.10.0:
 - 13 adversarial scenarios outside the suite passed: torn tails in both JSONL files,
   desynced DB, two installs, `CAIRN_DIR` pointing nowhere, `events.jsonl` byte-identical
   before/after, valid `--json`.
+
+## Backlog triggers (2026-11-16)
+
+Measured on Windows 11, Python 3.14.10, machine not idle (the SLO-e2e numbers of this
+machine fail even without anchors, so the anchor section uses in-process p50 and the
+retrieval section uses ranking metrics, which do not depend on load).
+
+### Retrieval at scale
+
+`python bench/bench_retrieval.py --distractors 10000` adds 10k deterministic filler
+memories with no relation to the queries (same 37 queries, same 52 real memories):
+
+| Corpus | System | Hit@3 | Recall@5 | MRR | Paraphrase Hit@3 | Abstention |
+|---|---|---|---|---|---|---|
+| 52 | cairn | 0.97 | 1.00 | 0.96 | 0.90 | 5/8 |
+| 10,052 | cairn | 0.97 | 1.00 | 0.94 | 0.90 | 5/8 |
+| 10,052 | grep | 0.97 | 0.95 | 0.95 | 0.90 | 5/8 |
+
+Index size alone does not hurt ranking (MRR −0.02). Paraphrase Hit@3 is 0.90, above the
+0.8 that `sqlite-vec` required. Filler does not enter the answers: the test suite asserts
+the cairn metrics are identical with 500 distractors.
+
+### Anchor cost on save (`anchor_cache` trigger)
+
+`python bench/bench_anchors.py --reps 30`, 10k memories, 200 anchored files placed on the
+newest memories (the ones that fit in the L0), p50 in process:
+
+| Anchors | KiB each | L0 p50 | save p50 | Marginal |
+|---|---|---|---|---|
+| 0 | — | 11.9 ms | 22.3 ms | — |
+| 200 | 10 | 50.9 ms | 61.9 ms | +39.6 ms |
+| 200 | 100 | 57.6 ms | 69.5 ms | +47.2 ms |
+| 200 | 256 | 67.5 ms | 80.8 ms | +58.5 ms |
+
+Before the parallel render (same scenarios, measured on the then-current sequential
+version): +36.9 / +64.9 / +81.0 ms. Hashing in 8 threads removed 23 ms of the worst case.
+The trigger (50 MB of anchors, +81 ms over the SLO margin at 10k) fired, but the remaining
+fix would be a cross-command hash cache keyed by `(size, mtime_ns)`, which the stale
+guarantee forbids. Closed; see `docs/DECISIONS.md`.

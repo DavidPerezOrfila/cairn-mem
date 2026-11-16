@@ -8,8 +8,12 @@
   used to measure precision@3 without an LLM (`tests/test_golden.py`).
 - `retrieval.jsonl` and `bench_retrieval.py`: S6 honest benchmark (52 memories, 37
   lexical/paraphrase/multi/no-answer queries, Hit@3, Recall@5, MRR and abstention
-  against a grep baseline). Run `python bench/bench_retrieval.py [--json]`. Results are
-  in [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md).
+  against a grep baseline). `--distractors N` adds deterministic filler to measure the
+  ranking as the index grows. Run `python bench/bench_retrieval.py [--json]
+  [--distractors N]`. Results are in [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md).
+- `bench_anchors.py`: marginal cost of anchors in `save` (10k memories, newest anchored),
+  the measurement behind the `anchor_cache` decision. Run
+  `python bench/bench_anchors.py --reps 30 [--json]`.
 - `bench_sync.py`: S7 incremental sync latency with two writers over 10k (save and search
   after the other writer appended). Run `python bench/bench_sync.py --reps 40 [--json]`.
   Results are in [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md).
