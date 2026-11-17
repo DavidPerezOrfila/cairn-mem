@@ -11,6 +11,7 @@ from pathlib import Path
 from cairn_mem.anchor import is_stale, resolve_anchor
 from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.sessions import Sessions
+from cairn_mem.setup import HARNESSES, setup
 from cairn_mem.store import KINDS, Store, search_scopes
 
 GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", ".MEMORY.md.*", "sessions.jsonl")
@@ -300,6 +301,12 @@ def _cmd_mcp(ns) -> int:
     return serve(read_only=ns.read_only)
 
 
+def _cmd_setup(ns) -> int:
+    for line in setup(ns.harness, Path(ns.dir) if ns.dir else Path.cwd()):
+        print(line)
+    return 0
+
+
 def _cmd_doctor(ns) -> int:
     from cairn_mem.doctor import run
 
@@ -419,6 +426,13 @@ def _parser() -> argparse.ArgumentParser:
     doctor.add_argument("--personal", action="store_true", help="scope personal")
     doctor.add_argument("--json", action="store_true")
     doctor.set_defaults(handler=_cmd_doctor)
+
+    setup_cmd = sub.add_parser(
+        "setup", help="configura MCP y reglas para un harness (claude-code, opencode)"
+    )
+    setup_cmd.add_argument("harness", choices=sorted(HARNESSES))
+    setup_cmd.add_argument("--dir", help="raíz del repo (por defecto el cwd)")
+    setup_cmd.set_defaults(handler=_cmd_setup)
     return p
 
 

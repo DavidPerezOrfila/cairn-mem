@@ -141,9 +141,15 @@ retires a memory that no longer applies.
 
 ### Any other harness
 
-Copy the snippet from [`docs/AGENT_SNIPPET.md`](docs/AGENT_SNIPPET.md) into your
-`AGENTS.md` or `CLAUDE.md`. The agent reads `MEMORY.md` at the start of a task, searches
-before writing, and saves only what is worth keeping.
+`cairn setup claude-code` writes `.mcp.json` and appends the snippet to `CLAUDE.md`;
+`cairn setup opencode` writes `opencode.json` (`mcp.servers.cairn`) and `AGENTS.md`. Both
+merge into an existing config, keep their own other keys, and are idempotent. Use
+`--dir <path>` to configure another root.
+
+For anything else, copy the snippet from
+[`docs/AGENT_SNIPPET.md`](docs/AGENT_SNIPPET.md) into your `AGENTS.md` or `CLAUDE.md`. The
+agent reads `MEMORY.md` at the start of a task, searches before writing, and saves only
+what is worth keeping.
 
 ## How it works
 
@@ -221,6 +227,7 @@ why the agent believes something.
 | `cairn session save\|list\|get [--personal]` | Session recaps, separate from curated memory |
 | `cairn import legacy --db <path> [--dry-run]` | Migrate observations from another SQLite store |
 | `cairn doctor [--personal]` | Check SQLite/FTS5, JSONL lines, DB sync, L0 budget, stale anchors, `.gitignore` and duplicate installs |
+| `cairn setup claude-code\|opencode [--dir <path>]` | Write the MCP config and the rules snippet for that harness |
 | `cairn mcp` | Serve MCP over stdio |
 
 `--json` is available on `save`, `search`, `get`, `check`, `session`, `doctor` and
