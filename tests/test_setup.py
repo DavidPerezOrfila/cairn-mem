@@ -96,6 +96,22 @@ def test_commented_config_is_refused(capsys, in_tmp):
     assert (in_tmp / "opencode.json").read_text(encoding="utf-8") == original
 
 
+def test_config_that_is_not_an_object_is_refused(capsys, in_tmp):
+    (in_tmp / "opencode.json").write_text("[]", encoding="utf-8")
+    code, _, err = run(capsys, "setup", "opencode")
+    assert code == 1
+    assert "objeto JSON" in err
+    assert (in_tmp / "opencode.json").read_text(encoding="utf-8") == "[]"
+
+
+def test_crlf_instructions_file_is_normalized(capsys, in_tmp):
+    (in_tmp / "CLAUDE.md").write_bytes(b"# previo\r\n\r\ntexto\r\n")
+    assert run(capsys, "setup", "claude-code")[0] == 0
+    raw = (in_tmp / "CLAUDE.md").read_bytes()
+    assert b"\r" not in raw
+    assert SNIPPET.strip().encode() in raw
+
+
 def test_dir_option_writes_elsewhere(capsys, in_tmp):
     target = in_tmp / "repo"
     assert run(capsys, "setup", "claude-code", "--dir", str(target))[0] == 0

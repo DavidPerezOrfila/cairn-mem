@@ -79,6 +79,9 @@ def _merge_config(path: Path, keys, server, base) -> bool:
                 f"{path} no es JSON estricto (¿comentarios?); añade el bloque a mano:\n"
                 f"{block}"
             )
+        if not isinstance(data, dict):
+            # ValueError: la CLI lo imprime como error de usuario, no como bug.
+            raise ValueError(f"{path}: se esperaba un objeto JSON")
     else:
         data = dict(base)
     node = data
@@ -105,7 +108,8 @@ def _write_snippet(path: Path) -> bool:
     if not path.exists():
         path.write_text(block, encoding="utf-8", newline="\n")
         return True
-    text = path.read_text(encoding="utf-8")
+    # LF siempre: el fichero de instrucciones se commitea y el bloque es LF.
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
     stop = text.find(END)
     start = text.rfind(BEGIN, 0, stop) if stop != -1 else -1
     if start != -1:
