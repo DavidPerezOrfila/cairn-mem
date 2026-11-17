@@ -5,7 +5,7 @@
 - **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (complete:
   annotations, `--read-only` and `search --kind/--topic/--stale` with `partial`), S16
   (`setup <harness>` and `export`), S18 (`source`) and S19 (hardening of `parse_event` and
-  sessions) are implemented.** 0.15.0 is published (2026-11-18, tagged `v0.15.0`, Trusted
+  sessions) are implemented.** 0.15.1 is published (2026-11-18, tagged `v0.15.1`, Trusted
   Publishing); nothing is unreleased.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py` and `legacy.py` are implemented.
