@@ -2,16 +2,17 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (partial:
-  annotations and `--read-only`) and S18 (`source`) are implemented.** 0.13.0 is
+- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (complete:
+  annotations, `--read-only` and `search --kind/--topic/--stale` with `partial`), S18
+  (`source`) and S19 (hardening of `parse_event` and sessions) are implemented.** 0.13.0 is
   published (2026-11-17, tagged `v0.13.0`, first release via Trusted Publishing);
-  only the S15 remainder (`search --kind/--topic/--stale`, `partial` flag) is unreleased.
+  the S15 remainder and S19 are unreleased.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py` and `legacy.py` are implemented.
-  `tests/` (282) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
-  mode and `source`), sessions, import, the JSONL tail repair, incremental sync,
-  retrieval, the golden set, the integrity audit fixes, `doctor`, the backlog benches and
-  the bench hygiene.
+  `tests/` (304) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
+  mode, `source` and search filters), sessions, import, the JSONL tail repair, incremental
+  sync, retrieval, the golden set, the integrity audit fixes, `doctor`, the backlog benches
+  and the bench hygiene.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -86,8 +87,10 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
 - `stale` is calculated when reading. It is not persisted, and there is no verification
   event.
 - Every JSONL line goes through `store.parse_event` before it reaches SQLite: a bad `op`,
-  `id`, `kind`, `title` or `body` fails naming the file and the line, never with a
-  `KeyError` or a CHECK `IntegrityError`. Only a torn tail (the file does not end in `\n`)
+  `id`, `kind`, `title`, `body` or metadata field fails naming the file and the line, never
+  with a `KeyError` or a CHECK `IntegrityError`. Metadata (S19): no control characters
+  (the historical multi-line `why` tolerates `\n` and `\t`), `why` ≤ 2000, `anchor_path`
+  ≤ 500, `anchor_hash` ≤ 64. Only a torn tail (the file does not end in `\n`)
   is tolerated.
 - L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters. It goes round-robin by kind (each round:
   `convention > decision > gotcha > fact`) and newest `ts` first inside each kind. Output
@@ -122,7 +125,8 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   Stripe `sk_live_`/`rk_live_`, `npm_`), `Bearer <token>` with at least one digit (prose
   like "Bearer authentication" must pass),
   `password|secret|token|api_key` with `=` or `:` (JSON/YAML), and URLs `://user:pass@`.
-  A `body` over 500 characters or a `title` over 200 is an error. `id` must be 12 lowercase
+  A `body` over 500 characters, a `title` over 200 or a `why` over 2000 (multiline
+  prose; `\n`/`\t` allowed) is an error. `id` must be 12 lowercase
   hex, and `topic_key` is ≤ 100 characters with no control characters.
 - Minimal imports at startup. CLI end-to-end SLO: p95 `search` < 350 ms and `save` <
   500 ms, startup included. In-process MCP tool call: < 50 ms.
@@ -142,7 +146,9 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   accumulating windows: one recap can exceed 64 KB with JSON escapes, and `MAX_FRAGMENT`
   is 1 MiB so the tail repair does not truncate it. `_records` rejects a line that is not
   a JSON object or is invalid mid-file with `sessions.jsonl línea N`; only a torn tail (no
-  final `\n`) is skipped. `last` and `all` share one order: the append (line number), not
+  final `\n`) is skipped. A record is served only if `id` is 12 hex and `summary` is a
+  string (S19: a truncation that still parses does not reach `last`/`all`). `last` and
+  `all` share one order: the append (line number), not
   `ts`; a duplicate `id` keeps its last line. `id` must be 12 lowercase hex in `save` and
   `get`. `context` keeps the head and the tail (2000 + 2000 characters) of a long recap.
 - **Importer:** idempotent through `sha1("<fixed salt>:<source id>")[:12]`. `What` →

@@ -20,6 +20,9 @@ KINDS = tuple(KIND_PRIORITY)
 MAX_BODY = 500
 MAX_TITLE = 200
 MAX_SOURCE = 100
+MAX_WHY = 2000
+MAX_ANCHOR_PATH = 500
+MAX_ANCHOR_HASH = 64
 ID_PATTERN = re.compile(r"[0-9a-f]{12}")
 
 SECRET_PATTERNS = (
@@ -215,13 +218,21 @@ def reject_secrets(*texts):
             raise ValueError("el texto parece contener un secreto; reescríbelo sin él")
 
 
+def _has_controls(text: str, allowed: str = "") -> bool:
+    """Caracteres que `cairn get` imprimiría tal cual: saltos de línea que
+    forjan líneas y escapes de terminal."""
+    return any(
+        ord(char) < 32 or ord(char) == 127 for char in text if char not in allowed
+    )
+
+
 def validate_topic(topic_key):
     """Normaliza el topic y rechaza lo que rompería el L0: líneas inyectadas por
     un salto de línea o un topic tan largo que deja el título fuera del presupuesto."""
     if topic_key is None:
         return None
     topic_key = str(topic_key)
-    if any(ord(char) < 32 or ord(char) == 127 for char in topic_key):
+    if _has_controls(topic_key):
         raise ValueError("topic_key no puede contener saltos de línea ni controles")
     topic_key = topic_key.strip()
     if len(topic_key) > MAX_TOPIC:
@@ -235,12 +246,24 @@ def validate_source(source):
     if source is None:
         return None
     source = str(source)
-    if any(ord(char) < 32 or ord(char) == 127 for char in source):
+    if _has_controls(source):
         raise ValueError("source no puede contener saltos de línea ni controles")
     source = source.strip()
     if len(source) > MAX_SOURCE:
         raise ValueError(f"source supera {MAX_SOURCE} caracteres")
     return source or None
+
+
+def _escapes_root(anchor_path: str) -> bool:
+    """El ancla es una ruta POSIX relativa a la raíz. Absoluta, UNC, letra de
+    unidad o segmento '..' sale del proyecto — o abre un recurso remoto en
+    Windows durante el hash, rompiendo la garantía de cero red."""
+    text = anchor_path.replace("\\", "/")
+    return (
+        text.startswith("/")
+        or re.match(r"^[A-Za-z]:", text) is not None
+        or ".." in text.split("/")
+    )
 
 
 def parse_event(line: str, number: int) -> dict:
@@ -263,24 +286,41 @@ def parse_event(line: str, number: int) -> dict:
         raise ValueError(f"{where}: ts inválido") from error
     for key in ("why", "source", "topic_key", "anchor_path", "anchor_hash"):
         value = event.get(key)
-        if value is not None and not isinstance(value, str):
+        if value is None:
+            continue
+        # S19: mismo contrato que el borde de escritura. El why histórico es prosa
+        # multilínea (la memoria real ya tiene saltos), así que tolera \n y \t.
+        allowed = "\n\t" if key == "why" else ""
+        limit = {
+            "why": MAX_WHY,
+            "source": MAX_SOURCE,
+            "topic_key": MAX_TOPIC,
+            "anchor_path": MAX_ANCHOR_PATH,
+            "anchor_hash": MAX_ANCHOR_HASH,
+        }[key]
+        if (
+            not isinstance(value, str)
+            or len(value) > limit
+            or _has_controls(value, allowed)
+        ):
             raise ValueError(f"{where}: {key} inválido")
+    anchor = event.get("anchor_path")
+    if anchor is not None and _escapes_root(anchor):
+        raise ValueError(
+            f"{where}: anchor_path inválido (debe ser relativo al proyecto)"
+        )
     if event["op"] == "save":
         if event.get("kind") not in KINDS:
             raise ValueError(f"{where}: kind inválido")
         title, body = event.get("title"), event.get("body")
-        if not isinstance(title, str) or len(title) > MAX_TITLE:
+        if not isinstance(title, str) or len(title) > MAX_TITLE or _has_controls(title):
             raise ValueError(f"{where}: title inválido o supera {MAX_TITLE}")
-        if not isinstance(body, str) or len(body) > MAX_BODY:
-            raise ValueError(f"{where}: body inválido o supera {MAX_BODY}")
-        source = event.get("source")
-        if source is not None and (
-            len(source) > MAX_SOURCE
-            or any(ord(char) < 32 or ord(char) == 127 for char in source)
+        if (
+            not isinstance(body, str)
+            or len(body) > MAX_BODY
+            or _has_controls(body, "\n\t")
         ):
-            # Defensa extra sobre el topic_key: un source con '\n' se imprime
-            # tal cual en `cairn get`.
-            raise ValueError(f"{where}: source inválido")
+            raise ValueError(f"{where}: body inválido o supera {MAX_BODY}")
     return event
 
 
@@ -355,8 +395,18 @@ class Store:
             raise ValueError(
                 f"body supera {MAX_BODY} caracteres; divídelo en dos memorias"
             )
+        if why is not None and (
+            not isinstance(why, str) or len(why) > MAX_WHY or _has_controls(why, "\n\t")
+        ):
+            # S19: el why comparte contrato con parse_event; \n y \t siguen siendo
+            # prosa válida porque la memoria histórica ya los usa.
+            raise ValueError(f"why inválido o supera {MAX_WHY} caracteres")
         topic_key = validate_topic(topic_key)
         source = validate_source(source)
+        if anchor_path is not None and _escapes_root(str(anchor_path)):
+            raise ValueError("anchor_path debe ser una ruta relativa al proyecto")
+        if body is not None and _has_controls(body, "\n\t"):
+            raise ValueError("body contiene caracteres de control")
         mid = id or secrets.token_hex(6)
         if ID_PATTERN.fullmatch(mid) is None:
             raise ValueError("id debe ser 12 caracteres hex en minúscula")
