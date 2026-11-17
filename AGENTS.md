@@ -4,9 +4,8 @@
 
 - **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (complete:
   annotations, `--read-only` and `search --kind/--topic/--stale` with `partial`), S18
-  (`source`) and S19 (hardening of `parse_event` and sessions) are implemented.** 0.13.0 is
-  published (2026-11-17, tagged `v0.13.0`, first release via Trusted Publishing);
-  the S15 remainder and S19 are unreleased.
+  (`source`) and S19 (hardening of `parse_event` and sessions) are implemented.** 0.14.0 is
+  published (2026-11-17, tagged `v0.14.0`, Trusted Publishing); nothing is unreleased.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py` and `legacy.py` are implemented.
   `tests/` (304) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
