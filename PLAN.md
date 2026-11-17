@@ -235,11 +235,11 @@ Each round is a slice: tests first, gate, review and its own release.
 | S12   | CLI/MCP symmetry: `search --project`, `--personal` on `rebuild/render/check`, `archive` across both scopes                                                                                                                                           | 0.12.0                | [`docs/features/s12-cli-mcp-symmetry.md`](docs/features/s12-cli-mcp-symmetry.md)               |
 | S13   | Secret filter v2: `Bearer`, `ASIA`, `xox[baprs]-`, `sk_live_`/`rk_live_`, `npm_`                                                                                                                                                                     | 0.11.0                | `tests/test_store.py` (reject + prose cases)                                                   |
 | S14   | Bench hygiene: clean `mkdtemp` dirs, exit 1 when an SLO fails                                                                                                                                                                                        | — (bench-only)        | [`docs/features/s14-bench-hygiene.md`](docs/features/s14-bench-hygiene.md)                       |
-| S15   | MCP annotations (`readOnlyHint`, `idempotentHint`, `destructiveHint`), `cairn mcp --read-only` (solo las 5 tools de lectura) y `search --kind/--topic/--stale` con el flag `partial` del fallback OR                                                                                                                              | 0.13.0 + unreleased   | [`docs/features/s15-mcp-annotations-read-only.md`](docs/features/s15-mcp-annotations-read-only.md) |
+| S15   | MCP annotations (`readOnlyHint`, `idempotentHint`, `destructiveHint`), `cairn mcp --read-only` (solo las 5 tools de lectura) y `search --kind/--topic/--stale` con el flag `partial` del fallback OR                                                                                                                              | 0.14.0                | [`docs/features/s15-mcp-annotations-read-only.md`](docs/features/s15-mcp-annotations-read-only.md) |
 | S16   | Agent setup: `cairn setup <harness>` writes the snippet/MCP config; Markdown export                                                                                                                                                                  | planned               | —                                                                                              |
 | S17   | Trusted Publishing: `.github/workflows/publish.yml` (OIDC, attestations PEP 740); PyPI deja de mostrar "No provenance"                                                                                                                               | — (release infra)     | [`docs/features/s17-trusted-publishing.md`](docs/features/s17-trusted-publishing.md)            |
 | S18   | Procedencia opcional de la memoria: `source` en `save` (CLI/MCP), validado e indexado. Sin estado "sin revisar": el PR sobre `events.jsonl` ya es la revisión humana                                                                                 | 0.13.0                | [`docs/features/s18-source-provenance.md`](docs/features/s18-source-provenance.md)             |
-| S19   | Hardening del borde: `parse_event` acota y controla todo el metadato (`why` ≤ 2000 tolerando el `\n` histórico, topic/anchor caps, `title` sin controles); `Sessions` solo sirve registros completos (id 12 hex + summary)                              | — (unreleased)        | `tests/test_store.py`, `tests/test_sessions.py`, `docs/DECISIONS.md`                            |
+| S19   | Hardening del borde: `parse_event` acota y controla todo el metadato (`why` ≤ 2000 tolerando el `\n` histórico, topic/anchor caps, `title` sin controles); `Sessions` solo sirve registros completos (id 12 hex + summary)                              | 0.14.0                | `tests/test_store.py`, `tests/test_sessions.py`, `docs/DECISIONS.md`                            |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -277,6 +277,13 @@ annotations and `cairn mcp --read-only`) and S18 (optional `source` provenance,
 `SCHEMA_VERSION = 4`). Verified with a clean install from the public index in an empty
 venv (`init`, `save`, `search`, `doctor` exit 0, version 0.13.0) and the PyPI page
 showing provenance.
+
+**0.14.0 release:** 2026-11-17 on PyPI and tag `v0.14.0`. Contents: the S15 remainder
+(`search --kind/--topic/--stale` in CLI and MCP, with `partial` as an output field of the
+OR fallback) and S19 (the parse edge caps and controls every metadata field; `Sessions`
+fails on a corrupt record outside a torn tail). No schema change. Verified with a clean
+install from the public index in an empty venv (`init`, `save`, `search`, `doctor` exit 0,
+version 0.14.0).
 
 ## 5. Backlog (closed with evidence, 2026-11-16)
 
