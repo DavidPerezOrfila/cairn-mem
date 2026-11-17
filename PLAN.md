@@ -236,8 +236,8 @@ Each round is a slice: tests first, gate, review and its own release.
 | S13   | Secret filter v2: `Bearer`, `ASIA`, `xox[baprs]-`, `sk_live_`/`rk_live_`, `npm_`                                                                                                                                                                     | 0.11.0                | `tests/test_store.py` (reject + prose cases)                                                   |
 | S14   | Bench hygiene: clean `mkdtemp` dirs, exit 1 when an SLO fails                                                                                                                                                                                        | — (bench-only)        | [`docs/features/s14-bench-hygiene.md`](docs/features/s14-bench-hygiene.md)                       |
 | S15   | MCP annotations (`readOnlyHint`, `idempotentHint`, `destructiveHint`), `cairn mcp --read-only` (solo las 5 tools de lectura) y `search --kind/--topic/--stale` con el flag `partial` del fallback OR                                                                                                                              | 0.14.0                | [`docs/features/s15-mcp-annotations-read-only.md`](docs/features/s15-mcp-annotations-read-only.md) |
-| S16   | Agent setup: `cairn setup claude-code\|opencode [--dir]` escribe la config MCP y el snippet entre marcas; merge sin pisar el resto del fichero; JSONC con comentarios se rechaza con el bloque a pegar                                      | 0.15.0 (unreleased)   | [`docs/features/s16-setup-harness.md`](docs/features/s16-setup-harness.md)                     |
-| S16.1 | `cairn export [--personal] [--sessions N] [--out PATH]`: memoria activa a Markdown por kind, sin marcas de stale y con salida determinista                                                                                                          | 0.15.0 (unreleased)   | [`docs/features/s16-setup-harness.md`](docs/features/s16-setup-harness.md)                     |
+| S16   | Agent setup: `cairn setup claude-code\|opencode [--dir]` escribe la config MCP y el snippet entre marcas; merge sin pisar el resto del fichero; JSONC con comentarios se rechaza con el bloque a pegar                                      | 0.15.0   | [`docs/features/s16-setup-harness.md`](docs/features/s16-setup-harness.md)                     |
+| S16.1 | `cairn export [--personal] [--sessions N] [--out PATH]`: memoria activa a Markdown por kind, sin marcas de stale y con salida determinista                                                                                                          | 0.15.0   | [`docs/features/s16-setup-harness.md`](docs/features/s16-setup-harness.md)                     |
 | S17   | Trusted Publishing: `.github/workflows/publish.yml` (OIDC, attestations PEP 740); PyPI deja de mostrar "No provenance"                                                                                                                               | — (release infra)     | [`docs/features/s17-trusted-publishing.md`](docs/features/s17-trusted-publishing.md)            |
 | S18   | Procedencia opcional de la memoria: `source` en `save` (CLI/MCP), validado e indexado. Sin estado "sin revisar": el PR sobre `events.jsonl` ya es la revisión humana                                                                                 | 0.13.0                | [`docs/features/s18-source-provenance.md`](docs/features/s18-source-provenance.md)             |
 | S19   | Hardening del borde: `parse_event` acota y controla todo el metadato (`why` ≤ 2000 tolerando el `\n` histórico, topic/anchor caps, `title` sin controles); `Sessions` solo sirve registros completos (id 12 hex + summary)                              | 0.14.0                | `tests/test_store.py`, `tests/test_sessions.py`, `docs/DECISIONS.md`                            |
@@ -285,6 +285,13 @@ OR fallback) and S19 (the parse edge caps and controls every metadata field; `Se
 fails on a corrupt record outside a torn tail). No schema change. Verified with a clean
 install from the public index in an empty venv (`init`, `save`, `search`, `doctor` exit 0,
 version 0.14.0).
+
+**0.15.0 release:** 2026-11-18 on PyPI and tag `v0.15.0`. Contents: S16 (`cairn setup
+claude-code|opencode [--dir]` writes the harness MCP config and the rules snippet between
+markers, idempotent, merge-safe and refusing a commented JSONC config) and S16.1
+(`cairn export` dumps active memory to Markdown). No schema change. Verified with a clean
+install from the public index in an empty venv (`init`, `save`, `search`, `doctor` exit 0,
+`setup` and `export` included, version 0.15.0).
 
 ## 5. Backlog (closed with evidence, 2026-11-16)
 
