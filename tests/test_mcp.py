@@ -559,6 +559,20 @@ def test_mcp_without_init_returns_tool_error(in_tmp):
     assert "cairn init" in text(response)
 
 
+def test_search_filters_by_kind_and_marks_partial_rows():
+    server = Server()
+    decision = text(
+        call(
+            server, "save", kind="decision", title="Pipeline ETL", body="carga nocturna"
+        )
+    )
+    text(call(server, "save", kind="fact", title="Informe de ventas", body="turno"))
+    rows = json.loads(text(call(server, "search", query="carga", kind="decision")))
+    assert [row["id"] for row in rows] == [decision]
+    fallback = json.loads(text(call(server, "search", query="carga ventas")))
+    assert fallback and all(row["partial"] is True for row in fallback)
+
+
 def test_search_by_topic_returns_topic_key():
     server = Server()
     memory_id = text(

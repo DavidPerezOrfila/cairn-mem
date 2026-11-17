@@ -129,6 +129,38 @@ def test_search_text_output(capsys):
     assert code == 0 and "Pipeline KNIME" in out
 
 
+def test_search_kind_topic_and_stale_flags(capsys):
+    run(capsys, "init")
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "decision",
+        "--topic",
+        "infra/deploy",
+        "--title",
+        "Pipeline ETL",
+        "--body",
+        "carga nocturna",
+    )
+    run(
+        capsys,
+        "save",
+        "--kind",
+        "fact",
+        "--title",
+        "Pipeline nocturno",
+        "--body",
+        "carga nocturna",
+    )
+    _, out, _ = run(capsys, "search", "carga", "--kind", "decision", "--json")
+    assert [row["title"] for row in json.loads(out)] == ["Pipeline ETL"]
+    _, out, _ = run(capsys, "search", "carga", "--topic", "infra/deploy", "--json")
+    assert [row["title"] for row in json.loads(out)] == ["Pipeline ETL"]
+    _, out, _ = run(capsys, "search", "carga", "--stale", "--json")
+    assert json.loads(out) == []
+
+
 def test_archive_hides_from_search(capsys):
     run(capsys, "init")
     _, out, _ = run(

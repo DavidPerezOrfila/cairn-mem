@@ -374,3 +374,19 @@ version): +36.9 / +64.9 / +81.0 ms. Hashing in 8 threads removed 23 ms of the wo
 The trigger (50 MB of anchors, +81 ms over the SLO margin at 10k) fired, but the remaining
 fix would be a cross-command hash cache keyed by `(size, mtime_ns)`, which the stale
 guarantee forbids. Closed; see `docs/DECISIONS.md`.
+
+## S15 remainder: search filters (2026-11-17)
+
+`search --kind/--topic/--stale` only adds WHERE terms to the same query; `--stale` walks
+the bm25 order without the SQL LIMIT and stops at `limit` stale rows, so it does not hash
+the whole corpus. `python bench/bench_cli.py --reps 20` on a loaded machine (startup floor
+`python -c pass` 138.7 ms against 72 ms in the M4 pass):
+
+| Records | search p95 | save p95 | internal search p95 |
+|---|---|---|---|
+| 1,000 | 555.7 ms | 597.1 ms | 1.4 ms |
+| 10,000 | 629.6 ms | 635.5 ms | 5.5 ms |
+
+The end-to-end SLO fails on this run and it is the environment, not the change: `python -m
+cairn_mem.cli --help` takes 442.7 ms with the change and 451.2 ms with `src/` stashed, and
+the internal query stays at 1.4-5.5 ms (5.9 ms in the baseline pass).

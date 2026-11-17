@@ -135,7 +135,15 @@ def _cmd_search(ns) -> int:
         except FileNotFoundError:
             if ns.project or personal is None:
                 raise  # sin proyecto ni scope personal no hay nada que buscar
-    results = search_scopes(project, personal, ns.query, limit=ns.limit)
+    results = search_scopes(
+        project,
+        personal,
+        ns.query,
+        limit=ns.limit,
+        kind=ns.kind,
+        topic=ns.topic,
+        stale=ns.stale,
+    )
     if ns.json:
         _print_json(results)
     elif not results:
@@ -147,9 +155,10 @@ def _cmd_search(ns) -> int:
             scope = "  [personal]" if r["scope"] == "personal" else ""
             source = f"  ({r['source']})" if r.get("source") else ""
             stale = "  ⚠ revisar" if r["stale"] else ""
+            partial = "  (parcial)" if r.get("partial") else ""
             print(
                 f"{r['id']}  {r['kind']}{topic}{scope}  {r['title']} — {snippet}"
-                f"{source}{stale}"
+                f"{source}{stale}{partial}"
             )
     return 0
 
@@ -340,6 +349,11 @@ def _parser() -> argparse.ArgumentParser:
     search = sub.add_parser("search", help="busca memorias activas")
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=5)
+    search.add_argument("--kind", choices=KINDS)
+    search.add_argument("--topic", help="topic_key exacto")
+    search.add_argument(
+        "--stale", action="store_true", help="solo memorias con el ancla cambiada"
+    )
     scope = search.add_mutually_exclusive_group()
     scope.add_argument("--project", action="store_true", help="solo el proyecto")
     scope.add_argument("--personal", action="store_true", help="scope personal")

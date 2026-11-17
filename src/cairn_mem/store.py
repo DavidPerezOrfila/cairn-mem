@@ -439,23 +439,46 @@ class Store:
         row = self._conn.execute("SELECT * FROM mem WHERE id = ?", (id,)).fetchone()
         return dict(row) if row else None
 
-    def search(self, query: str, limit: int = 5) -> list[dict]:
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+        kind: str | None = None,
+        topic: str | None = None,
+        stale: bool = False,
+    ) -> list[dict]:
+        """Con `stale` no vale el LIMIT de SQL (los primeros K pueden estar
+        frescos): se recorre el ranking y se corta al reunir `limit` stale, así
+        no se hashea el corpus entero."""
         self._sync()
         limit = max(0, limit)
+        if not limit:
+            return []
         terms = self._stems(query)
         if not terms:
             return []
-        rows = self._search(self._match(terms, "AND"), limit)
+        sql_limit = None if stale else limit
+        rows = self._search(self._match(terms, "AND"), sql_limit, kind, topic, stale)
+        partial = False
         if not rows and len(terms) > 1:
             # Sin quórum: exigir 2 raíces hundía el parafraseo (S6.1).
-            rows = self._search(self._match(terms, "OR"), limit)
+            rows = self._search(self._match(terms, "OR"), sql_limit, kind, topic, stale)
+            partial = bool(rows)
         root = self.root.parent
+        rows_kept = []
         for row in rows:
             row["stale"] = is_stale(row["anchor_path"], row["anchor_hash"], root)
+            if stale and not row["stale"]:
+                continue
             if not row["source"]:
                 # Sin procedencia no se ruido de tokens en el JSON.
                 del row["source"]
-        return rows
+            if partial:
+                row["partial"] = True
+            rows_kept.append(row)
+            if len(rows_kept) >= limit:
+                break
+        return rows_kept
 
     def dump(self) -> list[dict]:
         self._sync()
@@ -656,15 +679,35 @@ class Store:
                 stems.append(stem)
         return stems
 
-    def _search(self, match: str, limit: int) -> list[dict]:
-        rows = self._conn.execute(
-            """SELECT m.id, m.kind, m.topic_key, m.title, m.source, m.anchor_path, m.anchor_hash,
-                      snippet(mem_fts, 1, '', '', '…', 12) AS snippet
-               FROM mem_fts JOIN mem m ON m.rowid = mem_fts.rowid
-               WHERE mem_fts MATCH ? AND m.status = 'active'
-               ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0), m.rowid LIMIT ?""",
-            (match, limit),
-        ).fetchall()
+    def _search(
+        self,
+        match: str,
+        limit: int | None,
+        kind: str | None = None,
+        topic: str | None = None,
+        stale: bool = False,
+    ) -> list[dict]:
+        where = ["mem_fts MATCH ?", "m.status = 'active'"]
+        params: list = [match]
+        if kind:
+            where.append("m.kind = ?")
+            params.append(kind)
+        if topic:
+            where.append("m.topic_key = ?")
+            params.append(topic)
+        if stale:
+            where.append("m.anchor_path IS NOT NULL AND m.anchor_hash IS NOT NULL")
+        sql = (
+            "SELECT m.id, m.kind, m.topic_key, m.title, m.source, m.anchor_path, m.anchor_hash, "
+            "snippet(mem_fts, 1, '', '', '…', 12) AS snippet "
+            "FROM mem_fts JOIN mem m ON m.rowid = mem_fts.rowid "
+            f"WHERE {' AND '.join(where)} "
+            "ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0), m.rowid"
+        )
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(limit)
+        rows = self._conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
 
     def _fingerprint(self) -> tuple[str, str]:
@@ -729,14 +772,22 @@ class Store:
         return True
 
 
-def search_scopes(project, personal, query: str, limit: int = 5) -> list[dict]:
+def search_scopes(
+    project,
+    personal,
+    query: str,
+    limit: int = 5,
+    kind: str | None = None,
+    topic: str | None = None,
+    stale: bool = False,
+) -> list[dict]:
     """Busca en proyecto y scope personal. Un BM25 de otra base no es comparable:
     se entrelazan por posición de ranking, empezando por el proyecto."""
     groups = []
     for scope, store in (("project", project), ("personal", personal)):
         if store is None:
             continue
-        rows = store.search(query, limit=limit)
+        rows = store.search(query, limit=limit, kind=kind, topic=topic, stale=stale)
         groups.append([{**row, "scope": scope} for row in rows])
     merged = [row for group in zip_longest(*groups) for row in group if row]
     return merged[: max(0, limit)]

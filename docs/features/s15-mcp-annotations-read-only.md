@@ -1,4 +1,4 @@
-# S15 (parcial): anotaciones MCP y `cairn mcp --read-only`
+# S15: anotaciones MCP, `--read-only` y filtros de `search`
 
 ## Goal
 
@@ -36,9 +36,24 @@ sin depender de reglas de permisos en el prompt.
 Gate medido 2026-11-16: `pytest -q` → 264 passed; `ruff check src tests bench`
 limpio. Los benches no cambian: `bench_mcp` no pasa por `--read-only`.
 
+## Resto de S15 (2026-11-17)
+
+- `search --kind/--topic/--stale` en CLI y MCP; los filtros van al WHERE de SQL.
+  `--topic` es el `topic_key` exacto.
+- Con `--stale` no se aplica el LIMIT de SQL (los primeros K por bm25 pueden estar
+  frescos): se recorre el ranking y se corta al reunir `limit` filas stale.
+- `partial` es un campo de salida, no un flag de entrada: se marca en las filas que
+  vienen del fallback OR.
+- `Sessions._records` falla con `sessions.jsonl línea N: sesión inválida` salvo cola
+  rasgada (sin `\n` final).
+
+Aceptación: `test_search_filters_by_kind_and_topic`,
+`test_search_marks_rows_from_the_or_fallback_as_partial`,
+`test_search_stale_skips_fresh_rows_before_applying_the_limit`,
+`test_search_kind_topic_and_stale_flags`, `test_search_filters_by_kind_and_marks_partial_rows`,
+`test_invalid_session_mid_file_fails_naming_the_line`.
+
 ## Out of scope
 
-- `search --kind/--topic/--stale` y el flag `partial` del fallback OR
-  (siguen en la fila S15 de `PLAN.md`).
 - Modo read-only en la CLI general (los comandos de escritura siguen ahí:
   la proteccción es por servidor MCP, no por shell).

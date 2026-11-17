@@ -254,6 +254,8 @@ def test_out_of_order_save_keeps_newest_active(store, monkeypatch):
 def test_search_non_positive_limit_returns_empty(store, limit):
     store.save(kind="fact", title="x", body="y")
     assert store.search("x", limit=limit) == []
+    # Con `stale` no hay LIMIT en SQL: el recorte no puede depender de la consulta.
+    assert store.search("x", limit=limit, stale=True) == []
 
 
 @pytest.mark.parametrize("field", ["topic_key", "anchor_path"])
@@ -506,6 +508,56 @@ def test_search_result_exposes_topic_key(store):
     rows = {row["id"]: row for row in store.search("bm25")}
     assert rows[mid]["topic_key"] == "storage/fts5"
     assert rows[without]["topic_key"] is None
+
+
+def test_search_filters_by_kind_and_topic(store):
+    decision = store.save(
+        kind="decision",
+        topic_key="infra/deploy",
+        title="Pipeline ETL",
+        body="carga nocturna",
+    )
+    fact = store.save(kind="fact", title="Pipeline nocturno", body="carga nocturna")
+    assert [row["id"] for row in store.search("carga", kind="decision")] == [decision]
+    assert [row["id"] for row in store.search("carga", kind="fact")] == [fact]
+    assert [row["id"] for row in store.search("carga", topic="infra/deploy")] == [
+        decision
+    ]
+    assert store.search("carga", topic="infra/otro") == []
+
+
+def test_search_marks_rows_from_the_or_fallback_as_partial(store):
+    store.save(kind="fact", title="Pipeline KNIME", body="carga nocturna")
+    store.save(kind="fact", title="Informe de ventas", body="carga por turno")
+    fallback = store.search("knime ventas")
+    assert fallback and all(row["partial"] is True for row in fallback)
+    assert "partial" not in store.search("knime")[0]
+
+
+def test_search_stale_skips_fresh_rows_before_applying_the_limit(store):
+    from cairn_mem.anchor import file_hash
+
+    project = store.root.parent
+    (project / "a.md").write_text("uno\n", encoding="utf-8", newline="\n")
+    (project / "b.md").write_text("dos\n", encoding="utf-8", newline="\n")
+    # Repite más el término para quedar primero en bm25.
+    fresh = store.save(
+        kind="fact",
+        title="fts5 bm25 bm25",
+        body="bm25 bm25",
+        anchor_path="a.md",
+        anchor_hash=file_hash(project / "a.md"),
+    )
+    stale = store.save(
+        kind="fact",
+        title="fts5 bm25",
+        body="bm25",
+        anchor_path="b.md",
+        anchor_hash=file_hash(project / "b.md"),
+    )
+    assert [row["id"] for row in store.search("bm25", limit=1)] == [fresh]
+    (project / "b.md").write_text("tres\n", encoding="utf-8", newline="\n")
+    assert [row["id"] for row in store.search("bm25", limit=1, stale=True)] == [stale]
 
 
 def test_search_scopes_interleaves_scopes_by_rank(tmp_path):

@@ -111,6 +111,11 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   out, plural trimmed to 5+ characters, prefix), use AND and fall back to OR when there
   are no results. Raw queries fail with `-`, `:` and `"`.
   Ranking: `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)`.
+- `search` filters (`--kind`, `--topic` exact `topic_key`, `--stale`) go into the
+  parameterized SQL WHERE. With `--stale` SQL does **not** apply the LIMIT: the first K by
+  bm25 can all be fresh, so the ranking is walked and cut at `limit` stale rows (anchors
+  over `MAX_HASH_BYTES` count as stale without hashing). `partial` is an output field set
+  only on the OR fallback, never an input flag.
 - **Security:** reject (do not redact) secrets before writing: cloud keys (`AKIA`, `ASIA`),
   `BEGIN ... PRIVATE KEY`, JWTs `eyJ...`, provider tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`,
   `ghr_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza`, Slack `xox[baprs]-`,
