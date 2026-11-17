@@ -106,8 +106,9 @@ def _write_snippet(path: Path) -> bool:
         path.write_text(block, encoding="utf-8", newline="\n")
         return True
     text = path.read_text(encoding="utf-8")
-    start, stop = text.find(BEGIN), text.find(END)
-    if start != -1 and stop > start:
+    stop = text.find(END)
+    start = text.rfind(BEGIN, 0, stop) if stop != -1 else -1
+    if start != -1:
         updated = text[:start] + block + text[stop + len(END) + 1 :]
     else:
         updated = text.rstrip("\n") + "\n\n" + block

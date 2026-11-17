@@ -42,7 +42,7 @@ def test_export_renders_active_memories(capsys, in_tmp):
     )
     code, out, _ = run(capsys, "export")
     assert code == 0
-    assert out.startswith("# ")
+    assert out.startswith("# Memoria cairn")
     assert "## decision" in out
     assert "### FTS5 over LIKE" in out
     assert "bm25 ranking" in out and "escala a 10k" in out
@@ -69,6 +69,7 @@ def test_export_includes_sessions_on_demand(capsys, in_tmp):
     out = run(capsys, "export", "--sessions", "1")[1]
     assert "## sesiones" in out and "sesión dos" in out
     assert "sesión uno" not in out
+    assert "## sesiones" not in run(capsys, "export", "--sessions", "-1")[1]
 
 
 def test_export_out_writes_a_file(capsys, in_tmp):

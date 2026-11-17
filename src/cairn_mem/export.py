@@ -31,9 +31,10 @@ def _why(why: str) -> str:
 
 def render_markdown(store, sessions=None, limit: int = 0) -> str:
     rows = [row for row in store.dump() if row["status"] == "active"]
+    limit = max(0, limit)
     records = sessions.all(limit=limit) if sessions is not None and limit else []
     lines = [
-        f"# {store.root.parent.name} — memoria cairn",
+        "# Memoria cairn",
         "",
         "<!-- generado por `cairn export`; la verdad está en .cairn/events.jsonl -->",
         "",

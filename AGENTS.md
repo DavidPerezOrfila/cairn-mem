@@ -3,15 +3,16 @@
 ## State and scope
 
 - **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (complete:
-  annotations, `--read-only` and `search --kind/--topic/--stale` with `partial`), S18
-  (`source`) and S19 (hardening of `parse_event` and sessions) are implemented.** 0.14.0 is
-  published (2026-11-17, tagged `v0.14.0`, Trusted Publishing); nothing is unreleased.
+  annotations, `--read-only` and `search --kind/--topic/--stale` with `partial`), S16
+  (`setup <harness>` and `export`), S18 (`source`) and S19 (hardening of `parse_event` and
+  sessions) are implemented.** 0.14.0 is published (2026-11-17, tagged `v0.14.0`, Trusted
+  Publishing); S16 and S16.1 are merged but unreleased (next: 0.15.0).
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
-  `jsonl.py`, `doctor.py` and `legacy.py` are implemented.
-  `tests/` (304) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
+  `jsonl.py`, `doctor.py`, `setup.py`, `export.py` and `legacy.py` are implemented.
+  `tests/` (319) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
   mode, `source` and search filters), sessions, import, the JSONL tail repair, incremental
-  sync, retrieval, the golden set, the integrity audit fixes, `doctor`, the backlog benches
-  and the bench hygiene.
+  sync, retrieval, the golden set, the integrity audit fixes, `doctor`, `setup`/`export`,
+  the backlog benches and the bench hygiene.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -58,7 +59,8 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
 - `src/cairn_mem/cli.py` (`main(argv) -> int`; entrypoints `cairn` and `cairn-mem`, text and
   `--json`), `store.py` (core), `anchor.py` (hash and stale), `render.py` (L0),
   `paths.py` (`.cairn/` root and personal scope), `mcp.py` (stdio JSON-RPC), `sessions.py`
-  (recaps), `jsonl.py` (shared append), `doctor.py` (diagnosis) and `legacy.py` (importer).
+  (recaps), `jsonl.py` (shared append), `doctor.py` (diagnosis), `setup.py` (harness
+  config) and `legacy.py` (importer).
 - **Truth:** `.cairn/events.jsonl` (append-only, 2 operations: `save`, `archive`).
   `cairn.db` and `MEMORY.md` are derived and can be regenerated. Do not edit them by hand.
   `sessions.jsonl` is a separate append-only file and is not curated memory.
@@ -139,6 +141,15 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   It parses `events.jsonl` with `parse_event` (line-numbered failures) and refreshes
   `cairn.db`/`MEMORY.md` only because it opens the `Store`, like every other command.
   Exit code 1 only on `fail`; `warn` keeps it 0.
+- **Setup:** `setup.py` holds one table (`HARNESSES`) with the config file, the JSON path of
+  the server and the instructions file per harness. It only touches the repo (never
+  `~/.claude.json` or the global OpenCode config) and only the `cairn` key: a config file
+  that is not strict JSON (JSONC with comments) is **not** rewritten, the command fails
+  with code 1 and prints the block to paste. A new harness is one row plus one test
+  against a fixture; do not add a format nobody verified.
+- **Export:** `cairn export` is a snapshot of active memories grouped by kind, plus the
+  last N recaps only when `--sessions N` is given. No stale marks: that would hash every
+  anchor and turn a copy into `check`. It must stay byte-identical across runs.
 - **Sessions:** `.cairn/sessions.jsonl` is local and does not enter FTS or the L0. A recap
   may exceed 500 characters (up to 20k). `context` injects only the last **project** recap;
   a personal one belongs to another repo. `Sessions.last` walks the tail backwards
