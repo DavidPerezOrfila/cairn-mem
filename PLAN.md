@@ -293,6 +293,13 @@ markers, idempotent, merge-safe and refusing a commented JSONC config) and S16.1
 install from the public index in an empty venv (`init`, `save`, `search`, `doctor` exit 0,
 `setup` and `export` included, version 0.15.0).
 
+**0.15.1 release:** 2026-11-18 on PyPI and tag `v0.15.1`. Patch for two S16 defects found
+in the post-release review: a config file that parses but is not a JSON object (`[]`, a
+scalar) raised `AttributeError` instead of failing as a user error, and the rules snippet
+was written as LF into a CRLF instructions file. No API or schema change. Verified with a
+clean install from the public index in an empty venv (`setup` with a config that is not an
+object exits 1, CRLF file normalized, version 0.15.1).
+
 ## 5. Backlog (closed with evidence, 2026-11-16)
 
 Every item was measured on 2026-11-10 and 2026-11-16 (numbers in
