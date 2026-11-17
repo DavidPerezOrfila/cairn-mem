@@ -75,6 +75,9 @@ TOOLS = [
             "properties": {
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                "kind": {"type": "string", "enum": list(KINDS)},
+                "topic": {"type": "string", "maxLength": 100},
+                "stale": {"type": "boolean"},
                 "scope": {"type": "string", "enum": list(SCOPES)},
             },
             "required": ["query"],
@@ -306,6 +309,15 @@ def _search(server, args):
     if not isinstance(limit, int) or isinstance(limit, bool):
         raise TypeError("limit debe ser entero")
     limit = max(1, min(limit, 20))
+    kind = args.get("kind")
+    if kind is not None and kind not in KINDS:
+        raise ValueError(f"kind inválido: {kind!r}")
+    topic = args.get("topic")
+    if topic is not None and not isinstance(topic, str):
+        raise TypeError("topic debe ser texto")
+    stale = args.get("stale", False)
+    if not isinstance(stale, bool):
+        raise TypeError("stale debe ser booleano")
     scope = _scope(args, SCOPES, "all")
     personal = None
     if scope != "project" and (scope == "personal" or personal_dir().exists()):
@@ -318,7 +330,16 @@ def _search(server, args):
             if personal is None:
                 raise  # sin proyecto ni scope personal no hay nada que buscar
     return json.dumps(
-        search_scopes(project, personal, query, limit=limit), ensure_ascii=False
+        search_scopes(
+            project,
+            personal,
+            query,
+            limit=limit,
+            kind=kind,
+            topic=topic,
+            stale=stale,
+        ),
+        ensure_ascii=False,
     )
 
 

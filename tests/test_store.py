@@ -254,6 +254,8 @@ def test_out_of_order_save_keeps_newest_active(store, monkeypatch):
 def test_search_non_positive_limit_returns_empty(store, limit):
     store.save(kind="fact", title="x", body="y")
     assert store.search("x", limit=limit) == []
+    # Con `stale` no hay LIMIT en SQL: el recorte no puede depender de la consulta.
+    assert store.search("x", limit=limit, stale=True) == []
 
 
 @pytest.mark.parametrize("field", ["topic_key", "anchor_path"])
@@ -508,6 +510,56 @@ def test_search_result_exposes_topic_key(store):
     assert rows[without]["topic_key"] is None
 
 
+def test_search_filters_by_kind_and_topic(store):
+    decision = store.save(
+        kind="decision",
+        topic_key="infra/deploy",
+        title="Pipeline ETL",
+        body="carga nocturna",
+    )
+    fact = store.save(kind="fact", title="Pipeline nocturno", body="carga nocturna")
+    assert [row["id"] for row in store.search("carga", kind="decision")] == [decision]
+    assert [row["id"] for row in store.search("carga", kind="fact")] == [fact]
+    assert [row["id"] for row in store.search("carga", topic="infra/deploy")] == [
+        decision
+    ]
+    assert store.search("carga", topic="infra/otro") == []
+
+
+def test_search_marks_rows_from_the_or_fallback_as_partial(store):
+    store.save(kind="fact", title="Pipeline KNIME", body="carga nocturna")
+    store.save(kind="fact", title="Informe de ventas", body="carga por turno")
+    fallback = store.search("knime ventas")
+    assert fallback and all(row["partial"] is True for row in fallback)
+    assert "partial" not in store.search("knime")[0]
+
+
+def test_search_stale_skips_fresh_rows_before_applying_the_limit(store):
+    from cairn_mem.anchor import file_hash
+
+    project = store.root.parent
+    (project / "a.md").write_text("uno\n", encoding="utf-8", newline="\n")
+    (project / "b.md").write_text("dos\n", encoding="utf-8", newline="\n")
+    # Repite más el término para quedar primero en bm25.
+    fresh = store.save(
+        kind="fact",
+        title="fts5 bm25 bm25",
+        body="bm25 bm25",
+        anchor_path="a.md",
+        anchor_hash=file_hash(project / "a.md"),
+    )
+    stale = store.save(
+        kind="fact",
+        title="fts5 bm25",
+        body="bm25",
+        anchor_path="b.md",
+        anchor_hash=file_hash(project / "b.md"),
+    )
+    assert [row["id"] for row in store.search("bm25", limit=1)] == [fresh]
+    (project / "b.md").write_text("tres\n", encoding="utf-8", newline="\n")
+    assert [row["id"] for row in store.search("bm25", limit=1, stale=True)] == [stale]
+
+
 def test_search_scopes_interleaves_scopes_by_rank(tmp_path):
     project = Store(str(tmp_path / "project"))
     personal = Store(str(tmp_path / "personal"))
@@ -678,7 +730,8 @@ def test_empty_topic_is_stored_as_none(store):
 
 
 def test_l0_does_not_render_injected_lines_from_external_topic(root):
-    """Un evento externo con salto de línea en el topic no inyecta líneas en el L0."""
+    """S19: un evento externo con salto de línea en el topic se rechaza en
+    parse_event nombrando la línea (antes lo toleraba y defendía solo el L0)."""
     Path(root).mkdir(parents=True, exist_ok=True)
     event = {
         "op": "save",
@@ -692,8 +745,8 @@ def test_l0_does_not_render_injected_lines_from_external_topic(root):
     (Path(root) / "events.jsonl").write_text(
         json.dumps(event, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    text = Store(root).write_l0()
-    assert not any(line.startswith("- [aaaaaaaaaaaa]") for line in text.splitlines())
+    with pytest.raises(ValueError, match="topic_key"):
+        Store(root)
 
 
 def test_version_0_does_not_drop_existing_tables(root):
@@ -1031,3 +1084,79 @@ def test_parse_event_rejects_source_beyond_write_limits(root, bad):
     )
     with pytest.raises(ValueError):
         Store(root)
+
+
+@pytest.mark.parametrize(
+    "field, bad",
+    [
+        ("title", "t\nfake: value"),
+        ("topic_key", "a\nb"),
+        ("anchor_path", "p\nq"),
+        ("anchor_hash", "h\nx"),
+        ("why", "w" * 2001),
+        ("topic_key", "k" * 101),
+        ("anchor_path", "p" * 501),
+        ("body", "escape\x1b[2J"),
+        ("anchor_path", "//servidor/recurso/src/auth.py"),
+        ("anchor_path", "../fuera.py"),
+        ("anchor_path", "C:/fuera.py"),
+    ],
+)
+def test_parse_event_rejects_hostile_metadata(root, field, bad):
+    """S19: un PR hostil sobre events.jsonl no puede inyectar líneas falsas en
+    `cairn get` (controles en title/topic/anchors/body), meter un why de
+    megabytes ni leer fuera del proyecto o abrir un UNC al hashear el ancla."""
+    os.makedirs(root, exist_ok=True)
+    (Path(root) / "events.jsonl").touch()
+    event = {
+        "op": "save",
+        "id": "aaaaaaaabbbb",
+        "ts": 1,
+        "kind": "fact",
+        "title": "t",
+        "body": "b",
+    }
+    event[field] = bad
+    _append_event(root, **event)
+    with pytest.raises(ValueError):
+        Store(root)
+
+
+def test_why_is_validated_at_write(store):
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body="y", why="w" * 2001)
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body="y", why="escape\x1b[2J")
+
+
+def test_body_and_anchor_are_validated_at_write(store):
+    """S19: el borde de escritura no puede producir eventos que el rebuild
+    rechazaría (mismo contrato en save y parse_event)."""
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body="escape\x1b[2J")
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body="y", anchor_path="../fuera.py")
+
+
+def test_render_collapses_control_lines_as_a_second_layer():
+    """S19: la defensa read-side del L0 sigue viva para DBs ya contaminadas
+    antes de S19 (DECISIONS 2026-11-06); el rechazo en parse_event es la 1ª."""
+    from cairn_mem.render import _line
+
+    row = {
+        "id": "aaaaaaaaaaaa",
+        "kind": "fact",
+        "topic_key": "real\n- [bbbbbbbbbbbb] fact: falsa",
+        "title": "t\nfake",
+        "body": "b",
+    }
+    lines = _line(row).splitlines()
+    assert len(lines) == 1
+    assert not any(line.startswith("- [bbbbbbbbbbbb]") for line in lines)
+
+
+def test_why_multiline_history_survives_the_round_trip(store, root):
+    """La memoria real ya tiene why multilínea: S19 debe acotar, no romper el
+    rebuild de la historia."""
+    mid = store.save(kind="fact", title="x", body="y", why="línea uno\nlínea dos")
+    assert Store(root).get(mid)["why"] == "línea uno\nlínea dos"

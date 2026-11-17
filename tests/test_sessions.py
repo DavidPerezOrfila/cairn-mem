@@ -158,3 +158,28 @@ def test_secret_in_summary_is_rejected(tmp_path, secret):
     with pytest.raises(ValueError, match="secreto"):
         sessions.save(f"## Goal\nconfig {secret}")
     assert not sessions.path.exists()
+
+
+def test_truncated_but_parseable_tail_is_skipped(tmp_path):
+    """S19: un corte que deja JSON válido (id no hex o summary ausente) no se
+    sirve: ni last ni all ni get devuelven el recap truncado."""
+    sessions = Sessions(str(tmp_path))
+    real = sessions.save("bueno")
+    with open(sessions.path, "a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps({"op": "session", "id": "no-hex", "summary": "x"}))
+    assert sessions.last()["id"] == real
+    assert [record["id"] for record in sessions.all()] == [real]
+
+
+def test_invalid_session_mid_file_fails_naming_the_line(tmp_path):
+    sessions = Sessions(str(tmp_path))
+    sessions.save("bueno")
+    with open(sessions.path, "a", encoding="utf-8", newline="\n") as handle:
+        handle.write(
+            json.dumps({"op": "session", "id": "bbbbbbbbbbbb", "ts": 8}) + "\n"
+        )
+        handle.write(
+            json.dumps({"op": "session", "id": "cccccccccccc", "summary": "ok"}) + "\n"
+        )
+    with pytest.raises(ValueError, match="sessions.jsonl línea 2"):
+        sessions.all()

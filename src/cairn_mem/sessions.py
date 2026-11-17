@@ -14,6 +14,18 @@ WINDOW = 64 * 1024
 LONGEST_LINE = 1 << 20  # un recap de MAX_SUMMARY con escapes se queda muy abajo
 
 
+def _is_session(event) -> bool:
+    """S19: un recap truncado que casualmente parsea (id no hex o summary
+    ausente) no se sirve ni desde last ni desde all."""
+    return (
+        isinstance(event, dict)
+        and event.get("op") == "session"
+        and isinstance(event.get("id"), str)
+        and ID_PATTERN.fullmatch(event["id"]) is not None
+        and isinstance(event.get("summary"), str)
+    )
+
+
 def _session_record(raw: bytes):
     line = raw.strip()
     if not line:
@@ -22,7 +34,7 @@ def _session_record(raw: bytes):
         event = json.loads(line.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
-    if isinstance(event, dict) and event.get("op") == "session" and event.get("id"):
+    if _is_session(event):
         return event
     return None
 
@@ -123,8 +135,11 @@ class Sessions:
                 if number == last and torn_tail:
                     continue
                 raise ValueError(f"{where}: evento inválido")
-            if event.get("op") == "session" and event.get("id"):
-                # El nº de línea desempata: dos recaps en el mismo ns siguen el orden
-                # del append en vez de un id aleatorio.
-                records[event["id"]] = (number, event)
+            if not _is_session(event):
+                if number == last and torn_tail:
+                    continue
+                raise ValueError(f"{where}: sesión inválida")
+            # El nº de línea desempata: dos recaps en el mismo ns siguen el orden
+            # del append en vez de un id aleatorio.
+            records[event["id"]] = (number, event)
         return records
