@@ -11,6 +11,7 @@ from pathlib import Path
 from cairn_mem.anchor import is_stale, resolve_anchor
 from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.sessions import Sessions
+from cairn_mem.setup import HARNESSES, setup
 from cairn_mem.store import KINDS, Store, search_scopes
 
 GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", ".MEMORY.md.*", "sessions.jsonl")
@@ -300,6 +301,29 @@ def _cmd_mcp(ns) -> int:
     return serve(read_only=ns.read_only)
 
 
+def _cmd_setup(ns) -> int:
+    for line in setup(ns.harness, Path(ns.dir) if ns.dir else Path.cwd()):
+        print(line)
+    return 0
+
+
+def _cmd_export(ns) -> int:
+    from cairn_mem.export import render_markdown
+
+    root = personal_dir() if ns.personal else data_dir()
+    if not root.exists():
+        raise FileNotFoundError(f"no existe {root}; ejecuta 'cairn init'")
+    store = Store(str(root))
+    sessions = Sessions(str(root)) if ns.sessions else None
+    text = render_markdown(store, sessions, ns.sessions)
+    if ns.out:
+        Path(ns.out).write_text(text, encoding="utf-8", newline="\n")
+        print(ns.out)
+    else:
+        print(text, end="")
+    return 0
+
+
 def _cmd_doctor(ns) -> int:
     from cairn_mem.doctor import run
 
@@ -419,6 +443,21 @@ def _parser() -> argparse.ArgumentParser:
     doctor.add_argument("--personal", action="store_true", help="scope personal")
     doctor.add_argument("--json", action="store_true")
     doctor.set_defaults(handler=_cmd_doctor)
+
+    setup_cmd = sub.add_parser(
+        "setup", help="configura MCP y reglas para un harness (claude-code, opencode)"
+    )
+    setup_cmd.add_argument("harness", choices=sorted(HARNESSES))
+    setup_cmd.add_argument("--dir", help="raíz del repo (por defecto el cwd)")
+    setup_cmd.set_defaults(handler=_cmd_setup)
+
+    export = sub.add_parser("export", help="vuelca la memoria activa a Markdown")
+    export.add_argument("--personal", action="store_true", help="scope personal")
+    export.add_argument(
+        "--sessions", type=int, default=0, help="incluye las últimas N sesiones"
+    )
+    export.add_argument("--out", help="fichero de salida (por defecto stdout)")
+    export.set_defaults(handler=_cmd_export)
     return p
 
 

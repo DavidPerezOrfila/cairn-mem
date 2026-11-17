@@ -1,5 +1,9 @@
 # Snippet for the AGENTS.md / CLAUDE.md of a project that uses cairn-mem
 
+`cairn setup claude-code|opencode` writes this block for you (between
+`<!-- cairn:begin -->` and `<!-- cairn:end -->`). Copy it by hand only for a harness
+without a `setup` entry.
+
 ```markdown
 ## Project memory (cairn-mem)
 @.cairn/MEMORY.md
