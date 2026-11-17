@@ -9,7 +9,7 @@
   Publishing); nothing is unreleased.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py` and `legacy.py` are implemented.
-  `tests/` (319) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
+  `tests/` (321) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
   mode, `source` and search filters), sessions, import, the JSONL tail repair, incremental
   sync, retrieval, the golden set, the integrity audit fixes, `doctor`, `setup`/`export`,
   the backlog benches and the bench hygiene.
