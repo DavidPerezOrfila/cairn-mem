@@ -307,6 +307,23 @@ def _cmd_setup(ns) -> int:
     return 0
 
 
+def _cmd_export(ns) -> int:
+    from cairn_mem.export import render_markdown
+
+    root = personal_dir() if ns.personal else data_dir()
+    if not root.exists():
+        raise FileNotFoundError(f"no existe {root}; ejecuta 'cairn init'")
+    store = Store(str(root))
+    sessions = Sessions(str(root)) if ns.sessions else None
+    text = render_markdown(store, sessions, ns.sessions)
+    if ns.out:
+        Path(ns.out).write_text(text, encoding="utf-8", newline="\n")
+        print(ns.out)
+    else:
+        print(text, end="")
+    return 0
+
+
 def _cmd_doctor(ns) -> int:
     from cairn_mem.doctor import run
 
@@ -433,6 +450,14 @@ def _parser() -> argparse.ArgumentParser:
     setup_cmd.add_argument("harness", choices=sorted(HARNESSES))
     setup_cmd.add_argument("--dir", help="raíz del repo (por defecto el cwd)")
     setup_cmd.set_defaults(handler=_cmd_setup)
+
+    export = sub.add_parser("export", help="vuelca la memoria activa a Markdown")
+    export.add_argument("--personal", action="store_true", help="scope personal")
+    export.add_argument(
+        "--sessions", type=int, default=0, help="incluye las últimas N sesiones"
+    )
+    export.add_argument("--out", help="fichero de salida (por defecto stdout)")
+    export.set_defaults(handler=_cmd_export)
     return p
 
 

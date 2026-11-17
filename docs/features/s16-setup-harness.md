@@ -37,3 +37,16 @@ repo.
 | --- | --- |
 | S16 | `cairn setup <harness>`, tabla de harnesses, snippet idempotente |
 | S16.1 | `cairn export` a Markdown (memoria + sesiones) para un harness sin cairn |
+
+## S16.1: `cairn export`
+
+- `cairn export [--personal] [--sessions N] [--out PATH]`: secciones por kind
+  (`convention > decision > gotcha > fact`), la más reciente primero, con id, topic,
+  ancla, source, cuerpo y motivo.
+- Las sesiones entran solo si se piden (`--sessions N`): son continuidad, no memoria
+  curada.
+- Sin marcas de stale: hashear las anclas convertiría una foto en un `check`; para eso
+  están `search` y `check`.
+- Salida determinista (dos ejecuciones, los mismos bytes) para que un diff del `.md`
+  signifique algo.
+

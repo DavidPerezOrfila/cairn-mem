@@ -1,0 +1,64 @@
+"""`cairn export`: memoria activa y sesiones a Markdown (S16.1).
+
+Para un harness que no puede ejecutar `cairn`: una foto legible del store, sin
+marcas de stale (eso exige hashear anclas; para eso están `search` y `check`).
+"""
+
+import time
+
+from cairn_mem.store import KIND_PRIORITY
+
+
+def _date(ts) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(int(ts) / 1e9))
+
+
+def _meta(row) -> str:
+    parts = [f"`{row['id']}`"]
+    if row["topic_key"]:
+        parts.append(f"topic `{row['topic_key']}`")
+    if row["anchor_path"]:
+        parts.append(f"anchor `{row['anchor_path']}`")
+    if row["source"]:
+        parts.append(f"source `{row['source']}`")
+    return " · ".join(parts)
+
+
+def _why(why: str) -> str:
+    lines = why.splitlines()
+    return "\n".join([f"Motivo: {lines[0]}", *[f"  {line}" for line in lines[1:]]])
+
+
+def render_markdown(store, sessions=None, limit: int = 0) -> str:
+    rows = [row for row in store.dump() if row["status"] == "active"]
+    records = sessions.all(limit=limit) if sessions is not None and limit else []
+    lines = [
+        f"# {store.root.parent.name} — memoria cairn",
+        "",
+        "<!-- generado por `cairn export`; la verdad está en .cairn/events.jsonl -->",
+        "",
+        f"{len(rows)} memorias activas, {len(records)} sesiones.",
+    ]
+    for kind in KIND_PRIORITY:
+        group = sorted(
+            (row for row in rows if row["kind"] == kind),
+            key=lambda row: (row["ts"], row["id"]),
+            reverse=True,
+        )
+        if not group:
+            continue
+        lines += ["", f"## {kind}"]
+        for row in group:
+            lines += ["", f"### {row['title']}", "", _meta(row), "", row["body"]]
+            if row["why"]:
+                lines += ["", _why(row["why"])]
+    if records:
+        lines += ["", "## sesiones"]
+        for record in records:
+            lines += [
+                "",
+                f"### {record['id']} — {_date(record.get('ts', 0))}",
+                "",
+                record["summary"].strip(),
+            ]
+    return "\n".join(lines).rstrip("\n") + "\n"

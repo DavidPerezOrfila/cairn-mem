@@ -149,7 +149,8 @@ merge into an existing config, keep their own other keys, and are idempotent. Us
 For anything else, copy the snippet from
 [`docs/AGENT_SNIPPET.md`](docs/AGENT_SNIPPET.md) into your `AGENTS.md` or `CLAUDE.md`. The
 agent reads `MEMORY.md` at the start of a task, searches before writing, and saves only
-what is worth keeping.
+what is worth keeping. If the harness cannot run `cairn`, `cairn export --out MEMORIA.md`
+writes the same knowledge as plain Markdown.
 
 ## How it works
 
@@ -228,6 +229,7 @@ why the agent believes something.
 | `cairn import legacy --db <path> [--dry-run]` | Migrate observations from another SQLite store |
 | `cairn doctor [--personal]` | Check SQLite/FTS5, JSONL lines, DB sync, L0 budget, stale anchors, `.gitignore` and duplicate installs |
 | `cairn setup claude-code\|opencode [--dir <path>]` | Write the MCP config and the rules snippet for that harness |
+| `cairn export [--personal] [--sessions N] [--out <path>]` | Dump active memory (and recaps) as Markdown for a harness without cairn |
 | `cairn mcp` | Serve MCP over stdio |
 
 `--json` is available on `save`, `search`, `get`, `check`, `session`, `doctor` and
