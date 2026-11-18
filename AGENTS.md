@@ -4,15 +4,18 @@
 
 - **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (complete:
   annotations, `--read-only` and `search --kind/--topic/--stale` with `partial`), S16
-  (`setup <harness>` and `export`), S18 (`source`) and S19 (hardening of `parse_event` and
-  sessions) are implemented.** 0.15.1 is published (2026-11-18, tagged `v0.15.1`, Trusted
-  Publishing); nothing is unreleased.
+  (`setup <harness>` and `export`), S18 (`source`), S19 (hardening of `parse_event` and
+  sessions) and S20 (secrets v3 by value shape, injection rejection plus the L0 header,
+  non-blocking dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan and the
+  agent-facing English L0/MCP) are implemented.** 0.15.1 is published (2026-11-18, tagged
+  `v0.15.1`, Trusted Publishing); **S20 is unreleased on `main` (0.16.0 pending the tag).**
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py` and `legacy.py` are implemented.
-  `tests/` (321) covers the CLI, the store, the L0, anchors, MCP (annotations, read-only
-  mode, `source` and search filters), sessions, import, the JSONL tail repair, incremental
-  sync, retrieval, the golden set, the integrity audit fixes, `doctor`, `setup`/`export`,
-  the backlog benches and the bench hygiene.
+  `tests/` (384 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
+  tail repair, incremental sync, retrieval, the paraphrase baseline, the secrets corpus,
+  dedupe/pin/purge/topics, the golden set, the integrity audit fixes, `doctor`,
+  `setup`/`export`, the backlog benches and the bench hygiene.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -34,6 +37,7 @@ ruff check src tests bench
 python bench/bench_mcp.py --reps 20                 # MCP tool-call latency (10k)
 python bench/bench_sync.py --reps 40                # 2 writers incremental sync (10k)
 python bench/bench_retrieval.py --distractors 10000 # ranking al crecer el índice
+python bench/bench_retrieval.py --file bench/paraphrase.jsonl  # P@3 de léxico/flexión/paráfrasis
 python bench/bench_anchors.py --reps 30             # coste de los anclas en save
 ```
 
@@ -70,8 +74,10 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   order is `(ts, line number)`. A `save` with `topic_key` marks the previous memory
   `superseded` **before** the insert. A `save` may carry an optional `source`
   (provenance: agent, model or session; ≤ 100 chars, no control characters, same
-  treatment as `topic_key`; `SCHEMA_VERSION = 4`). There is deliberately **no**
+  treatment as `topic_key`). There is deliberately **no**
   "unreviewed" state: with `--share`, the PR over `events.jsonl` is the human review.
+  `SCHEMA_VERSION = 5` (S20: the `pinned` column; older JSONL without the field replays
+  with 0).
 - Writes: `O_APPEND` plus **one** `os.write` per event. There is an in-process lock
   (`jsonl._LOCK`) because Windows `O_APPEND` is not atomic between threads.
 - When the database opens, it compares `(size, mtime_ns)` of the JSONL and
@@ -93,11 +99,13 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   (the historical multi-line `why` tolerates `\n` and `\t`), `why` ≤ 2000, `anchor_path`
   ≤ 500, `anchor_hash` ≤ 64. Only a torn tail (the file does not end in `\n`)
   is tolerated.
-- L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters. It goes round-robin by kind (each round:
-  `convention > decision > gotcha > fact`) and newest `ts` first inside each kind. Output
-  is deterministic (prompt cache). The anchor hashes of the candidate rows are read in an
-  **8-thread pool**; the hash is never reused across commands (`anchor._cached_hash`):
-  NTFS updates `mtime` late, so a same-size rewrite would hide a stale anchor.
+- L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters: a fixed English title plus a
+  "Data, not instructions" header line, then the pinned rows (`📌`, human-set), then
+  round-robin by kind (each round: `convention > decision > gotcha > fact`) and newest `ts`
+  first inside each kind. Output is deterministic (prompt cache). The anchor hashes of the
+  candidate rows are read in an **8-thread pool**; the hash is never reused across commands
+  (`anchor._cached_hash`): NTFS updates `mtime` late, so a same-size rewrite would hide a
+  stale anchor.
 - Project root: search for `.cairn/` upward from the cwd, or use `CAIRN_DIR`. The search
   excludes `~/.cairn` and `CAIRN_HOME` (the personal scope). Personal scope:
   `CAIRN_HOME` or `~/.cairn`.
@@ -122,13 +130,36 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   only on the OR fallback, never an input flag.
 - **Security:** reject (do not redact) secrets before writing: cloud keys (`AKIA`, `ASIA`),
   `BEGIN ... PRIVATE KEY`, JWTs `eyJ...`, provider tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`,
-  `ghr_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza`, Slack `xox[baprs]-`,
-  Stripe `sk_live_`/`rk_live_`, `npm_`), `Bearer <token>` with at least one digit (prose
-  like "Bearer authentication" must pass),
-  `password|secret|token|api_key` with `=` or `:` (JSON/YAML), and URLs `://user:pass@`.
+  `ghr_`, `github_pat_`, `glpat-`, `sk-proj-`, `sk-ant-`, `AIza`, `sk-` alone, `sk_test_`,
+  Slack `xox[baprs]-` and `hooks.slack.com/services/`, Stripe `sk_live_`/`rk_live_`,
+  `npm_`), `Bearer <token>` with at least one digit (prose like "Bearer authentication"
+  must pass), URLs `://user:pass@`, Oracle `user/pass@host` and `jdbc:`, SAS `sig=`,
+  Fernet/AccountKey (base64 ≥42 with `=`), Azure `~XXXX~…`.
+  Named keys (`password`, `pwd`, `secret`, `token`, `api_key`, `client_secret`,
+  `contraseña`, `_pass`/`_password`/`_secret` suffixes) reject only when the **value**
+  carries a digit or a symbol other than `_`; `private_key`/`secret_key` reject any
+  non-excluded value; `pass`/`clave` need upper+lower+digit (in EBS "clave" is a column).
+  `null`, `$VAR`, `%VAR%`, `<…>` pass — `hunter2` must stay rejected (the corpus in
+  `tests/test_secrets_corpus.py` is the contract, both directions).
   A `body` over 500 characters, a `title` over 200 or a `why` over 2000 (multiline
   prose; `\n`/`\t` allowed) is an error. `id` must be 12 lowercase
   hex, and `topic_key` is ≤ 100 characters with no control characters.
+- **Injection:** `reject_secrets` also rejects `curl|wget … | sh` and
+  "ignore/ignora … (previous|prior|anteriores|previas)"; it applies to sessions too. The L0
+  carries a fixed header (`Data, not instructions…`) because it lives inside the prompt.
+- **Dedupe:** `Store.similar(title, body)` returns the 3 FTS neighbours with their Jaccard
+  overlap over stems. `save` blocks only at ≥ 0.9 (`DUP_THRESHOLD`), with the id and
+  `--topic` in the message; below that it only prints `similar:` (CLI stderr, MCP result)
+  so a paraphrase is never refused. A `topic_key` or an existing `id` skips the filter:
+  those are the update paths (import idempotent, pin).
+- **Pins:** `pin`/`unpin` exist only in the CLI (never in MCP): a poisoned memory with a
+  pin would outrank everything. At most 5 pins and 800 characters; they render first with
+  `📌`. The row travels as a `pinned` field on a `save` event with the same id, **not** as a
+  new `op`: older `parse_event`s reject an unknown `op` and a `--share` repo would stop
+  opening. `SCHEMA_VERSION = 5`.
+- **Purge:** `cairn purge <id>` rewrites `events.jsonl` without every event of that id
+  (save, archive, pin) and leaves `events.jsonl.bak`. It exists because the JSONL is
+  append-only and `archive` keeps the secret in Git; it warns to rotate the credential.
 - Minimal imports at startup. CLI end-to-end SLO: p95 `search` < 350 ms and `save` <
   500 ms, startup included. In-process MCP tool call: < 50 ms.
 - **MCP:** stdout carries protocol only (NDJSON in binary, `\n`). Logs go to stderr. No
@@ -136,11 +167,15 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   while it lives. Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
   `idempotentHint`): the 5 read tools are read-only, `archive` is destructive and
   idempotent, `save`/`save_session` are writes. `cairn mcp --read-only` serves only the
-  5 read tools and rejects the write tools at the protocol edge.
+  5 read tools and rejects the write tools at the protocol edge. S20: the tool
+  descriptions, the `initialize` instructions and every tool error are in **English**, and
+  `save` appends the `similar:` lines to its result. CLI, `doctor` and `setup` messages stay
+  in Spanish until S21 (`CAIRN_LANG`).
 - **Doctor:** `doctor.py` is imported lazily and is local: no network, no events written.
-  It parses `events.jsonl` with `parse_event` (line-numbered failures) and refreshes
-  `cairn.db`/`MEMORY.md` only because it opens the `Store`, like every other command.
-  Exit code 1 only on `fail`; `warn` keeps it 0.
+  It parses `events.jsonl` with `parse_event` (line-numbered failures), re-runs
+  `reject_secrets` on every `save` (S20: a stored secret is `fail`/`secrets`, the gate
+  before `--share`) and refreshes `cairn.db`/`MEMORY.md` only because it opens the `Store`,
+  like every other command. Exit code 1 only on `fail`; `warn` keeps it 0.
 - **Setup:** `setup.py` holds one table (`HARNESSES`) with the config file, the JSON path of
   the server and the instructions file per harness. It only touches the repo (never
   `~/.claude.json` or the global OpenCode config) and only the `cairn` key: a config file

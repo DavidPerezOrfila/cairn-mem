@@ -80,7 +80,17 @@ def bench_size(count: int, reps: int) -> dict:
         searches = _cli_ms(root, ["search", "oauth", "--limit", "5"], reps)
         saves = _cli_ms(
             root,
-            ["save", "--kind", "fact", "--title", "bench", "--body", "bench"],
+            [
+                "save",
+                "--kind",
+                "fact",
+                "--topic",
+                "bench/save",
+                "--title",
+                "bench",
+                "--body",
+                "bench",
+            ],
             reps,
         )
 

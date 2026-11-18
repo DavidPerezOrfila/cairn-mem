@@ -12,10 +12,10 @@ from itertools import zip_longest
 from pathlib import Path
 
 from cairn_mem.anchor import is_stale
-from cairn_mem.jsonl import append_jsonl
-from cairn_mem.render import KIND_PRIORITY, MAX_TOPIC, render_l0
+from cairn_mem.jsonl import _LOCK, append_jsonl
+from cairn_mem.render import KIND_PRIORITY, MAX_TOPIC, _line, render_l0
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 KINDS = tuple(KIND_PRIORITY)
 MAX_BODY = 500
 MAX_TITLE = 200
@@ -23,7 +23,35 @@ MAX_SOURCE = 100
 MAX_WHY = 2000
 MAX_ANCHOR_PATH = 500
 MAX_ANCHOR_HASH = 64
+MAX_PINS = 5
+PIN_BUDGET = 800
+# S20: el dedupe solo bloquea la copia casi literal; el aviso no bloquea.
+DUP_THRESHOLD = 0.9
 ID_PATTERN = re.compile(r"[0-9a-f]{12}")
+
+# S20: el valor debe tener pinta de secreto, no solo el nombre. Placeholders y
+# null pasan; la prosa ("rotar cada 90 días") no lleva dígito pegado al nombre.
+_VALUE_EXCLUDED = r"(?![<>$%])(?!(?:null|none|nil|true|false)\b)"
+# Nombres inequívocos: dígito o símbolo en el valor.
+_KEY_STRICT = re.compile(
+    r"(?<![A-Za-z0-9_])(?i:password|passwd|pwd|secret|token|api[-_]?key|access[-_]?key"
+    r"|auth[-_]?token|account[-_]?key|client[-_]?secret|contraseña"
+    r"|[a-z0-9]*_pass(?:word)?|[a-z0-9]*_secret)"
+    r"(?![A-Za-z0-9_])[\"']?\s*[:=]\s*[\"']?"
+    + _VALUE_EXCLUDED
+    + r"(?=\S*[0-9]|\S*[^0-9A-Za-z_\s])\S+"
+)
+# Nombres ambiguos (EBS llama "clave" a las columnas): mezcla de mayúscula,
+# minúscula y dígito en el valor.
+_KEY_AMBIGUOUS = re.compile(
+    r"(?<![A-Za-z0-9_])(?i:pass|clave)(?![A-Za-z0-9_])[\"']?\s*[:=]\s*[\"']?"
+    r"(?![<>$%])(?=\S*[a-z])(?=\S*[A-Z])(?=\S*[0-9])\S+"
+)
+# Cualquier valor no excluido: el nombre ya dice qué es.
+_KEY_EXPLICIT = re.compile(
+    r"(?<![A-Za-z0-9_])(?i:private[-_]?key|secret[-_]?key)(?![A-Za-z0-9_])"
+    r"[\"']?\s*[:=]\s*[\"']?" + _VALUE_EXCLUDED + r"\S+"
+)
 
 SECRET_PATTERNS = (
     re.compile(r"AKIA[0-9A-Z]{16}"),
@@ -39,13 +67,33 @@ SECRET_PATTERNS = (
     re.compile(r"npm_[A-Za-z0-9_-]{20,}"),
     # Bearer con un valor opaco: exige al menos un dígito para no cazar prosa.
     re.compile(r"(?i)\bbearer\s+(?=[\w.~+/-]*\d)[\w.~+/-]{8,}"),
-    re.compile(
-        r"(?i)(?<![a-z0-9])"
-        r"(password|passwd|secret|token|api[-_]?key|access[-_]?key|private_key"
-        r"|secret[-_]?key|auth[-_]?token)"
-        r"(?![a-z0-9])[\"']?\s*[:=]\s*[\"']?\S+"
-    ),
+    _KEY_STRICT,
+    _KEY_AMBIGUOUS,
+    _KEY_EXPLICIT,
     re.compile(r"[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]+@"),
+    # S20, por formato y no por nombre: Oracle/JDBC, SAS de Azure, Fernet/AccountKey
+    # (base64 largo con '='), OpenAI suelto, Stripe test y webhooks de Slack.
+    # La mirada atrás descarta `.../org/repo@v1` y `pkg@1.0.0` de una URL: sin
+    # ella, cualquier ruta antes de un @ se leía como usuario/clave@host.
+    re.compile(r"(?<![./\w])[A-Za-z0-9_$#]+/[^@/\s'\"`]+@"),
+    re.compile(r"[?&;]sig=[A-Za-z0-9%_.~*-]{16,}"),
+    # Azure AD client secret: ~XXXX~ + base62 largo.
+    re.compile(r"(?<![\w~])~[A-Za-z0-9]{1,4}~[A-Za-z0-9._-]{20,}"),
+    re.compile(r"[A-Za-z0-9+/]{42,}={1,2}"),
+    re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9]{16,}"),
+    re.compile(r"(?<![A-Za-z0-9])sk_test_[A-Za-z0-9]{8,}"),
+    re.compile(r"https://hooks\.slack\.com/services/\S+"),
+)
+
+# S20: el cuerpo de una memoria se imprime tal cual en el L0 y en `get`; una
+# instrucción guardada ahí es inyección, no conocimiento.
+INJECTION_PATTERNS = (
+    re.compile(r"(?i)\b(?:curl|wget)\b[^\n]{0,200}\|\s*(?:ba|z|da|fi)?sh\b"),
+    re.compile(r"(?i)\bignore\s+(?:all\s+|any\s+)?(?:previous|prior|above)\b"),
+    re.compile(
+        r"(?i)\bignora\s+(?:las\s+|todas\s+las\s+)?"
+        r"(?:instrucciones|indicaciones|reglas)\s+(?:anteriores|previas|de\s+arriba)\b"
+    ),
 )
 
 MAX_TS = 2**63 - 1  # SQLite INTEGER es signed 64-bit
@@ -184,6 +232,7 @@ CREATE TABLE IF NOT EXISTS mem (
   source      TEXT,
   anchor_path TEXT,
   anchor_hash TEXT,
+  pinned      INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0,1)),
   status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','superseded','archived'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_mem_topic_active
@@ -215,7 +264,14 @@ END;
 def reject_secrets(*texts):
     for text in texts:
         if text and any(p.search(text) for p in SECRET_PATTERNS):
-            raise ValueError("el texto parece contener un secreto; reescríbelo sin él")
+            raise ValueError(
+                "text looks like it contains a secret; rewrite it without it"
+            )
+    for text in texts:
+        if text and any(p.search(text) for p in INJECTION_PATTERNS):
+            raise ValueError(
+                "text looks like an injected instruction; store data, not orders"
+            )
 
 
 def _has_controls(text: str, allowed: str = "") -> bool:
@@ -223,6 +279,15 @@ def _has_controls(text: str, allowed: str = "") -> bool:
     forjan líneas y escapes de terminal."""
     return any(
         ord(char) < 32 or ord(char) == 127 for char in text if char not in allowed
+    )
+
+
+def _content_tokens(text: str) -> frozenset:
+    """Palabras con contenido para medir solapamiento entre memorias (S20)."""
+    return frozenset(
+        _singular(word.lower())
+        for word in re.findall(r"\w+", text, re.UNICODE)
+        if word.lower() not in STOPWORDS
     )
 
 
@@ -309,6 +374,10 @@ def parse_event(line: str, number: int) -> dict:
         raise ValueError(
             f"{where}: anchor_path inválido (debe ser relativo al proyecto)"
         )
+    if event.get("pinned") is not None and (
+        type(event["pinned"]) is not int or event["pinned"] not in (0, 1)
+    ):
+        raise ValueError(f"{where}: pinned inválido (0 o 1)")
     if event["op"] == "save":
         if event.get("kind") not in KINDS:
             raise ValueError(f"{where}: kind inválido")
@@ -411,6 +480,17 @@ class Store:
         if ID_PATTERN.fullmatch(mid) is None:
             raise ValueError("id debe ser 12 caracteres hex en minúscula")
         reject_secrets(title, body, why, topic_key, anchor_path, source)
+        # S20: copia casi literal -> error; el resto, aviso en la salida del CLI.
+        # Un `id` existente es una actualización (pin, import idempotente) y un
+        # `topic_key` es la vía prevista para reemplazar: ni uno ni otro se filtran.
+        existing = self.get(mid) if id else None
+        if topic_key is None and not existing:
+            for row in self.similar(title, body):
+                if row["overlap"] >= DUP_THRESHOLD:
+                    raise ValueError(
+                        f"near-duplicate of {row['id']} ({row['title']}); "
+                        "use --topic to replace it"
+                    )
         event = {
             "op": "save",
             "id": mid,
@@ -419,6 +499,10 @@ class Store:
             "title": title,
             "body": body,
         }
+        # Una actualización no desmonta un pin: `_apply` hace upsert y sin el campo
+        # lo dejaría en 0.
+        if existing and existing["pinned"]:
+            event["pinned"] = 1
         for key, value in (
             ("topic_key", topic_key),
             ("why", why),
@@ -459,6 +543,145 @@ class Store:
                 self.rebuild()
             else:
                 self.write_l0()
+
+    # --- pins y mantenimiento (S20) ---
+
+    def similar(self, title: str, body: str, limit: int = 3) -> list[dict]:
+        """Candidatos a duplicado por solapamiento léxico. El FTS da los vecinos;
+        el solapamiento se mide en Python. Solo avisa: bloquear una paráfrasis
+        impediría guardar el mismo conocimiento mejor escrito."""
+        self._sync()
+        tokens = _content_tokens(f"{title} {body}")
+        terms = self._stems(f"{title} {body}")
+        if not tokens or not terms:
+            return []
+        rows = self._conn.execute(
+            "SELECT m.id, m.kind, m.title, m.body FROM mem_fts "
+            "JOIN mem m ON m.rowid = mem_fts.rowid "
+            "WHERE mem_fts MATCH ? AND m.status = 'active' "
+            "ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0) LIMIT 10",
+            (self._match(terms, "OR"),),
+        ).fetchall()
+        found = []
+        for row in rows:
+            other = _content_tokens(f"{row['title']} {row['body']}")
+            if not other:
+                continue
+            overlap = len(tokens & other) / len(tokens | other)
+            found.append(
+                {
+                    "id": row["id"],
+                    "kind": row["kind"],
+                    "title": row["title"],
+                    "overlap": round(overlap, 2),
+                }
+            )
+        found.sort(key=lambda item: item["overlap"], reverse=True)
+        return found[:limit]
+
+    def pin(self, id: str) -> None:
+        """Solo por CLI: un agente no puede poner pines (serían prioridad máxima
+        para una memoria envenenada)."""
+        self._set_pin(id, 1)
+
+    def unpin(self, id: str) -> None:
+        self._set_pin(id, 0)
+
+    def purge(self, id: str) -> int:
+        """Elimina del JSONL todos los eventos de `id`: un secreto filtrado no se
+        arregla con `archive`, que lo deja en el fichero y en Git. Copia a
+        `events.jsonl.bak` y reescribe. La credencial se rota aparte."""
+        if ID_PATTERN.fullmatch(id) is None:
+            raise ValueError("id debe ser 12 caracteres hex en minúscula")
+        raw = self.events.read_bytes() if self.events.exists() else b""
+        lines = raw.splitlines()
+        torn_tail = bool(lines) and not raw.endswith(b"\n")
+        kept, removed = [], 0
+        # Misma sección crítica que el append: sin ella, un save de este proceso
+        # entre la lectura y el replace se perdería.
+        with _LOCK:
+            for number, line in enumerate(lines):
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    if number == len(lines) - 1 and torn_tail:
+                        kept.append(line)  # crash a mitad de write: se conserva
+                        continue
+                    raise ValueError(
+                        f"events.jsonl línea {number + 1}: JSON inválido; no se purga"
+                    )
+                if isinstance(event, dict) and event.get("id") == id:
+                    removed += 1
+                else:
+                    kept.append(line)
+            if not removed:
+                raise ValueError(f"no existe la memoria {id}")
+            self.events.with_suffix(".jsonl.bak").write_bytes(raw)
+            tmp = self.events.with_name(f".events.jsonl.{secrets.token_hex(4)}")
+            tmp.write_bytes(b"\n".join(kept) + (b"\n" if kept else b""))
+            os.replace(tmp, self.events)
+        self.rebuild()
+        return removed
+
+    def topics(self) -> list[dict]:
+        """Temas conocidos: una búsqueda que no encuentra nada ya tiene por dónde
+        empezar."""
+        self._sync()
+        rows = self._conn.execute(
+            "SELECT topic_key, COUNT(*) AS count, MAX(ts) AS ts FROM mem "
+            "WHERE status = 'active' AND topic_key IS NOT NULL "
+            "GROUP BY topic_key ORDER BY ts DESC"
+        ).fetchall()
+        return [{"topic": row["topic_key"], "count": row["count"]} for row in rows]
+
+    def _set_pin(self, id: str, pinned: int) -> None:
+        memory = self.get(id)
+        if memory is None:
+            raise ValueError(f"no existe la memoria {id}")
+        if pinned and memory["status"] != "active":
+            raise ValueError("solo se puede pinear una memoria activa")
+        if pinned and not memory["pinned"]:
+            self._check_pin_budget(memory)
+        # Campo del evento `save` y no un `op` nuevo: una versión anterior del CLI
+        # lo ignora, así que un repo con --share sigue abriéndose.
+        event = {
+            "op": "save",
+            "id": id,
+            "ts": time.time_ns(),
+            "kind": memory["kind"],
+            "title": memory["title"],
+            "body": memory["body"],
+            "pinned": pinned,
+        }
+        for key in ("topic_key", "why", "source", "anchor_path", "anchor_hash"):
+            if memory.get(key):
+                event[key] = memory[key]
+        fingerprint, unseen = self._append(event)
+        if unseen:
+            self.rebuild()
+            return
+        with self._conn:
+            self._apply(event)
+        if not self._remember_fingerprint(fingerprint, int(fingerprint[0])):
+            self.rebuild()
+        else:
+            self.write_l0()
+
+    def _check_pin_budget(self, memory: dict) -> None:
+        rows = self._conn.execute(
+            "SELECT * FROM mem WHERE pinned = 1 AND status = 'active'"
+        ).fetchall()
+        if len(rows) >= MAX_PINS:
+            raise ValueError(
+                f"ya hay {MAX_PINS} memorias pineadas; usa 'cairn unpin <id>' antes"
+            )
+        used = sum(len(_line(dict(row))) + 1 for row in rows)
+        if used + len(_line(memory)) + 1 > PIN_BUDGET:
+            raise ValueError(
+                f"el bloque de pines supera {PIN_BUDGET} caracteres: despina algo"
+            )
 
     # --- lectura ---
 
@@ -610,13 +833,14 @@ class Store:
                         (topic_key, mid),
                     )
             self._conn.execute(
-                """INSERT INTO mem (id, ts, kind, topic_key, title, body, why, source, anchor_path, anchor_hash, status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO mem (id, ts, kind, topic_key, title, body, why, source, anchor_path, anchor_hash, pinned, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(id) DO UPDATE SET
                      ts = excluded.ts, kind = excluded.kind, topic_key = excluded.topic_key,
                      title = excluded.title, body = excluded.body, why = excluded.why,
                      source = excluded.source, anchor_path = excluded.anchor_path,
-                     anchor_hash = excluded.anchor_hash, status = excluded.status""",
+                     anchor_hash = excluded.anchor_hash, pinned = excluded.pinned,
+                     status = excluded.status""",
                 (
                     mid,
                     ts,
@@ -628,6 +852,7 @@ class Store:
                     event.get("source"),
                     event.get("anchor_path"),
                     event.get("anchor_hash"),
+                    int(event.get("pinned") or 0),
                     status,
                 ),
             )

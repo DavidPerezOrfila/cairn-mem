@@ -540,18 +540,19 @@ def test_search_stale_skips_fresh_rows_before_applying_the_limit(store):
     project = store.root.parent
     (project / "a.md").write_text("uno\n", encoding="utf-8", newline="\n")
     (project / "b.md").write_text("dos\n", encoding="utf-8", newline="\n")
-    # Repite más el término para quedar primero en bm25.
+    # Repite más el término para quedar primero en bm25. Títulos distintos: el
+    # dedupe de S20 bloquea la copia literal.
     fresh = store.save(
         kind="fact",
-        title="fts5 bm25 bm25",
-        body="bm25 bm25",
+        title="fts5 bm25 bm25 ranking",
+        body="bm25 bm25 ranking",
         anchor_path="a.md",
         anchor_hash=file_hash(project / "a.md"),
     )
     stale = store.save(
         kind="fact",
-        title="fts5 bm25",
-        body="bm25",
+        title="fts5 bm25 indice",
+        body="bm25 indice",
         anchor_path="b.md",
         anchor_hash=file_hash(project / "b.md"),
     )

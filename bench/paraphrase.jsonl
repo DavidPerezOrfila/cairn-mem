@@ -1,0 +1,40 @@
+{"id":"m01","kind":"gotcha","title":"OAuth callback en Django","body":"redirect_uri debe coincidir exactamente con el registrado","why":"Django rechaza el callback si cambia un caracter"}
+{"id":"m02","kind":"decision","title":"Rotacion de refresh tokens JWT","body":"rotar en cada uso y detectar reutilizacion","why":"un token filtrado dura para siempre"}
+{"id":"m03","kind":"decision","title":"Hash de contrasenas con Argon2id","body":"memory_cost 64 MiB y parallelism 4","why":"bcrypt se queda corto frente a GPU"}
+{"id":"m04","kind":"gotcha","title":"CSRF en formularios server-side","body":"token por sesion y SameSite Lax","why":"una cookie sin token permite post cruzado"}
+{"id":"m05","kind":"decision","title":"Rate limit del login","body":"5 intentos por minuto por IP y usuario","why":"frena fuerza bruta sin bloquear oficinas"}
+{"id":"m06","kind":"convention","title":"Cookies de sesion SameSite","body":"SameSite=Lax y Secure","why":"Strict rompe el retorno desde enlaces externos"}
+{"id":"m07","kind":"convention","title":"API keys en cabecera Authorization","body":"prefijo Bearer y hash guardado en base","why":"en query string quedan escritas en los logs"}
+{"id":"m08","kind":"convention","title":"Cifrado de secretos en reposo","body":"la clave vive en el gestor y se rota cada trimestre","why":"la clave dentro del repo no protege nada"}
+{"id":"m09","kind":"convention","title":"Vistas Oracle en mayusculas","body":"los objetos de BD se nombran en mayusculas y el attribute11 de mtl_system_items_vl es texto numerico","why":"EBS rompe si el nombre no coincide con el diccionario"}
+{"id":"m10","kind":"decision","title":"Migracion Postgres expand-contract","body":"anadir columna, desplegar, rellenar y borrar","why":"hay trafico 24/7 y no admite downtime"}
+{"id":"m11","kind":"gotcha","title":"Consultas N+1 en SQLAlchemy","body":"usar selectinload en las relaciones de la lista","why":"cada fila lanza una consulta extra"}
+{"id":"m12","kind":"gotcha","title":"Timeout del proxy nginx","body":"subir client_max_body_size y proxy_read_timeout a 120s","why":"las subidas pesadas se cortan a mitad"}
+{"id":"m13","kind":"decision","title":"Docker multi-stage","body":"separar build y runtime con imagen slim","why":"la imagen final pesa demasiado"}
+{"id":"m14","kind":"gotcha","title":"Lag de replicacion","body":"leer del primario tras escribir y comprobar el retraso","why":"la replica va por detras y devuelve datos viejos"}
+{"id":"q01","category":"lexical","query":"OAuth callback Django redirect_uri","expect":["OAuth callback en Django"]}
+{"id":"q02","category":"lexical","query":"refresh tokens JWT rotar","expect":["Rotacion de refresh tokens JWT"]}
+{"id":"q03","category":"lexical","query":"Argon2id memory_cost","expect":["Hash de contrasenas con Argon2id"]}
+{"id":"q04","category":"lexical","query":"CSRF formularios server-side","expect":["CSRF en formularios server-side"]}
+{"id":"q05","category":"lexical","query":"Rate limit login","expect":["Rate limit del login"]}
+{"id":"q06","category":"lexical","query":"SameSite cookies de sesion","expect":["Cookies de sesion SameSite"]}
+{"id":"q07","category":"lexical","query":"expand-contract Postgres","expect":["Migracion Postgres expand-contract"]}
+{"id":"q08","category":"lexical","query":"Docker multi-stage","expect":["Docker multi-stage"]}
+{"id":"q09","category":"inflection","query":"rotaciones de token JWT","expect":["Rotacion de refresh tokens JWT"]}
+{"id":"q10","category":"inflection","query":"hashes de contraseña","expect":["Hash de contrasenas con Argon2id"]}
+{"id":"q11","category":"inflection","query":"cookie de sesion SameSite","expect":["Cookies de sesion SameSite"]}
+{"id":"q12","category":"inflection","query":"cabeceras Authorization de las API keys","expect":["API keys en cabecera Authorization"]}
+{"id":"q13","category":"inflection","query":"cifrado de secreto en reposo","expect":["Cifrado de secretos en reposo"]}
+{"id":"q14","category":"inflection","query":"migraciones de Postgres sin downtime","expect":["Migracion Postgres expand-contract"]}
+{"id":"q15","category":"inflection","query":"consultas N+1 repetidas","expect":["Consultas N+1 en SQLAlchemy"]}
+{"id":"q16","category":"inflection","query":"timeouts del proxy","expect":["Timeout del proxy nginx"]}
+{"id":"q17","category":"paraphrase","query":"donde guardo las contraseñas","expect":["Cifrado de secretos en reposo"]}
+{"id":"q18","category":"paraphrase","query":"nombrar objetos de BD","expect":["Vistas Oracle en mayusculas"]}
+{"id":"q19","category":"paraphrase","query":"un formulario de otro sitio puede enviar peticiones en mi nombre","expect":["CSRF en formularios server-side"]}
+{"id":"q20","category":"paraphrase","query":"el token de acceso no debe vivir para siempre","expect":["Rotacion de refresh tokens JWT"]}
+{"id":"q21","category":"paraphrase","query":"me estan probando millones de claves por minuto","expect":["Rate limit del login"]}
+{"id":"q22","category":"paraphrase","query":"partir la imagen en dos fases","expect":["Docker multi-stage"]}
+{"id":"q23","category":"paraphrase","query":"cada fila lanza una consulta extra","expect":["Consultas N+1 en SQLAlchemy"]}
+{"id":"q24","category":"paraphrase","query":"las subidas grandes se cortan","expect":["Timeout del proxy nginx"]}
+{"id":"q25","category":"paraphrase","query":"la contraseña se guarda con un hash costoso en GPU","expect":["Hash de contrasenas con Argon2id"]}
+{"id":"q26","category":"paraphrase","query":"la replica va con retraso","expect":["Lag de replicacion"]}

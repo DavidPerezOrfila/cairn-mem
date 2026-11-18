@@ -110,7 +110,8 @@ def _cmd_save(ns) -> int:
     root = _root(ns)
     if ns.anchor:
         anchor_path, anchor_hash = resolve_anchor(ns.anchor, root.parent)
-    mid = _store(ns).save(
+    store = _store(ns)
+    mid = store.save(
         kind=ns.kind,
         title=ns.title,
         body=ns.body,
@@ -121,7 +122,20 @@ def _cmd_save(ns) -> int:
         id=ns.id,
         source=ns.source,
     )
-    _print_json({"id": mid}) if ns.json else print(mid)
+    similar = [row for row in store.similar(ns.title, ns.body) if row["id"] != mid]
+    if ns.json:
+        payload = {"id": mid}
+        if similar:
+            payload["similar"] = similar
+        _print_json(payload)
+    else:
+        print(mid)
+        for row in similar:
+            print(
+                f"similar: {row['id']}  {row['kind']}  {row['title']}  "
+                f"({row['overlap']:.0%})",
+                file=sys.stderr,
+            )
     return 0
 
 
@@ -188,6 +202,54 @@ def _cmd_archive(ns) -> int:
             print(f"archivada {ns.id}")
             return 0
     raise ValueError(f"no existe la memoria {ns.id}")
+
+
+def _cmd_pin(ns) -> int:
+    for store in _scopes():
+        if store.get(ns.id) is not None:
+            store.pin(ns.id)
+            print(f"pineada {ns.id}")
+            return 0
+    raise ValueError(f"no existe la memoria {ns.id}")
+
+
+def _cmd_unpin(ns) -> int:
+    for store in _scopes():
+        if store.get(ns.id) is not None:
+            store.unpin(ns.id)
+            print(f"despineada {ns.id}")
+            return 0
+    raise ValueError(f"no existe la memoria {ns.id}")
+
+
+def _cmd_purge(ns) -> int:
+    for store in _scopes():
+        if store.get(ns.id) is not None:
+            removed = store.purge(ns.id)
+            print(f"purgadas {removed} líneas de {ns.id} (copia: events.jsonl.bak)")
+            print(
+                "cairn: si era un secreto, rota la credencial ahora; con --share "
+                "el historial de Git puede conservarla",
+                file=sys.stderr,
+            )
+            return 0
+    raise ValueError(f"no existe la memoria {ns.id}")
+
+
+def _cmd_topics(ns) -> int:
+    rows = []
+    for store in _scopes():
+        scope = "personal" if store.root == personal_dir() else "project"
+        rows += [{**row, "scope": scope} for row in store.topics()]
+    if ns.json:
+        _print_json(rows)
+    elif not rows:
+        print("sin topics")
+    else:
+        for row in rows:
+            tag = "  [personal]" if row["scope"] == "personal" else ""
+            print(f"{row['topic']}  ({row['count']}){tag}")
+    return 0
 
 
 def _cmd_rebuild(ns) -> int:
@@ -392,6 +454,24 @@ def _parser() -> argparse.ArgumentParser:
     archive = sub.add_parser("archive", help="archiva una memoria")
     archive.add_argument("id")
     archive.set_defaults(handler=_cmd_archive)
+
+    pin = sub.add_parser("pin", help="fija una memoria al principio del L0 (humano)")
+    pin.add_argument("id")
+    pin.set_defaults(handler=_cmd_pin)
+
+    unpin = sub.add_parser("unpin", help="quita el pin de una memoria")
+    unpin.add_argument("id")
+    unpin.set_defaults(handler=_cmd_unpin)
+
+    purge = sub.add_parser(
+        "purge", help="borra una memoria del JSONL (secreto filtrado)"
+    )
+    purge.add_argument("id")
+    purge.set_defaults(handler=_cmd_purge)
+
+    topics = sub.add_parser("topics", help="lista los topic_key activos")
+    topics.add_argument("--json", action="store_true")
+    topics.set_defaults(handler=_cmd_topics)
 
     rebuild = sub.add_parser("rebuild", help="reconstruye la DB desde events.jsonl")
     rebuild.add_argument("--personal", action="store_true", help="scope personal")

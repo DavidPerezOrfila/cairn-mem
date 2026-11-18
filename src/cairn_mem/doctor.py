@@ -11,7 +11,13 @@ from pathlib import Path
 
 from cairn_mem.anchor import is_stale
 from cairn_mem.sessions import Sessions
-from cairn_mem.store import SCHEMA_VERSION, Store, fingerprint, parse_event
+from cairn_mem.store import (
+    SCHEMA_VERSION,
+    Store,
+    fingerprint,
+    parse_event,
+    reject_secrets,
+)
 
 MAX_L0 = 3000
 # `events.jsonl` depende de `--share`: init lo ignora en modo local y lo versiona en share.
@@ -110,11 +116,28 @@ def _events(root: Path) -> dict:
         if not line.strip():
             continue
         try:
-            parse_event(line, number)
+            event = parse_event(line, number)
         except ValueError as error:
             if number == last and torn_tail:
                 continue  # misma tolerancia que el rebuild
             return _check("fail", "events", str(error))
+        if event["op"] == "save":
+            # S20: puerta antes de --share. El detector de escritura no ve lo que
+            # ya está guardado; un secreto viejo sigue en el fichero y en Git.
+            try:
+                reject_secrets(
+                    event.get("title"),
+                    event.get("body"),
+                    event.get("why"),
+                    event.get("source"),
+                    event.get("topic_key"),
+                )
+            except ValueError as error:
+                return _check(
+                    "fail",
+                    "secrets",
+                    f"events.jsonl línea {number + 1} ({event['id']}): {error}",
+                )
         count += 1
     return _check("ok", "events", f"{count} eventos")
 
