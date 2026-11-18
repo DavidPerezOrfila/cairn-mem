@@ -7,8 +7,10 @@
   (`setup <harness>` and `export`), S18 (`source`), S19 (hardening of `parse_event` and
   sessions) and S20 (secrets v3 by value shape, injection rejection plus the L0 header,
   non-blocking dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan and the
-  agent-facing English L0/MCP) are implemented.** 0.15.1 is published (2026-11-18, tagged
-  `v0.15.1`, Trusted Publishing); **S20 is unreleased on `main` (0.16.0 pending the tag).**
+  agent-facing English L0/MCP) are implemented.** 0.16.0 is published (2026-11-18, tagged
+  `v0.16.0`, Trusted Publishing); nothing is unreleased. Pending plan: S21 (write-side A/B,
+  `setup` de-dup, `CAIRN_LANG`), S22 (`--keywords`, `history`, Windows multiprocess test)
+  and the minors — see `PLAN.md` §4.1.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py` and `legacy.py` are implemented.
   `tests/` (384 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP

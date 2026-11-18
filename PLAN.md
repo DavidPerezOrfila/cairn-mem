@@ -301,6 +301,55 @@ was written as LF into a CRLF instructions file. No API or schema change. Verifi
 clean install from the public index in an empty venv (`setup` with a config that is not an
 object exits 1, CRLF file normalized, version 0.15.1).
 
+**0.16.0 release:** 2026-11-18 on PyPI and tag `v0.16.0`. Contents: S20 (secret detector
+v3 keyed by value shape and format, injection rejection plus the L0 header, non-blocking
+dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan, agent-facing English
+L0/MCP and the paraphrase baseline). `SCHEMA_VERSION = 5` (`pinned` column; older JSONL
+replays with 0 and the schema mismatch rebuilds on open). Verified with a clean install
+from the public index in an empty venv (`init`, `save`, `search`, `pin`, `topics`, `purge`,
+`doctor` exit 0, version 0.16.0).
+
+## 4.1 Pending rounds (2026-11-18 audit)
+
+Not implemented yet. Each one starts only after the previous is measured; keep the
+one-round-per-release rule and add its row to the §4 table when it ships.
+
+### S21: write-side A/B, setup de-dup, languages (P1)
+
+- [ ] **A/B v2, write side.** `bench/ab_write.py`: a scenario with a planted gotcha; after
+  the session, check that `events.jsonl` gained an event containing the gotcha keywords.
+  Automatable, no human intervention. **Write the criteria before running.** n ≥ 30 per
+  arm with a confidence interval. Include code-resolvable tasks where a gotcha avoids the
+  error, and negative controls (stale memory, poisoned memory, 100 distractors). The
+  current A/B (16/16) only measured retrieval, not usefulness.
+- [ ] **`setup` without duplication.** When `CLAUDE.md` imports `@AGENTS.md`, do not write
+  the snippet block there (today `setup claude-code` + `setup opencode` leaves the block in
+  both and Claude reads it twice).
+- [ ] **`CAIRN_LANG`.** English by default for the human-facing messages (CLI, `doctor`,
+  `setup`), `CAIRN_LANG=es` opt-in. The agent-facing surface (L0, MCP) is already English
+  since S20.
+
+### S22: retrieval fields and concurrency (P2)
+
+- [ ] **`--keywords` indexed in FTS** (`SCHEMA_VERSION = 6`) for the queries whose terms are
+  not in the memory ("dónde guardo las contraseñas" → "secretos", "nombrar objetos de BD" →
+  "vistas en mayúsculas"). Gate: the hard paraphrase set (`bench/paraphrase.jsonl`, baseline
+  léxico 8/8, flexión 8/8, paráfrasis 9/10) must not regress and should improve P@3.
+- [ ] **`cairn history <topic>`**: the superseded rows of a topic from the JSONL (the
+  history already exists; no graph).
+- [ ] **Windows multiprocess test**: 8 processes appending in CI `windows-latest`;
+  `jsonl._LOCK` is only in-process, so `_repair_tail` could truncate another process's
+  half-written line.
+
+### Minors
+
+- [ ] `cairn --version` (nothing prints the version today; MCP does it in `serverInfo`).
+- [ ] Classifiers list 3.10-3.14 (today only 3.10 and 3.14).
+- [ ] 13 mypy errors.
+- Dropped: lazy imports (Windows pays process startup, MCP is the answer; Linux imports
+  were 46 ms). Git history email: **not** rewritten; going forward commits use the GitHub
+  noreply address.
+
 ## 5. Backlog (closed with evidence, 2026-11-16)
 
 Every item was measured on 2026-11-10 and 2026-11-16 (numbers in
