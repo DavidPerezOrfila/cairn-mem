@@ -19,7 +19,7 @@ from pathlib import Path
 from cairn_mem.store import Store
 
 LIMIT = 5  # fija: Recall@5 y Hit@3 se definen sobre el mismo top 5
-CATEGORIES = ("lexical", "paraphrase", "multi", "no_answer")
+CATEGORIES = ("lexical", "inflection", "paraphrase", "multi", "no_answer")
 WORD = re.compile(r"\w+", re.UNICODE)
 # Lista propia del baseline: no comparte la del producto para no sesgar la comparación.
 STOPWORDS = frozenset(
@@ -112,6 +112,8 @@ def summarize(rows: list[dict]) -> dict:
     summary = {}
     for category in CATEGORIES:
         subset = [row for row in rows if row["category"] == category]
+        if not subset:
+            continue  # un fichero puede no traer todas las categorías
         if category == "no_answer":
             summary[category] = {
                 "n": len(subset),
@@ -206,6 +208,8 @@ def report(path: Path, corpus: list[dict], queries: list[dict], systems: dict) -
     print("-" * len(header))
     for category in CATEGORIES:
         for name, summary in systems.items():
+            if category not in summary:
+                continue
             values = summary[category]
             if category == "no_answer":
                 abstained = round(values["abstention"] * values["n"])

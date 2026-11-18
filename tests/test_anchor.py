@@ -2,7 +2,7 @@
 
 import pytest
 
-from cairn_mem import anchor
+from cairn_mem import anchor, render
 
 
 def test_hash_ignores_crlf(tmp_path):
@@ -86,7 +86,7 @@ def test_stale_reads_an_anchor_once_per_render(tmp_path, monkeypatch):
 
     monkeypatch.setattr(anchor, "file_hash", counted)
 
-    assert "⚠ revisar" not in render_l0(store)
+    assert render.STALE_MARK not in render_l0(store)
     assert len(calls) == 1
 
 
@@ -128,7 +128,7 @@ def test_parallel_prewarm_hashes_each_anchor_once_per_render(tmp_path, monkeypat
     (tmp_path / "b.py").write_text("b.py v2\n", encoding="utf-8")
 
     out = render_l0(store)
-    assert out.count("⚠ revisar") == 1
+    assert out.count(render.STALE_MARK) == 1
     assert len(calls) == 2
 
     render_l0(store)

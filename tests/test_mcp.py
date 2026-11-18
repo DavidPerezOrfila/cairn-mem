@@ -213,7 +213,7 @@ def test_archive_tool_archives_memory():
         call(server, "save", kind="fact", title="T", body="B", topic="t/one")
     )
     assert (
-        "archivada"
+        "archived"
         in call(server, "archive", id=memory_id)["result"]["content"][0]["text"]
     )
     rows = {row["id"]: row for row in server.store().dump()}
@@ -243,7 +243,7 @@ def test_archive_tool_personal_scope(in_tmp):
 def test_archive_tool_missing_memory():
     response = call(Server(), "archive", id="000000000000")
     assert response["result"]["isError"] is True
-    assert "no existe" in text(response)
+    assert "does not exist" in text(response)
 
 
 def test_session_list_and_get_roundtrip():
@@ -275,7 +275,7 @@ def test_session_list_validates_limit():
 def test_session_get_missing():
     response = call(Server(), "session_get", id="000000000000")
     assert response["result"]["isError"] is True
-    assert "no existe" in text(response)
+    assert "does not exist" in text(response)
 
 
 def test_session_tools_respect_scope(in_tmp):
@@ -293,7 +293,7 @@ def test_context_returns_l0():
     server = Server()
     call(server, "save", kind="decision", title="Usar FTS5", body="bm25")
     body = text(call(server, "context"))
-    assert body.startswith("# Memoria del proyecto")
+    assert body.startswith("# Project memory")
     assert "Usar FTS5" in body
 
 
@@ -333,7 +333,7 @@ def test_tool_errors_are_structured():
     server = Server()
     response = call(server, "save", kind="fact", title="t", body="password = hunter2")
     assert response["result"]["isError"] is True
-    assert "secreto" in text(response)
+    assert "secret" in text(response)
 
     response = call(server, "get", id="000000000000")
     assert response["result"]["isError"] is True

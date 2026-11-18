@@ -55,7 +55,8 @@ def test_l0_keeps_one_line_per_memory(tmp_path):
     s = Store(str(tmp_path / ".cairn"))
     s.save(kind="fact", title="uno\ndos", body="x")
     lines = render.render_l0(s).splitlines()
-    assert len(lines) == 2 and lines[1].startswith("- [")
+    assert lines[:2] == [render.TITLE, render.HEADER]
+    assert len(lines) == 3 and lines[2].startswith("- [")
 
 
 def test_l0_marks_stale(tmp_path):
@@ -117,14 +118,15 @@ def test_stale_marker_counts_against_the_budget(tmp_path):
     (tmp_path / "a.py").write_text("v2\n", encoding="utf-8")
 
     full = render.render_l0(s, max_chars=10_000)
-    line = full.splitlines()[1]
+    line = full.splitlines()[2]
     assert line.endswith(render.STALE_MARK)
-    threshold = len(render.TITLE) + len(line) + 2  # used + línea + 1
+    head = f"{render.TITLE}\n{render.HEADER}\n"
+    threshold = len(head) + len(line) + 1
 
-    assert render.render_l0(s, max_chars=threshold - 1) == render.TITLE + "\n"
+    assert render.render_l0(s, max_chars=threshold - 1) == head
     assert (
         render.render_l0(s, max_chars=threshold)
-        .splitlines()[1]
+        .splitlines()[2]
         .endswith(render.STALE_MARK)
     )
 

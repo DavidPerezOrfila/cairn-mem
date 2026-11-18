@@ -390,3 +390,36 @@ the whole corpus. `python bench/bench_cli.py --reps 20` on a loaded machine (sta
 The end-to-end SLO fails on this run and it is the environment, not the change: `python -m
 cairn_mem.cli --help` takes 442.7 ms with the change and 451.2 ms with `src/` stashed, and
 the internal query stays at 1.4-5.5 ms (5.9 ms in the baseline pass).
+
+## S20: detector de secretos, dedupe y pin (2026-11-18)
+
+Baseline de paráfrasis medido **antes** de tocar ranking, dedupe o pin
+(`bench/paraphrase.jsonl`, 14 memorias, 26 consultas; 10k distractores no
+cambian las métricas porque el set es pequeño y el ranking aguanta el índice):
+
+| Categoría   | n  | cairn Hit@3 | grep Hit@3 |
+|-------------|----|-------------|------------|
+| léxico      | 8  | 1.00        | 1.00       |
+| flexión     | 8  | 1.00        | 0.88       |
+| paráfrasis  | 10 | 0.90        | 0.80       |
+| overall     | 26 | 0.96        | 0.88       |
+
+La única paráfrasis que falla es `"dónde guardo las contraseñas"` → devuelve
+`Hash de contrasenas con Argon2id` en vez de `Cifrado de secretos en reposo`:
+el mismo caso que reportó la auditoría. Este fichero es la referencia de P@3
+(Hit@3 con una sola respuesta esperada) para cada cambio futuro de ranking o
+`--keywords`.
+
+El dedupe añade una consulta FTS (sin LIMIT de SQL, top 10 por bm25) dentro de
+`save`; el render del L0 no cambia de orden de coste. Medido con
+`python bench/bench_cli.py --reps 20` en la misma máquina:
+
+| Registros | search p95 | save p95 | búsqueda interna p95 |
+|-----------|------------|----------|----------------------|
+| 1,000     | 197.6 ms   | 212.4 ms | 0.5 ms               |
+| 10,000    | 209.1 ms   | 213.3 ms | 2.6 ms               |
+
+`bench_mcp` (10k, en proceso): search p95 3.4 ms, save p95 16.1 ms, context
+6.1 ms. `bench_sync` (10k, 2 escritores): save p95 16.7 ms, search 3.8 ms.
+Los tres SLO se cumplen. El corpus de secretos mide la corrección, no latencia:
+38 casos verdes y 4 huecos documentados como `xfail`.

@@ -155,7 +155,7 @@ def test_get_rejects_a_malformed_id(tmp_path):
 @pytest.mark.parametrize("secret", ["password = hunter2", "AKIAIOSFODNN7EXAMPLE"])
 def test_secret_in_summary_is_rejected(tmp_path, secret):
     sessions = Sessions(str(tmp_path))
-    with pytest.raises(ValueError, match="secreto"):
+    with pytest.raises(ValueError, match="secret"):
         sessions.save(f"## Goal\nconfig {secret}")
     assert not sessions.path.exists()
 

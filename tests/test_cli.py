@@ -206,7 +206,7 @@ def test_secret_rejected_by_cli(capsys, in_tmp):
     code, _, err = run(
         capsys, "save", "--kind", "fact", "--title", "t", "--body", "password = hunter2"
     )
-    assert code == 1 and "secreto" in err
+    assert code == 1 and "secret" in err
     raw = (in_tmp / ".cairn" / "events.jsonl").read_text(encoding="utf-8")
     assert "hunter2" not in raw
 
