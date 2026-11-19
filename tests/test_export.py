@@ -42,12 +42,12 @@ def test_export_renders_active_memories(capsys, in_tmp):
     )
     code, out, _ = run(capsys, "export")
     assert code == 0
-    assert out.startswith("# Memoria cairn")
+    assert out.startswith("# cairn memory")
     assert "## decision" in out
     assert "### FTS5 over LIKE" in out
     assert "bm25 ranking" in out and "escala a 10k" in out
     assert "storage/fts5" in out
-    assert "1 memorias activas" in out
+    assert "1 active memories" in out
 
 
 def test_export_skips_archived_and_superseded(capsys, in_tmp):
@@ -67,7 +67,7 @@ def test_export_includes_sessions_on_demand(capsys, in_tmp):
         assert run(capsys, "session", "save", "--summary", text)[0] == 0
     assert "sesión uno" not in run(capsys, "export")[1]
     out = run(capsys, "export", "--sessions", "1")[1]
-    assert "## sesiones" in out and "sesión dos" in out
+    assert "## sessions" in out and "sesión dos" in out
     assert "sesión uno" not in out
     assert "## sesiones" not in run(capsys, "export", "--sessions", "-1")[1]
 

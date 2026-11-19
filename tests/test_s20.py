@@ -102,11 +102,11 @@ def test_unpin_returns_the_memory_to_its_kind(store):
 
 
 def test_pin_rejects_missing_and_superseded(store):
-    with pytest.raises(ValueError, match="no existe"):
+    with pytest.raises(ValueError, match="does not exist"):
         store.pin("0123456789ab")
     old = store.save(kind="fact", topic_key="k", title="v1", body="a")
     store.save(kind="fact", topic_key="k", title="v2", body="b")
-    with pytest.raises(ValueError, match="activa"):
+    with pytest.raises(ValueError, match="active"):
         store.pin(old)
 
 
@@ -172,9 +172,9 @@ def test_purge_removes_every_event_of_the_id(store, root):
 
 
 def test_purge_unknown_id_fails(store):
-    with pytest.raises(ValueError, match="no existe"):
+    with pytest.raises(ValueError, match="does not exist"):
         store.purge("0123456789ab")
-    with pytest.raises(ValueError, match="id debe"):
+    with pytest.raises(ValueError, match="id must"):
         store.purge("no-es-un-id")
 
 
@@ -186,7 +186,7 @@ def test_purge_refuses_a_corrupt_middle_line(store, root):
         encoding="utf-8",
         newline="\n",
     )
-    with pytest.raises(ValueError, match="JSON inválido"):
+    with pytest.raises(ValueError, match="invalid JSON"):
         store.purge(mid)
     assert mid in path.read_text(encoding="utf-8")
 
@@ -259,7 +259,7 @@ def test_cli_purge_prints_the_rotation_warning(capsys, store):
     mid = store.save(kind="fact", title="t", body="b")
     code, out, err = run(capsys, "purge", mid)
     assert code == 0 and "events.jsonl.bak" in out
-    assert "rota la credencial" in err
+    assert "rotate the credential" in err
 
 
 def test_cli_topics(capsys, store):

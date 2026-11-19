@@ -18,9 +18,7 @@ def data_dir() -> Path:
         candidate = folder / ".cairn"
         if candidate.is_dir() and candidate.resolve() not in personal:
             return candidate
-    raise FileNotFoundError(
-        "no se encontró .cairn/ en este árbol; ejecuta 'cairn init'"
-    )
+    raise FileNotFoundError("no .cairn/ found in this tree; run 'cairn init'")
 
 
 def personal_dir() -> Path:

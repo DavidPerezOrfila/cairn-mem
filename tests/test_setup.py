@@ -73,7 +73,7 @@ def test_second_run_changes_nothing(capsys, in_tmp):
     assert (in_tmp / ".mcp.json").read_bytes() == config
     assert (in_tmp / "CLAUDE.md").read_bytes() == rules
     assert rules.count(BEGIN.encode()) == 1
-    assert "ya estaba" in out
+    assert "already there" in out
 
 
 def test_snippet_is_refreshed_between_markers(capsys, in_tmp):
@@ -92,7 +92,7 @@ def test_commented_config_is_refused(capsys, in_tmp):
     (in_tmp / "opencode.json").write_text(original, encoding="utf-8")
     code, _, err = run(capsys, "setup", "opencode")
     assert code == 1
-    assert "a mano" in err and "cairn" in err
+    assert "by hand" in err and "cairn" in err
     assert (in_tmp / "opencode.json").read_text(encoding="utf-8") == original
 
 
@@ -100,7 +100,7 @@ def test_config_that_is_not_an_object_is_refused(capsys, in_tmp):
     (in_tmp / "opencode.json").write_text("[]", encoding="utf-8")
     code, _, err = run(capsys, "setup", "opencode")
     assert code == 1
-    assert "objeto JSON" in err
+    assert "JSON object" in err
     assert (in_tmp / "opencode.json").read_text(encoding="utf-8") == "[]"
 
 
@@ -110,6 +110,26 @@ def test_crlf_instructions_file_is_normalized(capsys, in_tmp):
     raw = (in_tmp / "CLAUDE.md").read_bytes()
     assert b"\r" not in raw
     assert SNIPPET.strip().encode() in raw
+
+
+def test_claude_md_that_imports_agents_md_gets_no_block(capsys, in_tmp):
+    original = "# mío\n\n@AGENTS.md\n"
+    (in_tmp / "CLAUDE.md").write_text(original, encoding="utf-8")
+    code, out, _ = run(capsys, "setup", "claude-code")
+    assert code == 0
+    assert (in_tmp / "CLAUDE.md").read_text(encoding="utf-8") == original
+    assert "@AGENTS.md" in out
+
+
+def test_import_removes_a_block_left_by_an_older_setup(capsys, in_tmp):
+    (in_tmp / "CLAUDE.md").write_text(
+        f"# mío\n\n@AGENTS.md\n\n{BEGIN}\nviejo\n{END}\n", encoding="utf-8"
+    )
+    assert run(capsys, "setup", "claude-code")[0] == 0
+    rules = (in_tmp / "CLAUDE.md").read_text(encoding="utf-8")
+    assert rules == "# mío\n\n@AGENTS.md\n"
+    assert run(capsys, "setup", "claude-code")[0] == 0
+    assert (in_tmp / "CLAUDE.md").read_text(encoding="utf-8") == rules
 
 
 def test_dir_option_writes_elsewhere(capsys, in_tmp):

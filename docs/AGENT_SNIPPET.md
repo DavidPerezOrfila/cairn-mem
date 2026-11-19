@@ -24,6 +24,6 @@ without a `setup` entry.
 - Do NOT save: anything you can work out from the code or `git log`, temporary task
   state, logs, or secrets, credentials and customer data.
 - The same `--topic` replaces the previous memory. Do not duplicate.
-- If an entry comes back with "⚠ revisar", check the code before trusting it. If the
+- If an entry comes back with "⚠ review", check the code before trusting it. If the
   code changed, rewrite the entry with the same `--topic`.
 ```

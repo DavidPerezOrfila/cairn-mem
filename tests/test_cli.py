@@ -35,7 +35,7 @@ def test_init_local_only_by_default(capsys, in_tmp):
 def test_init_refuses_personal_dir(capsys, in_tmp, monkeypatch):
     monkeypatch.setenv("CAIRN_HOME", str(in_tmp / ".cairn"))
     code, _, err = run(capsys, "init")
-    assert code == 1 and "scope personal" in err
+    assert code == 1 and "personal scope" in err
     assert not (in_tmp / ".cairn").exists()
 
 
@@ -44,7 +44,7 @@ def test_init_refuses_store_inside_personal(capsys, in_tmp, monkeypatch):
     (in_tmp / "home" / "sub").mkdir(parents=True)
     monkeypatch.chdir(in_tmp / "home" / "sub")
     code, _, err = run(capsys, "init")
-    assert code == 1 and "scope personal" in err
+    assert code == 1 and "personal scope" in err
     assert not (in_tmp / "home" / "sub" / ".cairn").exists()
 
 
@@ -74,7 +74,7 @@ def test_init_refuses_nested_store(capsys, in_tmp, monkeypatch):
     nested.mkdir()
     monkeypatch.chdir(nested)
     code, _, err = run(capsys, "init")
-    assert code == 1 and "ya existe un store" in err
+    assert code == 1 and "already exists" in err
     assert not (nested / ".cairn").exists()
 
 
@@ -175,7 +175,7 @@ def test_archive_hides_from_search(capsys):
 def test_get_unknown_id_fails(capsys):
     run(capsys, "init")
     code, _, err = run(capsys, "get", "000000000000")
-    assert code == 1 and "no existe" in err
+    assert code == 1 and "does not exist" in err
 
 
 def test_corrupt_db_tells_the_user_to_delete_it(capsys, in_tmp):
@@ -183,7 +183,7 @@ def test_corrupt_db_tells_the_user_to_delete_it(capsys, in_tmp):
     (in_tmp / ".cairn" / "events.jsonl").touch()
     (in_tmp / ".cairn" / "cairn.db").write_bytes(b"no es una base de datos")
     code, _, err = run(capsys, "search", "x")
-    assert code == 1 and "borra" in err
+    assert code == 1 and "delete" in err
 
 
 def test_commands_require_init(capsys, in_tmp):
@@ -280,7 +280,7 @@ def test_save_with_source_shows_provenance(capsys, in_tmp):
     _, out, _ = run(capsys, "search", "x")
     assert "(opencode/glm-4.7)" in out
     _, out, _ = run(capsys, "search", "sin-fuente-xyz")
-    assert out.strip() == "sin resultados"
+    assert out.strip() == "no results"
 
 
 def test_save_regenerates_l0_and_render_matches(capsys, in_tmp):
@@ -307,7 +307,7 @@ def test_check_lists_stale_after_anchor_change(capsys, in_tmp):
         "--anchor",
         "a.py",
     )
-    assert "sin memorias stale" in run(capsys, "check")[1]
+    assert "no stale memories" in run(capsys, "check")[1]
     (in_tmp / "a.py").write_text("v2\n", encoding="utf-8")
     code, out, _ = run(capsys, "check")
     assert code == 0 and "G" in out
@@ -334,7 +334,7 @@ def test_check_hashes_large_anchors(capsys, in_tmp, monkeypatch):
         "dump.csv",
     )
     monkeypatch.setattr(anchor_module, "MAX_HASH_BYTES", 1)
-    assert "sin memorias stale" in run(capsys, "check")[1]
+    assert "no stale memories" in run(capsys, "check")[1]
 
 
 def test_init_writes_gitignore_with_lf(capsys, in_tmp):
@@ -355,7 +355,7 @@ def test_bad_event_line_is_reported_without_traceback(capsys, in_tmp):
     (in_tmp / ".cairn").mkdir()
     (in_tmp / ".cairn" / "events.jsonl").write_text('{"op":"save"}\n', encoding="utf-8")
     code, _, err = run(capsys, "search", "x")
-    assert code == 1 and "línea 1" in err
+    assert code == 1 and "line 1" in err
 
 
 def test_personal_scope_is_reachable_from_the_project(capsys, in_tmp):
@@ -509,7 +509,7 @@ def test_personal_session_scope(capsys, in_tmp):
     )
     sid = json.loads(out)["id"]
     assert (in_tmp / "home" / "sessions.jsonl").exists()
-    assert "sin sesiones" in run(capsys, "session", "list")[1]
+    assert "no sessions" in run(capsys, "session", "list")[1]
     assert "resumen personal" in run(capsys, "session", "list", "--personal")[1]
     assert "resumen personal" in run(capsys, "session", "get", sid, "--personal")[1]
 
@@ -565,7 +565,7 @@ def test_search_project_restricts_to_the_project(capsys):
 
 def test_search_project_without_a_project_store_fails(capsys, in_tmp):
     code, _, err = run(capsys, "search", "x", "--project")
-    assert code == 1 and "no se encontró .cairn/" in err
+    assert code == 1 and "no .cairn/ found" in err
     assert not (in_tmp / "home").exists()
 
 
@@ -597,7 +597,7 @@ def test_rebuild_render_and_check_accept_personal(capsys, in_tmp):
     (in_tmp / "notes.md").write_text("v2\n", encoding="utf-8")
     assert "Commits en LF" in run(capsys, "check", "--personal")[1]
     code, out, _ = run(capsys, "rebuild", "--personal")
-    assert code == 0 and "reconstruida: 1" in out
+    assert code == 0 and "rebuilt: 1" in out
 
 
 def test_archive_finds_the_personal_scope_without_the_flag(capsys):
@@ -623,20 +623,20 @@ def test_archive_finds_the_personal_scope_without_the_flag(capsys):
 
 def test_archive_without_any_store_fails(capsys):
     code, _, err = run(capsys, "archive", "000000000000")
-    assert code == 1 and "no se encontró .cairn/" in err
+    assert code == 1 and "no .cairn/ found" in err
 
 
 def test_archive_unknown_id_with_a_store_fails(capsys):
     run(capsys, "init")
     code, _, err = run(capsys, "archive", "000000000000")
-    assert code == 1 and "no existe la memoria" in err
+    assert code == 1 and "does not exist" in err
 
 
 def test_personal_read_commands_do_not_create_the_scope(capsys, in_tmp):
     run(capsys, "init")
     for command in ("check", "render", "rebuild"):
         code, _, err = run(capsys, command, "--personal")
-        assert code == 1 and "scope personal" in err
+        assert code == 1 and "personal scope" in err
     assert not (in_tmp / "home").exists()
 
 
@@ -669,5 +669,5 @@ def test_archive_prefers_the_project_when_both_scopes_share_an_id(capsys):
         "--personal",
     )
     assert run(capsys, "archive", mid)[0] == 0
-    assert "sin resultados" in run(capsys, "search", "proyecto", "--project")[1]
+    assert "no results" in run(capsys, "search", "proyecto", "--project")[1]
     assert "memoria personal" in run(capsys, "search", "personal", "--personal")[1]

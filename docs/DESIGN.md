@@ -166,7 +166,7 @@ milliseconds; see `docs/features/s7-incremental-sync.md`.
   between Windows and Linux.
 - `anchor_path` is a POSIX path relative to the root.
 - In `search` and `render`, only for returned results: if the file is missing or the hash
-  differs, `stale=true` and the entry shows `⚠ revisar`. It is never hidden or deleted.
+  differs, `stale=true` and the entry shows `⚠ review`. It is never hidden or deleted.
 - `cairn check` lists every stale memory. Re-anchoring means running `cairn save` with the
   same `--id` and the current `--anchor`: the whole memory is rewritten, so the text gets
   reviewed instead of the flag being cleared silently.

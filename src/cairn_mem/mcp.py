@@ -229,7 +229,7 @@ class Server:
             return _result(request_id, {"tools": tools})
         if method == "tools/call":
             return self._call_tool(request_id, params)
-        return _error(request_id, METHOD_NOT_FOUND, f"método desconocido: {method}")
+        return _error(request_id, METHOD_NOT_FOUND, f"unknown method: {method}")
 
     def _call_tool(self, request_id, params):
         if not isinstance(params, dict):
@@ -240,12 +240,12 @@ class Server:
             return _error(request_id, INVALID_REQUEST, "arguments must be an object")
         tool = _TOOL_HANDLERS.get(name)
         if tool is None:
-            return _error(request_id, INVALID_PARAMS, f"tool desconocida: {name}")
+            return _error(request_id, INVALID_PARAMS, f"unknown tool: {name}")
         if self.read_only and name not in READ_TOOLS:
             return _error(
                 request_id,
                 INVALID_PARAMS,
-                f"tool no disponible en modo read-only: {name}",
+                f"tool not available in read-only mode: {name}",
             )
         try:
             text = tool(self, arguments)
@@ -373,8 +373,8 @@ def _context(server, args):
     summary = record.get("summary", "")
     if len(summary) > LAST_SESSION_CHARS:
         half = LAST_SESSION_CHARS // 2
-        summary = f"{summary[:half]}\n… (recortado)\n{summary[-half:]}"
-    return f"{text}\n## Última sesión ({record['id']})\n{summary}\n"
+        summary = f"{summary[:half]}\n… (truncated)\n{summary[-half:]}"
+    return f"{text}\n## Last session ({record['id']})\n{summary}\n"
 
 
 def _session_root(server, args):

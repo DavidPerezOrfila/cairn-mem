@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from cairn_mem.anchor import is_stale, resolve_anchor
+from cairn_mem.i18n import t
 from cairn_mem.paths import data_dir, personal_dir
 from cairn_mem.sessions import Sessions
 from cairn_mem.setup import HARNESSES, setup
@@ -30,7 +31,10 @@ def _existing_store(ns) -> Store:
     root = personal_dir() if ns.personal else data_dir()
     if not root.exists():
         raise FileNotFoundError(
-            "no existe el scope personal; crea una memoria con 'cairn save --personal'"
+            t(
+                "no personal scope yet; create one with 'cairn save --personal'",
+                "no existe el scope personal; crea una memoria con 'cairn save --personal'",
+            )
         )
     return Store(str(root))
 
@@ -46,7 +50,10 @@ def _scopes() -> list[Store]:
         stores.append(Store(str(personal_dir())))
     if not stores:
         raise FileNotFoundError(
-            "no se encontró .cairn/ en este árbol; ejecuta 'cairn init'"
+            t(
+                "no .cairn/ found in this tree; run 'cairn init'",
+                "no se encontró .cairn/ en este árbol; ejecuta 'cairn init'",
+            )
         )
     return stores
 
@@ -88,20 +95,27 @@ def _cmd_init(ns) -> int:
             existing = None
         if existing is not None and existing.resolve() != local.resolve():
             raise ValueError(
-                f"ya existe un store en {existing}; usa esa raíz o define CAIRN_DIR"
+                t(
+                    f"a store already exists at {existing}; use that root or set CAIRN_DIR",
+                    f"ya existe un store en {existing}; usa esa raíz o define CAIRN_DIR",
+                )
             )
         root = existing or local
     personal = personal_dir().resolve()
     if root.resolve() == personal or root.resolve().is_relative_to(personal):
         raise ValueError(
-            "esa carpeta está dentro del scope personal de cairn; "
-            "define CAIRN_HOME o cambia de directorio"
+            t(
+                "that folder is inside the cairn personal scope; "
+                "set CAIRN_HOME or change directory",
+                "esa carpeta está dentro del scope personal de cairn; "
+                "define CAIRN_HOME o cambia de directorio",
+            )
         )
     root.mkdir(parents=True, exist_ok=True)
     (root / "events.jsonl").touch()
     _write_gitignore(root, ns.share)
     Store(str(root))
-    print(f"cairn inicializado en {root}")
+    print(t(f"cairn initialized at {root}", f"cairn inicializado en {root}"))
     return 0
 
 
@@ -162,15 +176,15 @@ def _cmd_search(ns) -> int:
     if ns.json:
         _print_json(results)
     elif not results:
-        print("sin resultados")
+        print(t("no results", "sin resultados"))
     else:
         for r in results:
             snippet = " ".join(r["snippet"].split())
             topic = f"  [{r['topic_key']}]" if r.get("topic_key") else ""
             scope = "  [personal]" if r["scope"] == "personal" else ""
             source = f"  ({r['source']})" if r.get("source") else ""
-            stale = "  ⚠ revisar" if r["stale"] else ""
-            partial = "  (parcial)" if r.get("partial") else ""
+            stale = t("  ⚠ review", "  ⚠ revisar") if r["stale"] else ""
+            partial = t("  (partial)", "  (parcial)") if r.get("partial") else ""
             print(
                 f"{r['id']}  {r['kind']}{topic}{scope}  {r['title']} — {snippet}"
                 f"{source}{stale}{partial}"
@@ -185,7 +199,7 @@ def _cmd_get(ns) -> int:
         if memory is not None:
             break
     if memory is None:
-        raise ValueError(f"no existe la memoria {ns.id}")
+        raise ValueError(_missing(ns.id))
     if ns.json:
         _print_json(memory)
     else:
@@ -195,45 +209,58 @@ def _cmd_get(ns) -> int:
     return 0
 
 
+def _missing(memory_id: str) -> str:
+    return t(f"memory {memory_id} does not exist", f"no existe la memoria {memory_id}")
+
+
 def _cmd_archive(ns) -> int:
     for store in _scopes():
         if store.get(ns.id) is not None:
             store.archive(ns.id)
-            print(f"archivada {ns.id}")
+            print(t(f"archived {ns.id}", f"archivada {ns.id}"))
             return 0
-    raise ValueError(f"no existe la memoria {ns.id}")
+    raise ValueError(_missing(ns.id))
 
 
 def _cmd_pin(ns) -> int:
     for store in _scopes():
         if store.get(ns.id) is not None:
             store.pin(ns.id)
-            print(f"pineada {ns.id}")
+            print(t(f"pinned {ns.id}", f"pineada {ns.id}"))
             return 0
-    raise ValueError(f"no existe la memoria {ns.id}")
+    raise ValueError(_missing(ns.id))
 
 
 def _cmd_unpin(ns) -> int:
     for store in _scopes():
         if store.get(ns.id) is not None:
             store.unpin(ns.id)
-            print(f"despineada {ns.id}")
+            print(t(f"unpinned {ns.id}", f"despineada {ns.id}"))
             return 0
-    raise ValueError(f"no existe la memoria {ns.id}")
+    raise ValueError(_missing(ns.id))
 
 
 def _cmd_purge(ns) -> int:
     for store in _scopes():
         if store.get(ns.id) is not None:
             removed = store.purge(ns.id)
-            print(f"purgadas {removed} líneas de {ns.id} (copia: events.jsonl.bak)")
             print(
-                "cairn: si era un secreto, rota la credencial ahora; con --share "
-                "el historial de Git puede conservarla",
+                t(
+                    f"purged {removed} lines of {ns.id} (backup: events.jsonl.bak)",
+                    f"purgadas {removed} líneas de {ns.id} (copia: events.jsonl.bak)",
+                )
+            )
+            print(
+                t(
+                    "cairn: if it was a secret, rotate the credential now; with --share "
+                    "the Git history may keep it",
+                    "cairn: si era un secreto, rota la credencial ahora; con --share "
+                    "el historial de Git puede conservarla",
+                ),
                 file=sys.stderr,
             )
             return 0
-    raise ValueError(f"no existe la memoria {ns.id}")
+    raise ValueError(_missing(ns.id))
 
 
 def _cmd_topics(ns) -> int:
@@ -244,7 +271,7 @@ def _cmd_topics(ns) -> int:
     if ns.json:
         _print_json(rows)
     elif not rows:
-        print("sin topics")
+        print(t("no topics", "sin topics"))
     else:
         for row in rows:
             tag = "  [personal]" if row["scope"] == "personal" else ""
@@ -255,7 +282,12 @@ def _cmd_topics(ns) -> int:
 def _cmd_rebuild(ns) -> int:
     store = _existing_store(ns)
     store.rebuild()
-    print(f"reconstruida: {len(store.dump())} memorias")
+    print(
+        t(
+            f"rebuilt: {len(store.dump())} memories",
+            f"reconstruida: {len(store.dump())} memorias",
+        )
+    )
     return 0
 
 
@@ -288,7 +320,7 @@ def _cmd_check(ns) -> int:
             ]
         )
     elif not stale:
-        print("sin memorias stale")
+        print(t("no stale memories", "sin memorias stale"))
     else:
         for row in stale:
             print(f"{row['id']}  {row['kind']}  {row['title']}  ({row['anchor_path']})")
@@ -321,7 +353,7 @@ def _cmd_session_list(ns) -> int:
     if ns.json:
         _print_json(records)
     elif not records:
-        print("sin sesiones")
+        print(t("no sessions", "sin sesiones"))
     else:
         for record in records:
             first = " ".join(record["summary"].split())[:80]
@@ -333,7 +365,9 @@ def _cmd_session_get(ns) -> int:
     root = personal_dir() if ns.personal else data_dir()
     record = Sessions(str(root)).get(ns.id)
     if record is None:
-        raise ValueError(f"no existe la sesión {ns.id}")
+        raise ValueError(
+            t(f"session {ns.id} does not exist", f"no existe la sesión {ns.id}")
+        )
     if ns.json:
         _print_json(record)
     else:
@@ -348,11 +382,16 @@ def _cmd_import(ns) -> int:
     if ns.json:
         _print_json(report)
         return 0
-    prefix = "se importarían" if ns.dry_run else "importadas"
+    prefix = t("would import", "se importarían") if ns.dry_run else t("imported", "importadas")
     print(
-        f"{prefix} {report['memories']} memorias y {report['sessions']} sesiones "
-        f"({report['skipped']} omitidas, {report['rejected']} rechazadas, "
-        f"{report['foreign']} de otros repos)"
+        t(
+            f"{prefix} {report['memories']} memories and {report['sessions']} sessions "
+            f"({report['skipped']} skipped, {report['rejected']} rejected, "
+            f"{report['foreign']} from other repos)",
+            f"{prefix} {report['memories']} memorias y {report['sessions']} sesiones "
+            f"({report['skipped']} omitidas, {report['rejected']} rechazadas, "
+            f"{report['foreign']} de otros repos)",
+        )
     )
     return 0
 
@@ -374,7 +413,9 @@ def _cmd_export(ns) -> int:
 
     root = personal_dir() if ns.personal else data_dir()
     if not root.exists():
-        raise FileNotFoundError(f"no existe {root}; ejecuta 'cairn init'")
+        raise FileNotFoundError(
+            t(f"no {root}; run 'cairn init'", f"no existe {root}; ejecuta 'cairn init'")
+        )
     store = Store(str(root))
     sessions = Sessions(str(root)) if ns.sessions else None
     text = render_markdown(store, sessions, ns.sessions)
@@ -411,132 +452,249 @@ def _cmd_doctor(ns) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="cairn", description="Memoria persistente para agentes"
+        prog="cairn",
+        description=t(
+            "Persistent memory for agents", "Memoria persistente para agentes"
+        ),
     )
     sub = p.add_subparsers(dest="command", required=True)
 
-    init = sub.add_parser("init", help="crea .cairn/ (local-only por defecto)")
-    init.add_argument("--share", action="store_true", help="versiona events.jsonl")
+    init = sub.add_parser(
+        "init", help=t("creates .cairn/ (local-only by default)", "crea .cairn/ (local-only por defecto)")
+    )
+    init.add_argument(
+        "--share",
+        action="store_true",
+        help=t("versions events.jsonl", "versiona events.jsonl"),
+    )
     init.set_defaults(handler=_cmd_init)
 
-    save = sub.add_parser("save", help="guarda una memoria")
+    save = sub.add_parser("save", help=t("saves a memory", "guarda una memoria"))
     save.add_argument("--kind", required=True, choices=KINDS)
     save.add_argument("--title", required=True)
     save.add_argument("--body", required=True)
     save.add_argument("--why")
     save.add_argument("--topic", dest="topic")
-    save.add_argument("--source", help="procedencia: agente, modelo o sesión")
+    save.add_argument(
+        "--source",
+        help=t(
+            "provenance: agent, model or session",
+            "procedencia: agente, modelo o sesión",
+        ),
+    )
     save.add_argument("--anchor")
     save.add_argument("--id")
-    save.add_argument("--personal", action="store_true", help="scope personal")
+    save.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     save.add_argument("--json", action="store_true")
     save.set_defaults(handler=_cmd_save)
 
-    search = sub.add_parser("search", help="busca memorias activas")
+    search = sub.add_parser("search", help=t("searches active memories", "busca memorias activas"))
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=5)
     search.add_argument("--kind", choices=KINDS)
-    search.add_argument("--topic", help="topic_key exacto")
+    search.add_argument("--topic", help=t("exact topic_key", "topic_key exacto"))
     search.add_argument(
-        "--stale", action="store_true", help="solo memorias con el ancla cambiada"
+        "--stale",
+        action="store_true",
+        help=t(
+            "only memories whose anchor changed",
+            "solo memorias con el ancla cambiada",
+        ),
     )
     scope = search.add_mutually_exclusive_group()
-    scope.add_argument("--project", action="store_true", help="solo el proyecto")
-    scope.add_argument("--personal", action="store_true", help="scope personal")
+    scope.add_argument(
+        "--project", action="store_true", help=t("project only", "solo el proyecto")
+    )
+    scope.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     search.add_argument("--json", action="store_true")
     search.set_defaults(handler=_cmd_search)
 
-    get = sub.add_parser("get", help="muestra una memoria completa")
+    get = sub.add_parser(
+        "get", help=t("shows one full memory", "muestra una memoria completa")
+    )
     get.add_argument("id")
     get.add_argument("--json", action="store_true")
     get.set_defaults(handler=_cmd_get)
 
-    archive = sub.add_parser("archive", help="archiva una memoria")
+    archive = sub.add_parser("archive", help=t("archives a memory", "archiva una memoria"))
     archive.add_argument("id")
     archive.set_defaults(handler=_cmd_archive)
 
-    pin = sub.add_parser("pin", help="fija una memoria al principio del L0 (humano)")
+    pin = sub.add_parser(
+        "pin",
+        help=t(
+            "pins a memory at the top of the L0 (human)",
+            "fija una memoria al principio del L0 (humano)",
+        ),
+    )
     pin.add_argument("id")
     pin.set_defaults(handler=_cmd_pin)
 
-    unpin = sub.add_parser("unpin", help="quita el pin de una memoria")
+    unpin = sub.add_parser(
+        "unpin", help=t("removes a pin", "quita el pin de una memoria")
+    )
     unpin.add_argument("id")
     unpin.set_defaults(handler=_cmd_unpin)
 
     purge = sub.add_parser(
-        "purge", help="borra una memoria del JSONL (secreto filtrado)"
+        "purge",
+        help=t(
+            "deletes a memory from the JSONL (leaked secret)",
+            "borra una memoria del JSONL (secreto filtrado)",
+        ),
     )
     purge.add_argument("id")
     purge.set_defaults(handler=_cmd_purge)
 
-    topics = sub.add_parser("topics", help="lista los topic_key activos")
+    topics = sub.add_parser(
+        "topics", help=t("lists active topic_keys", "lista los topic_key activos")
+    )
     topics.add_argument("--json", action="store_true")
     topics.set_defaults(handler=_cmd_topics)
 
-    rebuild = sub.add_parser("rebuild", help="reconstruye la DB desde events.jsonl")
-    rebuild.add_argument("--personal", action="store_true", help="scope personal")
+    rebuild = sub.add_parser(
+        "rebuild",
+        help=t(
+            "rebuilds the DB from events.jsonl",
+            "reconstruye la DB desde events.jsonl",
+        ),
+    )
+    rebuild.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     rebuild.set_defaults(handler=_cmd_rebuild)
 
-    render = sub.add_parser("render", help="regenera y muestra MEMORY.md (L0)")
-    render.add_argument("--personal", action="store_true", help="scope personal")
+    render = sub.add_parser(
+        "render",
+        help=t(
+            "regenerates and prints MEMORY.md (L0)",
+            "regenera y muestra MEMORY.md (L0)",
+        ),
+    )
+    render.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     render.set_defaults(handler=_cmd_render)
 
-    check = sub.add_parser("check", help="lista memorias con ancla stale")
-    check.add_argument("--personal", action="store_true", help="scope personal")
+    check = sub.add_parser(
+        "check",
+        help=t("lists memories with a stale anchor", "lista memorias con ancla stale"),
+    )
+    check.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     check.add_argument("--json", action="store_true")
     check.set_defaults(handler=_cmd_check)
 
-    session = sub.add_parser("session", help="resúmenes de sesión")
+    session = sub.add_parser(
+        "session", help=t("session recaps", "resúmenes de sesión")
+    )
     session_sub = session.add_subparsers(dest="session_command", required=True)
-    session_save = session_sub.add_parser("save", help="guarda un resumen")
+    session_save = session_sub.add_parser(
+        "save", help=t("saves a recap", "guarda un resumen")
+    )
     session_save.add_argument("--summary", required=True)
-    session_save.add_argument("--personal", action="store_true", help="scope personal")
+    session_save.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     session_save.add_argument("--json", action="store_true")
     session_save.set_defaults(handler=_cmd_session_save)
-    session_list = session_sub.add_parser("list", help="lista sesiones recientes")
+    session_list = session_sub.add_parser(
+        "list", help=t("lists recent sessions", "lista sesiones recientes")
+    )
     session_list.add_argument("--limit", type=int, default=20)
-    session_list.add_argument("--personal", action="store_true", help="scope personal")
+    session_list.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     session_list.add_argument("--json", action="store_true")
     session_list.set_defaults(handler=_cmd_session_list)
-    session_get = session_sub.add_parser("get", help="muestra un resumen completo")
+    session_get = session_sub.add_parser(
+        "get", help=t("shows a full recap", "muestra un resumen completo")
+    )
     session_get.add_argument("id")
-    session_get.add_argument("--personal", action="store_true", help="scope personal")
+    session_get.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     session_get.add_argument("--json", action="store_true")
     session_get.set_defaults(handler=_cmd_session_get)
 
-    importer = sub.add_parser("import", help="importa memoria de otra herramienta")
+    importer = sub.add_parser(
+        "import", help=t("imports memory from another tool", "importa memoria de otra herramienta")
+    )
     importer.add_argument("source", choices=["legacy"])
-    importer.add_argument("--db", required=True, help="ruta a la base SQLite de origen")
+    importer.add_argument(
+        "--db",
+        required=True,
+        help=t("path to the source SQLite database", "ruta a la base SQLite de origen"),
+    )
     importer.add_argument("--dry-run", action="store_true")
     importer.add_argument("--json", action="store_true")
     importer.set_defaults(handler=_cmd_import)
 
-    mcp = sub.add_parser("mcp", help="sirve MCP por stdio (JSON-RPC)")
+    mcp = sub.add_parser(
+        "mcp", help=t("serves MCP over stdio (JSON-RPC)", "sirve MCP por stdio (JSON-RPC)")
+    )
     mcp.add_argument(
         "--read-only",
         action="store_true",
-        help="solo expone las tools de lectura; rechaza save/save_session/archive",
+        help=t(
+            "exposes only the read tools; rejects save/save_session/archive",
+            "solo expone las tools de lectura; rechaza save/save_session/archive",
+        ),
     )
     mcp.set_defaults(handler=_cmd_mcp)
 
-    doctor = sub.add_parser("doctor", help="diagnostica el store y la instalación")
-    doctor.add_argument("--personal", action="store_true", help="scope personal")
+    doctor = sub.add_parser(
+        "doctor",
+        help=t(
+            "diagnoses the store and the install",
+            "diagnostica el store y la instalación",
+        ),
+    )
+    doctor.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
     doctor.add_argument("--json", action="store_true")
     doctor.set_defaults(handler=_cmd_doctor)
 
     setup_cmd = sub.add_parser(
-        "setup", help="configura MCP y reglas para un harness (claude-code, opencode)"
+        "setup",
+        help=t(
+            "configures MCP and rules for a harness (claude-code, opencode)",
+            "configura MCP y reglas para un harness (claude-code, opencode)",
+        ),
     )
     setup_cmd.add_argument("harness", choices=sorted(HARNESSES))
-    setup_cmd.add_argument("--dir", help="raíz del repo (por defecto el cwd)")
+    setup_cmd.add_argument(
+        "--dir",
+        help=t("repo root (the cwd by default)", "raíz del repo (por defecto el cwd)"),
+    )
     setup_cmd.set_defaults(handler=_cmd_setup)
 
-    export = sub.add_parser("export", help="vuelca la memoria activa a Markdown")
-    export.add_argument("--personal", action="store_true", help="scope personal")
-    export.add_argument(
-        "--sessions", type=int, default=0, help="incluye las últimas N sesiones"
+    export = sub.add_parser(
+        "export",
+        help=t(
+            "dumps active memory to Markdown",
+            "vuelca la memoria activa a Markdown",
+        ),
     )
-    export.add_argument("--out", help="fichero de salida (por defecto stdout)")
+    export.add_argument(
+        "--personal", action="store_true", help=t("personal scope", "scope personal")
+    )
+    export.add_argument(
+        "--sessions",
+        type=int,
+        default=0,
+        help=t("includes the last N sessions", "incluye las últimas N sesiones"),
+    )
+    export.add_argument(
+        "--out",
+        help=t("output file (stdout by default)", "fichero de salida (por defecto stdout)"),
+    )
     export.set_defaults(handler=_cmd_export)
     return p
 
@@ -557,12 +715,22 @@ def main(argv=None) -> int:
             for word in ("not a database", "corrupt", "malformed")
         ):
             print(
-                "cairn: base de datos corrupta; borra .cairn/cairn.db y ejecuta "
-                "'cairn rebuild'",
+                t(
+                    "cairn: corrupt database; delete .cairn/cairn.db and run "
+                    "'cairn rebuild'",
+                    "cairn: base de datos corrupta; borra .cairn/cairn.db y ejecuta "
+                    "'cairn rebuild'",
+                ),
                 file=sys.stderr,
             )
         else:
-            print(f"cairn: error de base de datos: {error}", file=sys.stderr)
+            print(
+                t(
+                    f"cairn: database error: {error}",
+                    f"cairn: error de base de datos: {error}",
+                ),
+                file=sys.stderr,
+            )
         return 1
 
 

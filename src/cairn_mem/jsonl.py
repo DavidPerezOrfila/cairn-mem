@@ -79,5 +79,5 @@ def _repair_tail(fd: int, size: int) -> int:
         return start
     # Línea completa a la que solo le faltó el '\n' final: se conserva.
     if os.write(fd, b"\n") != 1:
-        raise OSError("no se pudo reparar la cola del JSONL")
+        raise OSError("could not repair the JSONL tail")
     return size + 1

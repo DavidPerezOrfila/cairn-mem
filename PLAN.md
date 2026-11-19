@@ -242,6 +242,7 @@ Each round is a slice: tests first, gate, review and its own release.
 | S18   | Procedencia opcional de la memoria: `source` en `save` (CLI/MCP), validado e indexado. Sin estado "sin revisar": el PR sobre `events.jsonl` ya es la revisión humana                                                                                 | 0.13.0                | [`docs/features/s18-source-provenance.md`](docs/features/s18-source-provenance.md)             |
 | S19   | Hardening del borde: `parse_event` acota y controla todo el metadato (`why` ≤ 2000 tolerando el `\n` histórico, topic/anchor caps, `title` sin controles); `Sessions` solo sirve registros completos (id 12 hex + summary)                              | 0.14.0                | `tests/test_store.py`, `tests/test_sessions.py`, `docs/DECISIONS.md`                            |
 | S20   | Auditoría externa: secretos v3 por forma del valor y formatos (Oracle/SAS/Fernet/Azure/sk-/Slack), rechazo de inyección con cabecera en el L0, dedupe no bloqueante (aviso a 0,3-0,9, bloqueo a 0,9), `pin`/`unpin` solo CLI, `purge`, `topics`, `doctor` reescanea secretos y L0/MCP en inglés | 0.16.0                | [`docs/features/s20-security-dedupe-pin.md`](docs/features/s20-security-dedupe-pin.md)         |
+| S21   | A/B de escritura (`bench/ab_write.py`: ¿el agente guarda el gotcha que acaba de descubrir? con controles stale, envenenado y 100 distractores; criterios escritos antes de medir), `setup` sin bloque duplicado cuando el fichero importa `@AGENTS.md`, `CAIRN_LANG` (inglés por defecto en CLI/`doctor`/`setup`, `es` opt-in; el núcleo y el MCP siempre en inglés) | pendiente (0.17.0) | [`docs/features/s21-write-ab-lang-setup.md`](docs/features/s21-write-ab-lang-setup.md) |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -316,18 +317,22 @@ one-round-per-release rule and add its row to the §4 table when it ships.
 
 ### S21: write-side A/B, setup de-dup, languages (P1)
 
-- [ ] **A/B v2, write side.** `bench/ab_write.py`: a scenario with a planted gotcha; after
-  the session, check that `events.jsonl` gained an event containing the gotcha keywords.
-  Automatable, no human intervention. **Write the criteria before running.** n ≥ 30 per
-  arm with a confidence interval. Include code-resolvable tasks where a gotcha avoids the
-  error, and negative controls (stale memory, poisoned memory, 100 distractors). The
-  current A/B (16/16) only measured retrieval, not usefulness.
-- [ ] **`setup` without duplication.** When `CLAUDE.md` imports `@AGENTS.md`, do not write
-  the snippet block there (today `setup claude-code` + `setup opencode` leaves the block in
-  both and Claude reads it twice).
-- [ ] **`CAIRN_LANG`.** English by default for the human-facing messages (CLI, `doctor`,
-  `setup`), `CAIRN_LANG=es` opt-in. The agent-facing surface (L0, MCP) is already English
-  since S20.
+- [x] **A/B v2, write side.** `bench/ab_write.py`: one session per run on a toy repo with
+  a real bug; the task is to fix it, and the run only counts when `events.jsonl` gained a
+  **new** `save` whose text matches the gotcha (`utc|tz|timezone|tzinfo|datetime`). Arms:
+  `plain` (control), `empty`, `stale`, `poison` and `distractors` (100 fillers). Criteria
+  pre-registered in [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md) (n ≥ 30 per
+  arm, Wilson 95%, the `empty` lower bound ≥ 0.5 and no overlap with `plain`, controls
+  within 0.20 of `empty`). **Pending: the n = 30 run.** The harness is covered by
+  `tests/test_ab_write.py` (detection, Wilson and cleanup with a fake run). Smoke on
+  2026-11-19 with the final scenario: `plain` 0/1, `empty` 0/1 (a probe confirmed the
+  model reads the snippet, so the zero is the model not saving).
+- [x] **`setup` without duplication.** When `CLAUDE.md` imports `@AGENTS.md`, the snippet
+  block is not written there, and a block left by an older setup is removed.
+- [x] **`CAIRN_LANG`.** English by default for the human-facing messages (CLI, `doctor`,
+  `setup`), `CAIRN_LANG=es` opt-in through `i18n.t(en, es)`. The agent-facing surface (L0,
+  MCP) and the library edge (`store`, `sessions`, `anchor`, `paths`, `jsonl`, `mcp`) are
+  English only, so a tool error cannot change language with the environment.
 
 ### S22: retrieval fields and concurrency (P2)
 

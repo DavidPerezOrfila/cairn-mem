@@ -318,7 +318,7 @@ def test_context_truncates_long_session_summary():
     server = Server()
     call(server, "save_session", summary="x" * 9000)
     body = text(call(server, "context"))
-    assert "… (recortado)" in body and len(body) < 9000
+    assert "… (truncated)" in body and len(body) < 9000
 
 
 def test_context_keeps_the_tail_of_a_long_session_summary():
@@ -495,7 +495,7 @@ def test_save_rejects_anchor_outside_project(in_tmp):
         anchor="../outside.py",
     )
     assert response["result"]["isError"] is True
-    assert "dentro del proyecto" in text(response)
+    assert "inside the project" in text(response)
 
 
 def test_serve_ndjson_and_parse_error():

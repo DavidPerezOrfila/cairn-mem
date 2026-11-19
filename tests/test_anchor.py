@@ -41,7 +41,7 @@ def test_resolve_anchor_rejects_paths_outside_project(tmp_path):
     (tmp_path / "project").mkdir()
     outside = tmp_path / "secret.key"
     outside.write_text("x\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="dentro del proyecto"):
+    with pytest.raises(ValueError, match="inside the project"):
         anchor.resolve_anchor(str(outside), tmp_path / "project")
 
 
@@ -58,7 +58,7 @@ def test_resolve_anchor_rejects_a_file_over_the_hash_limit(tmp_path, monkeypatch
     big = tmp_path / "dump.csv"
     big.write_text("x" * 32, encoding="utf-8")
     monkeypatch.setattr(anchor, "MAX_HASH_BYTES", 10)
-    with pytest.raises(ValueError, match="demasiado grande"):
+    with pytest.raises(ValueError, match="too large"):
         anchor.resolve_anchor(str(big), tmp_path)
 
 

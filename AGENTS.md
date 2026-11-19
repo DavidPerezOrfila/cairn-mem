@@ -5,19 +5,22 @@
 - **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (complete:
   annotations, `--read-only` and `search --kind/--topic/--stale` with `partial`), S16
   (`setup <harness>` and `export`), S18 (`source`), S19 (hardening of `parse_event` and
-  sessions) and S20 (secrets v3 by value shape, injection rejection plus the L0 header,
+  sessions), S20 (secrets v3 by value shape, injection rejection plus the L0 header,
   non-blocking dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan and the
-  agent-facing English L0/MCP) are implemented.** 0.16.0 is published (2026-11-18, tagged
-  `v0.16.0`, Trusted Publishing); nothing is unreleased. Pending plan: S21 (write-side A/B,
-  `setup` de-dup, `CAIRN_LANG`), S22 (`--keywords`, `history`, Windows multiprocess test)
-  and the minors — see `PLAN.md` §4.1.
+  agent-facing English L0/MCP) and S21 (`setup` de-dup through `@AGENTS.md`, `CAIRN_LANG`
+  and the write-side A/B) are implemented.** 0.16.0 is published (2026-11-18, tagged
+  `v0.16.0`, Trusted Publishing); S21 is implemented and unreleased. Pending plan: the
+  n = 30 run of `bench/ab_write.py`, S22 (`--keywords`, `history`, Windows multiprocess
+  test) and the minors — see `PLAN.md` §4.1.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
-  `jsonl.py`, `doctor.py`, `setup.py`, `export.py` and `legacy.py` are implemented.
-  `tests/` (384 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
+  implemented.
+  `tests/` (404 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
   (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
   tail repair, incremental sync, retrieval, the paraphrase baseline, the secrets corpus,
   dedupe/pin/purge/topics, the golden set, the integrity audit fixes, `doctor`,
-  `setup`/`export`, the backlog benches and the bench hygiene.
+  `setup`/`export`, `CAIRN_LANG`, the write-side A/B detection, the backlog benches and the
+  bench hygiene.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -41,12 +44,16 @@ python bench/bench_sync.py --reps 40                # 2 writers incremental sync
 python bench/bench_retrieval.py --distractors 10000 # ranking al crecer el índice
 python bench/bench_retrieval.py --file bench/paraphrase.jsonl  # P@3 de léxico/flexión/paráfrasis
 python bench/bench_anchors.py --reps 30             # coste de los anclas en save
+python bench/ab_write.py --reps 30                  # A/B de escritura (requiere opencode)
 ```
 
 - Benches: each one measures in a `TemporaryDirectory` and closes its `Store` in every
   path (`closing`), because Windows cannot delete an open SQLite file. The three with an
   SLO (`bench_cli`, `bench_mcp`, `bench_sync`) exit 1 when it fails, in the text and
-  `--json` paths.
+  `--json` paths. `bench/ab.py` (retrieval) and `bench/ab_write.py` (write side) need the
+  `opencode` CLI and spend model tokens; their criteria live in `bench/ab_protocol.md` and
+  `bench/ab_write_protocol.md`, written before measuring. Both reconfigure stdout to UTF-8
+  (the agent answer carries `→` and accents, and the Windows console is cp1252).
 
 - Publishing goes through `.github/workflows/publish.yml` (Trusted Publishing,
   OIDC, attestations PEP 740): push a tag `v*` and it builds and publishes; no PyPI
@@ -66,7 +73,7 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   `--json`), `store.py` (core), `anchor.py` (hash and stale), `render.py` (L0),
   `paths.py` (`.cairn/` root and personal scope), `mcp.py` (stdio JSON-RPC), `sessions.py`
   (recaps), `jsonl.py` (shared append), `doctor.py` (diagnosis), `setup.py` (harness
-  config) and `legacy.py` (importer).
+  config), `i18n.py` (`CAIRN_LANG`) and `legacy.py` (importer).
 - **Truth:** `.cairn/events.jsonl` (append-only, 2 operations: `save`, `archive`).
   `cairn.db` and `MEMORY.md` are derived and can be regenerated. Do not edit them by hand.
   `sessions.jsonl` is a separate append-only file and is not curated memory.
@@ -171,8 +178,11 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   idempotent, `save`/`save_session` are writes. `cairn mcp --read-only` serves only the
   5 read tools and rejects the write tools at the protocol edge. S20: the tool
   descriptions, the `initialize` instructions and every tool error are in **English**, and
-  `save` appends the `similar:` lines to its result. CLI, `doctor` and `setup` messages stay
-  in Spanish until S21 (`CAIRN_LANG`).
+  `save` appends the `similar:` lines to its result. Since S21 the library edge
+  (`store`, `sessions`, `anchor`, `paths`, `jsonl`, `mcp`) is **English only**, because an
+  MCP tool error is agent-facing; `cli`, `doctor` and `setup` go through
+  `i18n.t(en, es)`, English by default and `CAIRN_LANG=es` opt-in. Any new human message in
+  those three modules is a pair; any new library message is English.
 - **Doctor:** `doctor.py` is imported lazily and is local: no network, no events written.
   It parses `events.jsonl` with `parse_event` (line-numbered failures), re-runs
   `reject_secrets` on every `save` (S20: a stored secret is `fail`/`secrets`, the gate
@@ -183,7 +193,10 @@ python bench/bench_anchors.py --reps 30             # coste de los anclas en sav
   `~/.claude.json` or the global OpenCode config) and only the `cairn` key: a config file
   that is not strict JSON (JSONC with comments) is **not** rewritten, the command fails
   with code 1 and prints the block to paste. A new harness is one row plus one test
-  against a fixture; do not add a format nobody verified.
+  against a fixture; do not add a format nobody verified. Since S21, when the instructions
+  file is not `AGENTS.md` and already imports `@AGENTS.md`, `setup` writes no block there
+  and removes one that an older setup left (the harness reads the same block twice
+  otherwise).
 - **Export:** `cairn export` is a snapshot of active memories grouped by kind, plus the
   last N recaps only when `--sessions N` is given. No stale marks: that would hash every
   anchor and turn a copy into `check`. It must stay byte-identical across runs.

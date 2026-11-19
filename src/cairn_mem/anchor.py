@@ -13,15 +13,15 @@ def resolve_anchor(path: str, project_root) -> tuple[str, str]:
     if not file.is_absolute():
         file = root / file
     if not file.is_file():
-        raise FileNotFoundError(f"ancla no encontrada: {path}")
+        raise FileNotFoundError(f"anchor not found: {path}")
     if file.stat().st_size > MAX_HASH_BYTES:
         raise ValueError(
-            f"ancla demasiado grande (máximo {MAX_HASH_BYTES} bytes): {path}"
+            f"anchor too large (max {MAX_HASH_BYTES} bytes): {path}"
         )
     try:
         relative = file.resolve().relative_to(root.resolve()).as_posix()
     except ValueError as error:
-        raise ValueError(f"el ancla debe estar dentro del proyecto: {path}") from error
+        raise ValueError(f"the anchor must be inside the project: {path}") from error
     return relative, file_hash(file)
 
 

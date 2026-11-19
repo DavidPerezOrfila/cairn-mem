@@ -19,6 +19,10 @@
   Results are in [`docs/BENCHMARKS.md`](../docs/BENCHMARKS.md).
 - `ab_protocol.md`: the small paired A/B test (see PLAN.md). `ab.py` runs it with
   OpenCode. Results are in [`docs/AB_RESULTS.md`](../docs/AB_RESULTS.md).
+- `ab_write_protocol.md`: the write-side A/B (S21). Does the agent save the gotcha it just
+  discovered, and does a stale, poisoned or crowded store stop it? `ab_write.py` runs it
+  with OpenCode: `python bench/ab_write.py --arms plain,empty --reps 1` for a smoke and
+  `--reps 30` for the measurement in the criteria.
 
 Every bench measures inside a `TemporaryDirectory` and closes its `Store` on every path
 (`closing`), so no directory is left behind (`Windows` keeps an open SQLite file

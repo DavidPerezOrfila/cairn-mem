@@ -31,7 +31,7 @@ def test_doctor_ok_on_a_healthy_store(capsys):
 
     assert code == 0
     assert "ok    sqlite" in out
-    assert "ok    events" in out and "1 eventos" in out
+    assert "ok    events" in out and "1 events" in out
     assert "ok    anchors" in out
 
 
@@ -91,7 +91,7 @@ def test_doctor_reports_a_non_object_session_line(capsys, in_tmp):
 
     code, out, _ = run(capsys, "doctor")
 
-    assert code == 1 and "sessions.jsonl línea 2" in out
+    assert code == 1 and "sessions.jsonl line 2" in out
 
 
 def test_doctor_warns_on_an_outdated_schema(capsys, in_tmp):
@@ -102,7 +102,7 @@ def test_doctor_warns_on_an_outdated_schema(capsys, in_tmp):
 
     code, out, _ = run(capsys, "doctor")
 
-    assert code == 0 and "esquema 2" in out
+    assert code == 0 and "schema 2" in out
 
 
 def test_doctor_reports_a_corrupt_event_line(capsys, in_tmp):
@@ -111,7 +111,7 @@ def test_doctor_reports_a_corrupt_event_line(capsys, in_tmp):
 
     code, out, _ = run(capsys, "doctor")
 
-    assert code == 1 and "línea 1" in out
+    assert code == 1 and "line 1" in out
 
 
 def test_doctor_warns_about_missing_gitignore_entries(capsys, in_tmp):
@@ -160,7 +160,7 @@ def test_doctor_warns_about_two_installations(capsys, in_tmp, monkeypatch):
 
     code, out, _ = run(capsys, "doctor")
 
-    assert code == 0 and "2 instalaciones" in out
+    assert code == 0 and "2 installations" in out
 
 
 def test_doctor_fails_when_the_l0_exceeds_the_budget(capsys, in_tmp):
