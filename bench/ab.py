@@ -7,6 +7,7 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -98,23 +99,16 @@ def _prepare(directory: Path, arm: str) -> None:
         store.save(kind=kind, title=title, body=body, why="convencion del equipo")
 
 
-def _run(directory: Path, question: str) -> dict:
+def _run(directory: Path, prompt: str, timeout: int = 240) -> dict:
     proc = subprocess.run(
-        [
-            "opencode",
-            "run",
-            "--auto",
-            "--format",
-            "json",
-            f"Trabaja en este proyecto. Responde solo con el dato pedido, sin explicar. {question}",
-        ],
+        ["opencode", "run", "--auto", "--format", "json", prompt],
         cwd=directory,
         check=False,
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=240,
+        timeout=timeout,
     )
     text = []
     tokens = 0
@@ -132,10 +126,18 @@ def _run(directory: Path, question: str) -> dict:
         if part.get("type") == "step-finish":
             usage = part.get("tokens") or {}
             tokens += usage.get("input", 0) + usage.get("output", 0)
-    return {"answer": " ".join(text).strip(), "tokens": tokens, "tools": tools}
+    return {
+        "answer": " ".join(text).strip(),
+        "tokens": tokens,
+        "tools": tools,
+        "exit": proc.returncode,
+    }
 
 
 def main(argv=None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reps", type=int, default=2)
     parser.add_argument("--json", action="store_true")
@@ -150,7 +152,11 @@ def main(argv=None) -> int:
                 for question, expected in TASKS[: ns.tasks]:
                     project = tmp / f"{arm}-{rep}-{len(rows)}"
                     _prepare(project, arm)
-                    result = _run(project, question)
+                    prompt = (
+                        "Trabaja en este proyecto. Responde solo con el dato pedido, "
+                        f"sin explicar. {question}"
+                    )
+                    result = _run(project, prompt)
                     result.update(
                         rep=rep,
                         arm=arm,

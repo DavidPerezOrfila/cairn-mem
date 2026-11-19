@@ -59,7 +59,7 @@ def test_non_object_line_is_reported_with_its_line(tmp_path):
         '{"op":"session","id":"aaaaaaaaaaaa","ts":1,"summary":"ok"}\n[1]\n',
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="sessions.jsonl línea 2"):
+    with pytest.raises(ValueError, match="sessions.jsonl line 2"):
         sessions.all()
 
 
@@ -73,7 +73,7 @@ def test_non_object_torn_tail_is_ignored(tmp_path):
 
 
 def test_empty_summary_is_rejected(tmp_path):
-    with pytest.raises(ValueError, match="vacío"):
+    with pytest.raises(ValueError, match="empty"):
         Sessions(str(tmp_path)).save("   ")
 
 
@@ -181,5 +181,5 @@ def test_invalid_session_mid_file_fails_naming_the_line(tmp_path):
         handle.write(
             json.dumps({"op": "session", "id": "cccccccccccc", "summary": "ok"}) + "\n"
         )
-    with pytest.raises(ValueError, match="sessions.jsonl línea 2"):
+    with pytest.raises(ValueError, match="sessions.jsonl line 2"):
         sessions.all()

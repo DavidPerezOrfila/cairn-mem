@@ -208,7 +208,7 @@ def test_concurrent_appends_keep_jsonl_valid(root):
     [t.join() for t in ts]
     with open(f"{root}/events.jsonl", encoding="utf-8") as f:
         lines = f.read().splitlines()
-    assert len(lines) == 20 and all(json.loads(l)["op"] == "save" for l in lines)
+    assert len(lines) == 20 and all(json.loads(line)["op"] == "save" for line in lines)
     s = Store(root)
     s.rebuild()
     assert len([m for m in s.dump() if m["status"] == "active"]) == 20
@@ -373,7 +373,7 @@ def test_title_is_normalized_and_bounded(store):
     assert store.get(mid)["title"] == "uno dos"
     with pytest.raises(ValueError, match="title"):
         store.save(kind="fact", title="x" * 201, body="x")
-    with pytest.raises(ValueError, match="vacío"):
+    with pytest.raises(ValueError, match="empty"):
         store.save(kind="fact", title="   ", body="x")
 
 
@@ -889,7 +889,7 @@ def test_invalid_external_event_names_the_line(root, line):
         + "\n",
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="línea 2"):
+    with pytest.raises(ValueError, match="line 2"):
         Store(root)
 
 

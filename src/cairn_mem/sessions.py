@@ -41,7 +41,7 @@ def _session_record(raw: bytes):
 
 def _valid_id(sid: str) -> str:
     if not isinstance(sid, str) or not ID_PATTERN.fullmatch(sid):
-        raise ValueError(f"id de sesión inválido: {sid!r}; se esperan 12 hex")
+        raise ValueError(f"invalid session id: {sid!r}; expected 12 hex")
     return sid
 
 
@@ -68,9 +68,9 @@ class Sessions:
     def validate(summary: str) -> str:
         summary = summary.strip()
         if not summary:
-            raise ValueError("el resumen está vacío")
+            raise ValueError("the summary is empty")
         if len(summary) > MAX_SUMMARY:
-            raise ValueError(f"el resumen supera {MAX_SUMMARY} caracteres")
+            raise ValueError(f"the summary exceeds {MAX_SUMMARY} characters")
         reject_secrets(summary)
         return summary
 
@@ -124,21 +124,21 @@ class Sessions:
         for number, line in enumerate(lines):
             if not line.strip():
                 continue
-            where = f"sessions.jsonl línea {number + 1}"
+            where = f"sessions.jsonl line {number + 1}"
             try:
                 event = json.loads(line)
             except json.JSONDecodeError as error:
                 if number == last and torn_tail:
                     continue  # escritura rasgada por un crash
-                raise ValueError(f"{where}: JSON inválido") from error
+                raise ValueError(f"{where}: invalid JSON") from error
             if not isinstance(event, dict):
                 if number == last and torn_tail:
                     continue
-                raise ValueError(f"{where}: evento inválido")
+                raise ValueError(f"{where}: invalid event")
             if not _is_session(event):
                 if number == last and torn_tail:
                     continue
-                raise ValueError(f"{where}: sesión inválida")
+                raise ValueError(f"{where}: invalid session")
             # El nº de línea desempata: dos recaps en el mismo ns siguen el orden
             # del append en vez de un id aleatorio.
             records[event["id"]] = (number, event)

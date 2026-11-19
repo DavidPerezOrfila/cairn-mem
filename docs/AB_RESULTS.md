@@ -22,3 +22,26 @@ code (for example, "read `RATE_LIMIT`") and fails.
 With n=8 per arm, this is **indicative**. It shows that the memory gets used and saves
 work. It does not show statistical significance. The protocol lives in
 [`bench/ab_protocol.md`](../bench/ab_protocol.md).
+
+# Write-side A/B (smoke, not the measurement)
+
+**2026-11-19**, Windows 11, Python 3.12.10, OpenCode 2.3.2 default model,
+`python bench/ab_write.py --arms plain,empty --reps 1`. The task changes `/health`'s
+`time` field to epoch seconds because the data team consumes it from another timezone;
+the reason exists only in the request. Success = a new `save` in `events.jsonl` that
+mentions the topic (`epoch|utc|tz|timezone|iso|timestamp`).
+
+| Arm | Saved | Tokens | Tool calls |
+|---|---|---|---|
+| `plain` (no snippet) | 0/1 | 20,710 | 6 |
+| `empty` (snippet) | 0/1 | 8,618 | 6 |
+
+Two earlier scenario versions were discarded before the measurement, with their numbers,
+in [`bench/ab_write_protocol.md`](../bench/ab_write_protocol.md) (a one-line code bug: 0/5;
+an environment gotcha the agent moved into `conftest.py`: 0/2). A separate probe confirmed
+the model does receive the `AGENTS.md` snippet (it quoted the `cairn session save` line
+verbatim), so these zeros are the model not saving, not a broken harness.
+
+**This is a smoke, not the measurement**: n=1 per arm says nothing about the criterion
+(n ≥ 30, Wilson 95%). It does show the harness runs end to end and that the risk "the
+agent does not save memories" is still open for this model and scenario.

@@ -298,10 +298,10 @@ def validate_topic(topic_key):
         return None
     topic_key = str(topic_key)
     if _has_controls(topic_key):
-        raise ValueError("topic_key no puede contener saltos de línea ni controles")
+        raise ValueError("topic_key cannot contain newlines or control characters")
     topic_key = topic_key.strip()
     if len(topic_key) > MAX_TOPIC:
-        raise ValueError(f"topic_key supera {MAX_TOPIC} caracteres")
+        raise ValueError(f"topic_key exceeds {MAX_TOPIC} characters")
     return topic_key or None
 
 
@@ -312,10 +312,10 @@ def validate_source(source):
         return None
     source = str(source)
     if _has_controls(source):
-        raise ValueError("source no puede contener saltos de línea ni controles")
+        raise ValueError("source cannot contain newlines or control characters")
     source = source.strip()
     if len(source) > MAX_SOURCE:
-        raise ValueError(f"source supera {MAX_SOURCE} caracteres")
+        raise ValueError(f"source exceeds {MAX_SOURCE} characters")
     return source or None
 
 
@@ -335,20 +335,20 @@ def parse_event(line: str, number: int) -> dict:
     """Valida una línea del JSONL antes de aplicarla. Un evento inventado o
     incompleto debe fallar nombrando el fichero y la línea, no con un KeyError
     ni con un IntegrityError del CHECK de SQLite."""
-    where = f"events.jsonl línea {number + 1}"
+    where = f"events.jsonl line {number + 1}"
     try:
         event = json.loads(line)
     except json.JSONDecodeError as error:
-        raise ValueError(f"{where}: JSON inválido") from error
+        raise ValueError(f"{where}: invalid JSON") from error
     if not isinstance(event, dict) or event.get("op") not in ("save", "archive"):
-        raise ValueError(f"{where}: evento sin 'op' save/archive")
+        raise ValueError(f"{where}: event without 'op' save/archive")
     mid = event.get("id")
     if not isinstance(mid, str) or ID_PATTERN.fullmatch(mid) is None:
-        raise ValueError(f"{where}: id inválido")
+        raise ValueError(f"{where}: invalid id")
     try:
         int(event.get("ts", 0))
     except (TypeError, ValueError, OverflowError) as error:
-        raise ValueError(f"{where}: ts inválido") from error
+        raise ValueError(f"{where}: invalid ts") from error
     for key in ("why", "source", "topic_key", "anchor_path", "anchor_hash"):
         value = event.get(key)
         if value is None:
@@ -368,28 +368,28 @@ def parse_event(line: str, number: int) -> dict:
             or len(value) > limit
             or _has_controls(value, allowed)
         ):
-            raise ValueError(f"{where}: {key} inválido")
+            raise ValueError(f"{where}: invalid {key}")
     anchor = event.get("anchor_path")
     if anchor is not None and _escapes_root(anchor):
         raise ValueError(
-            f"{where}: anchor_path inválido (debe ser relativo al proyecto)"
+            f"{where}: invalid anchor_path (must be project-relative)"
         )
     if event.get("pinned") is not None and (
         type(event["pinned"]) is not int or event["pinned"] not in (0, 1)
     ):
-        raise ValueError(f"{where}: pinned inválido (0 o 1)")
+        raise ValueError(f"{where}: invalid pinned (0 or 1)")
     if event["op"] == "save":
         if event.get("kind") not in KINDS:
-            raise ValueError(f"{where}: kind inválido")
+            raise ValueError(f"{where}: invalid kind")
         title, body = event.get("title"), event.get("body")
         if not isinstance(title, str) or len(title) > MAX_TITLE or _has_controls(title):
-            raise ValueError(f"{where}: title inválido o supera {MAX_TITLE}")
+            raise ValueError(f"{where}: invalid title or exceeds {MAX_TITLE}")
         if (
             not isinstance(body, str)
             or len(body) > MAX_BODY
             or _has_controls(body, "\n\t")
         ):
-            raise ValueError(f"{where}: body inválido o supera {MAX_BODY}")
+            raise ValueError(f"{where}: invalid body or exceeds {MAX_BODY}")
     return event
 
 
@@ -454,31 +454,31 @@ class Store:
         source=None,
     ) -> str:
         if kind not in KINDS:
-            raise ValueError(f"kind inválido: {kind}")
+            raise ValueError(f"invalid kind: {kind}")
         title = " ".join(str(title).split())
         if not title:
-            raise ValueError("el título está vacío")
+            raise ValueError("the title is empty")
         if len(title) > MAX_TITLE:
-            raise ValueError(f"title supera {MAX_TITLE} caracteres")
+            raise ValueError(f"title exceeds {MAX_TITLE} characters")
         if len(body) > MAX_BODY:
             raise ValueError(
-                f"body supera {MAX_BODY} caracteres; divídelo en dos memorias"
+                f"body exceeds {MAX_BODY} characters; split it into two memories"
             )
         if why is not None and (
             not isinstance(why, str) or len(why) > MAX_WHY or _has_controls(why, "\n\t")
         ):
             # S19: el why comparte contrato con parse_event; \n y \t siguen siendo
             # prosa válida porque la memoria histórica ya los usa.
-            raise ValueError(f"why inválido o supera {MAX_WHY} caracteres")
+            raise ValueError(f"invalid why or exceeds {MAX_WHY} characters")
         topic_key = validate_topic(topic_key)
         source = validate_source(source)
         if anchor_path is not None and _escapes_root(str(anchor_path)):
-            raise ValueError("anchor_path debe ser una ruta relativa al proyecto")
+            raise ValueError("anchor_path must be a project-relative path")
         if body is not None and _has_controls(body, "\n\t"):
-            raise ValueError("body contiene caracteres de control")
+            raise ValueError("body contains control characters")
         mid = id or secrets.token_hex(6)
         if ID_PATTERN.fullmatch(mid) is None:
-            raise ValueError("id debe ser 12 caracteres hex en minúscula")
+            raise ValueError("id must be 12 lowercase hex characters")
         reject_secrets(title, body, why, topic_key, anchor_path, source)
         # S20: copia casi literal -> error; el resto, aviso en la salida del CLI.
         # Un `id` existente es una actualización (pin, import idempotente) y un
@@ -592,7 +592,7 @@ class Store:
         arregla con `archive`, que lo deja en el fichero y en Git. Copia a
         `events.jsonl.bak` y reescribe. La credencial se rota aparte."""
         if ID_PATTERN.fullmatch(id) is None:
-            raise ValueError("id debe ser 12 caracteres hex en minúscula")
+            raise ValueError("id must be 12 lowercase hex characters")
         raw = self.events.read_bytes() if self.events.exists() else b""
         lines = raw.splitlines()
         torn_tail = bool(lines) and not raw.endswith(b"\n")
@@ -610,14 +610,14 @@ class Store:
                         kept.append(line)  # crash a mitad de write: se conserva
                         continue
                     raise ValueError(
-                        f"events.jsonl línea {number + 1}: JSON inválido; no se purga"
+                        f"events.jsonl line {number + 1}: invalid JSON; not purged"
                     )
                 if isinstance(event, dict) and event.get("id") == id:
                     removed += 1
                 else:
                     kept.append(line)
             if not removed:
-                raise ValueError(f"no existe la memoria {id}")
+                raise ValueError(f"memory {id} does not exist")
             self.events.with_suffix(".jsonl.bak").write_bytes(raw)
             tmp = self.events.with_name(f".events.jsonl.{secrets.token_hex(4)}")
             tmp.write_bytes(b"\n".join(kept) + (b"\n" if kept else b""))
@@ -639,9 +639,9 @@ class Store:
     def _set_pin(self, id: str, pinned: int) -> None:
         memory = self.get(id)
         if memory is None:
-            raise ValueError(f"no existe la memoria {id}")
+            raise ValueError(f"memory {id} does not exist")
         if pinned and memory["status"] != "active":
-            raise ValueError("solo se puede pinear una memoria activa")
+            raise ValueError("only an active memory can be pinned")
         if pinned and not memory["pinned"]:
             self._check_pin_budget(memory)
         # Campo del evento `save` y no un `op` nuevo: una versión anterior del CLI
@@ -675,12 +675,12 @@ class Store:
         ).fetchall()
         if len(rows) >= MAX_PINS:
             raise ValueError(
-                f"ya hay {MAX_PINS} memorias pineadas; usa 'cairn unpin <id>' antes"
+                f"already {MAX_PINS} pinned memories; run 'cairn unpin <id>' first"
             )
         used = sum(len(_line(dict(row))) + 1 for row in rows)
         if used + len(_line(memory)) + 1 > PIN_BUDGET:
             raise ValueError(
-                f"el bloque de pines supera {PIN_BUDGET} caracteres: despina algo"
+                f"the pin block exceeds {PIN_BUDGET} characters: unpin something"
             )
 
     # --- lectura ---
@@ -769,7 +769,7 @@ class Store:
             # Windows: otro proceso (editor/antivirus) tiene MEMORY.md abierto.
             # Es derivado: se regenera en el próximo save, pero el usuario debe saberlo.
             tmp.unlink(missing_ok=True)
-            print(f"cairn: no se pudo actualizar MEMORY.md: {error}", file=sys.stderr)
+            print(f"cairn: could not update MEMORY.md: {error}", file=sys.stderr)
         return text
 
     # --- rebuild ---
@@ -785,7 +785,7 @@ class Store:
             try:
                 text = raw.decode("utf-8-sig")
             except UnicodeDecodeError as error:
-                raise ValueError("events.jsonl no es UTF-8 válido") from error
+                raise ValueError("events.jsonl is not valid UTF-8") from error
             lines = text.splitlines()
             last = max((i for i, line in enumerate(lines) if line.strip()), default=-1)
             # Solo un write interrumpido (sin '\n' final) se tolera: un evento

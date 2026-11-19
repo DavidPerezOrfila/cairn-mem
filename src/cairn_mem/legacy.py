@@ -40,7 +40,7 @@ ID_SALT = "engram"
 def import_legacy(db_path, dry_run=False) -> dict:
     db = Path(db_path)
     if not db.is_file():
-        raise FileNotFoundError(f"no existe la base de datos: {db}")
+        raise FileNotFoundError(f"database not found: {db}")
     report = {
         "memories": 0,
         "sessions": 0,
@@ -134,7 +134,7 @@ def import_legacy(db_path, dry_run=False) -> dict:
             continue
         body, why = _split(row["content"])
         # Título vacío o larguísimo no debe perder la memoria migrada.
-        title = (row["title"] or "").strip() or body[:MAX_TITLE] or "sin título"
+        title = (row["title"] or "").strip() or body[:MAX_TITLE] or "untitled"
         title = title[:MAX_TITLE]
         if dry_run:
             try:

@@ -7,6 +7,7 @@ instrucciones. Las rutas y formatos viven solo aquí.
 import json
 from pathlib import Path
 
+from cairn_mem.i18n import t
 from cairn_mem.paths import data_dir
 
 BEGIN = "<!-- cairn:begin -->"
@@ -33,7 +34,7 @@ SNIPPET = """## Project memory (cairn-mem)
 - Do NOT save: anything you can work out from the code or `git log`, temporary task
   state, logs, or secrets, credentials and customer data.
 - The same `--topic` replaces the previous memory. Do not duplicate.
-- If an entry comes back with "⚠ revisar", check the code before trusting it. If the
+- If an entry comes back with "⚠ review", check the code before trusting it. If the
   code changed, rewrite the entry with the same `--topic`."""
 
 HARNESSES = {
@@ -43,7 +44,7 @@ HARNESSES = {
         "server": {"command": "cairn", "args": ["mcp"]},
         "base": {},
         "instructions": "CLAUDE.md",
-        "restart": "reinicia Claude Code en este repo",
+        "label": "Claude Code",
     },
     "opencode": {
         "config": "opencode.json",
@@ -51,7 +52,7 @@ HARNESSES = {
         "server": {"type": "local", "command": ["cairn", "mcp"]},
         "base": {"$schema": SCHEMA},
         "instructions": "AGENTS.md",
-        "restart": "reinicia OpenCode en este repo",
+        "label": "OpenCode",
     },
 }
 
@@ -76,12 +77,21 @@ def _merge_config(path: Path, keys, server, base) -> bool:
                 _nested(keys, server, base), indent=2, ensure_ascii=False
             )
             raise ValueError(
-                f"{path} no es JSON estricto (¿comentarios?); añade el bloque a mano:\n"
-                f"{block}"
+                t(
+                    f"{path} is not strict JSON (comments?); add the block by hand:\n"
+                    f"{block}",
+                    f"{path} no es JSON estricto (¿comentarios?); añade el bloque a "
+                    f"mano:\n{block}",
+                )
             )
         if not isinstance(data, dict):
             # ValueError: la CLI lo imprime como error de usuario, no como bug.
-            raise ValueError(f"{path}: se esperaba un objeto JSON")
+            raise ValueError(
+                t(
+                    f"{path}: expected a JSON object",
+                    f"{path}: se esperaba un objeto JSON",
+                )
+            )
     else:
         data = dict(base)
     node = data
@@ -90,7 +100,10 @@ def _merge_config(path: Path, keys, server, base) -> bool:
         if not isinstance(node, dict):
             # ValueError: la CLI lo imprime como error de usuario, no como bug.
             raise ValueError(  # noqa: TRY004
-                f"{path}: '{key}' no es un objeto JSON"
+                t(
+                    f"{path}: '{key}' is not a JSON object",
+                    f"{path}: '{key}' no es un objeto JSON",
+                )
             )
     if node.get(keys[-1]) == server:
         return False
@@ -122,6 +135,32 @@ def _write_snippet(path: Path) -> bool:
     return True
 
 
+def _imports_agents(path: Path) -> bool:
+    """¿El fichero de instrucciones ya importa `@AGENTS.md` (S21)?
+
+    El harness lee el bloque a través del import, así que escribirlo también aquí lo
+    duplicaría en el prompt.
+    """
+    if not path.exists():
+        return False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip().removeprefix("@") in ("AGENTS.md", "./AGENTS.md"):
+            return True
+    return False
+
+
+def _remove_snippet(path: Path) -> bool:
+    """Quita el bloque de cairn y restaura el fichero a como estaba."""
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    stop = text.find(END)
+    start = text.rfind(BEGIN, 0, stop) if stop != -1 else -1
+    if start == -1:
+        return False
+    updated = text[:start].rstrip("\n") + "\n" + text[stop + len(END) + 1 :]
+    path.write_text(updated, encoding="utf-8", newline="\n")
+    return True
+
+
 def setup(harness: str, directory: Path) -> list[str]:
     spec = HARNESSES[harness]
     directory.mkdir(parents=True, exist_ok=True)
@@ -130,17 +169,46 @@ def setup(harness: str, directory: Path) -> list[str]:
     config_changed = _merge_config(
         config, spec["config_path"], spec["server"], spec["base"]
     )
-    snippet_changed = _write_snippet(instructions)
+    if spec["instructions"] != "AGENTS.md" and _imports_agents(instructions):
+        removed = _remove_snippet(instructions)
+        state = (
+            t("duplicate block removed", "bloque duplicado eliminado")
+            if removed
+            else t("already there", "ya estaba")
+        )
+        snippet_line = t(
+            f"instructions: {instructions} (imports @AGENTS.md; {state})",
+            f"instrucciones: {instructions} (importa @AGENTS.md; {state})",
+        )
+    else:
+        snippet_changed = _write_snippet(instructions)
+        state = (
+            t("updated", "actualizado") if snippet_changed else t("already there", "ya estaba")
+        )
+        snippet_line = t(
+            f"instructions: {instructions} ({state})",
+            f"instrucciones: {instructions} ({state})",
+        )
+    config_state = (
+        t("updated", "actualizado") if config_changed else t("already there", "ya estaba")
+    )
     lines = [
-        f"config: {config} ({'actualizado' if config_changed else 'ya estaba'})",
-        (
-            f"instrucciones: {instructions} "
-            f"({'actualizado' if snippet_changed else 'ya estaba'})"
-        ),
+        f"config: {config} ({config_state})",
+        snippet_line,
     ]
     try:
         data_dir()
     except FileNotFoundError:
-        lines.append("sin .cairn/ en este árbol: ejecuta 'cairn init'")
-    lines.append(spec["restart"])
+        lines.append(
+            t(
+                "no .cairn/ in this tree: run 'cairn init'",
+                "sin .cairn/ en este árbol: ejecuta 'cairn init'",
+            )
+        )
+    lines.append(
+        t(
+            f"restart {spec['label']} in this repo",
+            f"reinicia {spec['label']} en este repo",
+        )
+    )
     return lines
