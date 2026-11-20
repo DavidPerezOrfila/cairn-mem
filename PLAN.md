@@ -311,6 +311,14 @@ replays with 0 and the schema mismatch rebuilds on open). Verified with a clean 
 from the public index in an empty venv (`init`, `save`, `search`, `pin`, `topics`, `purge`,
 `doctor` exit 0, version 0.16.0).
 
+**0.17.0 release:** 2026-11-20 on PyPI and tag `v0.17.0`, published from GitHub Actions
+with Trusted Publishing. Contents: S21 (write-side A/B with pre-registered criteria,
+`setup` de-dup through `@AGENTS.md`, `CAIRN_LANG`) and S22 (`keywords` indexed in FTS with
+`SCHEMA_VERSION = 6`, `cairn history <topic>` and the cross-process JSONL lock). The schema
+goes v5 to v6: the derived DB rebuilds on open and older JSONL replays with `keywords`
+NULL. Verified with a clean install from the public index in an empty venv (`init`, `save`,
+`search` by a keyword, `history`, `doctor` exit 0, version 0.17.0).
+
 ## 4.1 Pending rounds (2026-11-18 audit)
 
 S21 and S22 shipped in 0.17.0. Each one started only after the previous was measured; keep
