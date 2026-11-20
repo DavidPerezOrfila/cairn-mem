@@ -87,10 +87,12 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   (provenance: agent, model or session; ≤ 100 chars, no control characters, same
   treatment as `topic_key`). There is deliberately **no**
   "unreviewed" state: with `--share`, the PR over `events.jsonl` is the human review.
-  `SCHEMA_VERSION = 5` (S20: the `pinned` column; older JSONL without the field replays
-  with 0).
-- Writes: `O_APPEND` plus **one** `os.write` per event. There is an in-process lock
-  (`jsonl._LOCK`) because Windows `O_APPEND` is not atomic between threads.
+  `SCHEMA_VERSION = 6` (S22: the `keywords` column; older JSONL without it replays with
+  NULL. S20 added `pinned`, which replays with 0).
+- Writes: `O_APPEND` plus **one** `os.write` per event, under a file lock
+  (`msvcrt.locking` on byte 0 on Windows, `fcntl.flock` on POSIX) plus the in-process
+  `jsonl._LOCK`, because Windows `O_APPEND` is not atomic between threads and two
+  processes repairing the tail otherwise truncate each other's line.
 - When the database opens, it compares `(size, mtime_ns)` of the JSONL and
   `PRAGMA user_version`. If they differ, it rebuilds automatically (this covers
   `git pull`).
@@ -133,7 +135,8 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
 - **FTS5:** never pass raw text to `MATCH`. Sanitize it (`\w+` → `"t"*`, stopwords
   out, plural trimmed to 5+ characters, prefix), use AND and fall back to OR when there
   are no results. Raw queries fail with `-`, `:` and `"`.
-  Ranking: `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)`.
+  Ranking: `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 3.0, 2.0)` over
+  `title, body, why, topic_key, keywords, anchor_path`.
 - `search` filters (`--kind`, `--topic` exact `topic_key`, `--stale`) go into the
   parameterized SQL WHERE. With `--stale` SQL does **not** apply the LIMIT: the first K by
   bm25 can all be fresh, so the ranking is walked and cut at `limit` stale rows (anchors
