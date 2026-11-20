@@ -58,6 +58,7 @@ TOOLS = [
                 "why": {"type": "string"},
                 "topic": {"type": "string"},
                 "source": {"type": "string", "maxLength": 100},
+                "keywords": {"type": "string", "maxLength": 200},
                 "anchor": {"type": "string"},
                 "id": {"type": "string"},
                 "scope": {"type": "string", "enum": ["project", "personal"]},
@@ -282,6 +283,9 @@ def _save(server, args):
     if why is not None and not isinstance(why, str):
         # un `why` no-string llegaría a reject_secrets y fallaría con TypeError
         raise TypeError("why must be a string")
+    keywords = args.get("keywords")
+    if keywords is not None and not isinstance(keywords, str):
+        raise TypeError("keywords must be a string")
     scope = _scope(args)
     anchor_path = anchor_hash = None
     if args.get("anchor"):
@@ -298,6 +302,7 @@ def _save(server, args):
         anchor_hash=anchor_hash,
         id=args.get("id"),
         source=args.get("source"),
+        keywords=args.get("keywords"),
     )
     similar = [row for row in store.similar(title, body) if row["id"] != memory_id]
     lines = [memory_id]

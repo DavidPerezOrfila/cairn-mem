@@ -220,10 +220,12 @@ why the agent believes something.
 | Command | Purpose |
 |---|---|
 | `cairn init [--share]` | Create `.cairn/`; `--share` versions `events.jsonl` |
-| `cairn save` | Store a decision, convention, gotcha or fact |
+| `cairn save` | Store a decision, convention, gotcha or fact (`--keywords` adds synonyms for search) |
 | `cairn search "terms"` | Ranked active memories from project and personal scope (`--project`/`--personal`) |
 | `cairn get <id>` | Full memory |
 | `cairn archive <id>` | Stop returning a memory (either scope) |
+| `cairn topics` | List active `topic_key`s with their count |
+| `cairn history <topic>` | Every version of a `topic_key`, with its status |
 | `cairn check [--personal]` | List memories whose anchor changed |
 | `cairn render [--personal]` | Regenerate and print `MEMORY.md` |
 | `cairn rebuild [--personal]` | Rebuild the index from `events.jsonl` |
@@ -234,8 +236,8 @@ why the agent believes something.
 | `cairn export [--personal] [--sessions N] [--out <path>]` | Dump active memory (and recaps) as Markdown for a harness without cairn |
 | `cairn mcp` | Serve MCP over stdio |
 
-`--json` is available on `save`, `search`, `get`, `check`, `session`, `doctor` and
-`import` for agent consumption. `--personal` selects the personal scope on `save`,
+`--json` is available on `save`, `search`, `get`, `check`, `topics`, `history`,
+`session`, `doctor` and `import` for agent consumption. `--personal` selects the personal scope on `save`,
 `search`, `rebuild`, `render`, `check`, `session` and `doctor`; `search` also takes
 `--project`. `search` spans both scopes by default, and `get` and `archive` check both
 stores.

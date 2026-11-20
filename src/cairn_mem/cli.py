@@ -135,6 +135,7 @@ def _cmd_save(ns) -> int:
         anchor_hash=anchor_hash,
         id=ns.id,
         source=ns.source,
+        keywords=ns.keywords,
     )
     similar = [row for row in store.similar(ns.title, ns.body) if row["id"] != mid]
     if ns.json:
@@ -276,6 +277,26 @@ def _cmd_topics(ns) -> int:
         for row in rows:
             tag = "  [personal]" if row["scope"] == "personal" else ""
             print(f"{row['topic']}  ({row['count']}){tag}")
+    return 0
+
+
+def _cmd_history(ns) -> int:
+    rows = []
+    for store in _scopes():
+        scope = "personal" if store.root == personal_dir() else "project"
+        rows += [{**row, "scope": scope} for row in store.history(ns.topic)]
+    rows.sort(key=lambda row: (row["ts"], row["id"]))
+    if ns.json:
+        _print_json(rows)
+    elif not rows:
+        print(t("no history for that topic", "sin historial para ese topic"))
+    else:
+        for row in rows:
+            tag = "  [personal]" if row["scope"] == "personal" else ""
+            print(
+                f"{row['id']}  {_date(row['ts'])}  {row['kind']}  "
+                f"{row['status']}  {row['title']}{tag}"
+            )
     return 0
 
 
@@ -482,6 +503,13 @@ def _parser() -> argparse.ArgumentParser:
             "procedencia: agente, modelo o sesión",
         ),
     )
+    save.add_argument(
+        "--keywords",
+        help=t(
+            "synonyms that should find this memory",
+            "sinónimos con los que debe encontrarse esta memoria",
+        ),
+    )
     save.add_argument("--anchor")
     save.add_argument("--id")
     save.add_argument(
@@ -555,6 +583,17 @@ def _parser() -> argparse.ArgumentParser:
     )
     topics.add_argument("--json", action="store_true")
     topics.set_defaults(handler=_cmd_topics)
+
+    history = sub.add_parser(
+        "history",
+        help=t(
+            "shows every version of a topic_key",
+            "muestra todas las versiones de un topic_key",
+        ),
+    )
+    history.add_argument("topic", help=t("exact topic_key", "topic_key exacto"))
+    history.add_argument("--json", action="store_true")
+    history.set_defaults(handler=_cmd_history)
 
     rebuild = sub.add_parser(
         "rebuild",
