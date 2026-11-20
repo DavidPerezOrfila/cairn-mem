@@ -22,7 +22,13 @@ from cairn_mem.store import (
 
 MAX_L0 = 3000
 # `events.jsonl` depende de `--share`: init lo ignora en modo local y lo versiona en share.
-GITIGNORE_ENTRIES = ("MEMORY.md", "cairn.db", ".MEMORY.md.*", "sessions.jsonl")
+GITIGNORE_ENTRIES = (
+    "MEMORY.md",
+    "cairn.db",
+    ".MEMORY.md.*",
+    "sessions.jsonl",
+    "*.lock",
+)
 
 
 def _check(status: str, name: str, detail: str) -> dict:
@@ -39,7 +45,9 @@ def _sqlite() -> dict:
             conn.execute("CREATE VIRTUAL TABLE probe USING fts5(x)")
     except sqlite3.OperationalError as error:
         return _check(
-            "fail", "sqlite", t(f"FTS5 not available: {error}", f"FTS5 no disponible: {error}")
+            "fail",
+            "sqlite",
+            t(f"FTS5 not available: {error}", f"FTS5 no disponible: {error}"),
         )
     return _check(
         "ok",
@@ -100,7 +108,9 @@ def _gitignore(root: Path) -> dict:
     path = root / ".gitignore"
     if not path.exists():
         return _check(
-            "warn", "gitignore", t("missing: run cairn init", "no existe: ejecuta cairn init")
+            "warn",
+            "gitignore",
+            t("missing: run cairn init", "no existe: ejecuta cairn init"),
         )
     text = _read_text(path)
     if text is None:
@@ -198,7 +208,9 @@ def _sessions(root: Path) -> dict:
         return _check(
             "fail", "sessions", t(f"unreadable: {error}", f"no se pudo leer: {error}")
         )
-    return _check("ok", "sessions", t(f"{len(records)} recaps", f"{len(records)} recaps"))
+    return _check(
+        "ok", "sessions", t(f"{len(records)} recaps", f"{len(records)} recaps")
+    )
 
 
 def _db(root: Path) -> dict:
@@ -215,7 +227,9 @@ def _db(root: Path) -> dict:
             stored = dict(conn.execute("SELECT key, value FROM meta").fetchall())
     except sqlite3.Error:
         return _check(
-            "warn", "db", t("unreadable: rebuilt on open", "ilegible: se reconstruye al abrir")
+            "warn",
+            "db",
+            t("unreadable: rebuilt on open", "ilegible: se reconstruye al abrir"),
         )
     if version != SCHEMA_VERSION:
         return _check(
@@ -231,7 +245,10 @@ def _db(root: Path) -> dict:
         return _check(
             "warn",
             "db",
-            t("out of sync: rebuilt on open", "desincronizada: se reconstruye al abrir"),
+            t(
+                "out of sync: rebuilt on open",
+                "desincronizada: se reconstruye al abrir",
+            ),
         )
     return _check("ok", "db", t("in sync", "sincronizada"))
 
@@ -240,17 +257,23 @@ def _l0(root: Path) -> dict:
     path = root / "MEMORY.md"
     if not path.exists():
         return _check(
-            "warn", "l0", t("missing: generated on open", "no existe: se genera al abrir")
+            "warn",
+            "l0",
+            t("missing: generated on open", "no existe: se genera al abrir"),
         )
     text = _read_text(path)
     if text is None:
         return _check(
-            "fail", "l0", t("unreadable (not UTF-8?)", "no se pudo leer (¿no es UTF-8?)")
+            "fail",
+            "l0",
+            t("unreadable (not UTF-8?)", "no se pudo leer (¿no es UTF-8?)"),
         )
     length = len(text)
     status = "ok" if length <= MAX_L0 else "fail"
     return _check(
-        status, "l0", t(f"{length}/{MAX_L0} characters", f"{length}/{MAX_L0} caracteres")
+        status,
+        "l0",
+        t(f"{length}/{MAX_L0} characters", f"{length}/{MAX_L0} caracteres"),
     )
 
 

@@ -38,6 +38,14 @@ def _unlock(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
 
 
+def _open_lock(path: Path) -> int:
+    """Fichero de lock aparte: bloquear byte 0 de `events.jsonl` impediría leerlo
+    desde otro proceso (Windows: un rango bloqueado no se puede leer) y un
+    `cairn search` fallaría con PermissionError mientras alguien escribe."""
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0)
+    return os.open(path.with_name(path.name + ".lock"), flags, 0o644)
+
+
 def append_jsonl(
     path: Path, event: dict
 ) -> tuple[int, int, tuple[str, str], tuple[str, str]]:
@@ -47,28 +55,32 @@ def append_jsonl(
     data = line.encode("utf-8")
     flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0)
     with _LOCK:
-        fd = os.open(path, flags, 0o644)
+        lock_fd = _open_lock(path)
         try:
-            _lock(fd)
+            _lock(lock_fd)
             try:
-                stat = os.fstat(fd)
-                before = (str(stat.st_size), str(stat.st_mtime_ns))
-                start = _repair_tail(fd, stat.st_size)
+                fd = os.open(path, flags, 0o644)
                 try:
-                    written = os.write(fd, data)
-                except OSError:
-                    # Disco lleno: el write puede fallar a medias.
-                    os.ftruncate(fd, start)
-                    raise
-                if written != len(data):
-                    # Un solo escritor por proyecto (diseño): el truncado no pisa
-                    # líneas ajenas. Deshace la línea a medias.
-                    os.ftruncate(fd, start)
-                    raise OSError(f"incomplete write: {written}/{len(data)} bytes")
+                    stat = os.fstat(fd)
+                    before = (str(stat.st_size), str(stat.st_mtime_ns))
+                    start = _repair_tail(fd, stat.st_size)
+                    try:
+                        written = os.write(fd, data)
+                    except OSError:
+                        # Disco lleno: el write puede fallar a medias.
+                        os.ftruncate(fd, start)
+                        raise
+                    if written != len(data):
+                        # Un solo escritor por proyecto (diseño): el truncado no pisa
+                        # líneas ajenas. Deshace la línea a medias.
+                        os.ftruncate(fd, start)
+                        raise OSError(f"incomplete write: {written}/{len(data)} bytes")
+                finally:
+                    os.close(fd)
             finally:
-                _unlock(fd)
+                _unlock(lock_fd)
         finally:
-            os.close(fd)
+            os.close(lock_fd)
         stat = path.stat()
     return start, len(data), before, (str(stat.st_size), str(stat.st_mtime_ns))
 

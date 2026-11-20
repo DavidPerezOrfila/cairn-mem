@@ -1,8 +1,9 @@
 """Tests de la reparación de cola del JSONL antes de cada append."""
 
 import json
+import os
 
-from cairn_mem.jsonl import append_jsonl
+from cairn_mem.jsonl import _lock, _open_lock, _unlock, append_jsonl
 
 EVENT = {
     "op": "save",
@@ -51,3 +52,18 @@ def test_fragment_over_the_cap_is_truncated(tmp_path):
     append_jsonl(path, OTHER)
 
     assert [line["id"] for line in _lines(path)] == [OTHER["id"]]
+
+
+def test_lock_does_not_block_reading_the_log(tmp_path):
+    """El lock va en `events.jsonl.lock`: bloquear byte 0 del log impedía leerlo
+    (Windows devuelve PermissionError) y el `rebuild` de otro proceso fallaba
+    mientras alguien escribía."""
+    path = tmp_path / "events.jsonl"
+    append_jsonl(path, EVENT)
+    lock_fd = _open_lock(path)
+    try:
+        _lock(lock_fd)
+        assert path.read_bytes().endswith(b"\n")
+    finally:
+        _unlock(lock_fd)
+        os.close(lock_fd)

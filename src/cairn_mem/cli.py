@@ -16,7 +16,14 @@ from cairn_mem.sessions import Sessions
 from cairn_mem.setup import HARNESSES, setup
 from cairn_mem.store import KINDS, Store, search_scopes
 
-GITIGNORE = ("cairn.db", "cairn.db-*", "MEMORY.md", ".MEMORY.md.*", "sessions.jsonl")
+GITIGNORE = (
+    "cairn.db",
+    "cairn.db-*",
+    "MEMORY.md",
+    ".MEMORY.md.*",
+    "sessions.jsonl",
+    "*.lock",
+)
 
 
 def _root(ns) -> Path:

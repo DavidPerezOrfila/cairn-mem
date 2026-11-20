@@ -3,4 +3,5 @@ cairn.db-*
 MEMORY.md
 .MEMORY.md.*
 sessions.jsonl
+*.lock
 events.jsonl
