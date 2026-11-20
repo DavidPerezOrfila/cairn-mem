@@ -169,6 +169,8 @@ def cairn_ranks(corpus: list[dict], queries: list[dict], limit: int) -> list[lis
             }
             if memory.get("why"):
                 event["why"] = memory["why"]
+            if memory.get("keywords"):
+                event["keywords"] = memory["keywords"]
             lines.append(json.dumps(event, ensure_ascii=False))
         (root / "events.jsonl").write_text(
             "\n".join(lines) + "\n", encoding="utf-8", newline="\n"

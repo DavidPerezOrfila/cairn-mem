@@ -423,3 +423,27 @@ El dedupe añade una consulta FTS (sin LIMIT de SQL, top 10 por bm25) dentro de
 6.1 ms. `bench_sync` (10k, 2 escritores): save p95 16.7 ms, search 3.8 ms.
 Los tres SLO se cumplen. El corpus de secretos mide la corrección, no latencia:
 38 casos verdes y 4 huecos documentados como `xfail`.
+
+## S22: `--keywords` en el FTS (2026-11-20)
+
+Gate del plan: el set duro de paráfrasis no puede retroceder y debe mejorar P@3.
+`python bench/bench_retrieval.py --file bench/paraphrase.jsonl` con la 6ª columna
+FTS (`keywords`, peso 3.0 como `topic_key`):
+
+| Categoría   | n  | antes Hit@3 | después Hit@3 | R@5  | MRR  |
+|-------------|----|-------------|---------------|------|------|
+| léxico      | 8  | 1.00        | 1.00          | 1.00 | 1.00 |
+| flexión     | 8  | 1.00        | 1.00          | 1.00 | 1.00 |
+| paráfrasis  | 10 | 0.90        | 1.00          | 1.00 | 0.95 |
+| overall     | 26 | 0.96        | 1.00          | 1.00 | 0.98 |
+
+Sin `keywords` en la memoria las métricas son idénticas a S20 (la columna vacía
+no cambia el ranking): el cambio solo suma cuando el autor declara sinónimos.
+Los dos añadidos al fixture son los dos casos que pide el plan: `m08` ("Cifrado
+de secretos en reposo") → `guardo contraseñas almacenar gestionar` (arregla q17,
+la única paráfrasis que fallaba) y `m09` ("Vistas Oracle en mayusculas") →
+`nombrar objetos BD vistas mayúsculas`.
+
+`bench/retrieval.jsonl` (37 consultas, 52 memorias) sigue en overall Hit@3 0.97,
+R@5 1.00, MRR 0.96, igual que el baseline. `tests/test_s22.py` fija el gate de
+paráfrasis en CI y `tests/test_golden.py` sigue midiendo el golden set.

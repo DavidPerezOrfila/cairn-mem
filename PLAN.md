@@ -243,6 +243,7 @@ Each round is a slice: tests first, gate, review and its own release.
 | S19   | Hardening del borde: `parse_event` acota y controla todo el metadato (`why` ≤ 2000 tolerando el `\n` histórico, topic/anchor caps, `title` sin controles); `Sessions` solo sirve registros completos (id 12 hex + summary)                              | 0.14.0                | `tests/test_store.py`, `tests/test_sessions.py`, `docs/DECISIONS.md`                            |
 | S20   | Auditoría externa: secretos v3 por forma del valor y formatos (Oracle/SAS/Fernet/Azure/sk-/Slack), rechazo de inyección con cabecera en el L0, dedupe no bloqueante (aviso a 0,3-0,9, bloqueo a 0,9), `pin`/`unpin` solo CLI, `purge`, `topics`, `doctor` reescanea secretos y L0/MCP en inglés | 0.16.0                | [`docs/features/s20-security-dedupe-pin.md`](docs/features/s20-security-dedupe-pin.md)         |
 | S21   | A/B de escritura (`bench/ab_write.py`: ¿el agente guarda el gotcha que acaba de descubrir? con controles stale, envenenado y 100 distractores; criterios escritos antes de medir), `setup` sin bloque duplicado cuando el fichero importa `@AGENTS.md`, `CAIRN_LANG` (inglés por defecto en CLI/`doctor`/`setup`, `es` opt-in; el núcleo y el MCP siempre en inglés) | pendiente (0.17.0) | [`docs/features/s21-write-ab-lang-setup.md`](docs/features/s21-write-ab-lang-setup.md) |
+| S22   | `keywords` indexado en FTS (`SCHEMA_VERSION = 6`), `cairn history <topic>` y lock de fichero entre procesos (el test de 8 procesos midió la pérdida de eventos) | pendiente (0.17.0) | [`docs/features/s22-retrieval-fields.md`](docs/features/s22-retrieval-fields.md) |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -312,8 +313,9 @@ from the public index in an empty venv (`init`, `save`, `search`, `pin`, `topics
 
 ## 4.1 Pending rounds (2026-11-18 audit)
 
-Not implemented yet. Each one starts only after the previous is measured; keep the
-one-round-per-release rule and add its row to the §4 table when it ships.
+S21 and S22 are implemented and unreleased (0.17.0). Each one started only after the
+previous was measured; keep the one-round-per-release rule and add its row to the §4
+table when it ships.
 
 ### S21: write-side A/B, setup de-dup, languages (P1)
 
@@ -342,15 +344,23 @@ one-round-per-release rule and add its row to the §4 table when it ships.
 
 ### S22: retrieval fields and concurrency (P2)
 
-- [ ] **`--keywords` indexed in FTS** (`SCHEMA_VERSION = 6`) for the queries whose terms are
+- [x] **`--keywords` indexed in FTS** (`SCHEMA_VERSION = 6`) for the queries whose terms are
   not in the memory ("dónde guardo las contraseñas" → "secretos", "nombrar objetos de BD" →
   "vistas en mayúsculas"). Gate: the hard paraphrase set (`bench/paraphrase.jsonl`, baseline
   léxico 8/8, flexión 8/8, paráfrasis 9/10) must not regress and should improve P@3.
-- [ ] **`cairn history <topic>`**: the superseded rows of a topic from the JSONL (the
-  history already exists; no graph).
-- [ ] **Windows multiprocess test**: 8 processes appending in CI `windows-latest`;
+  **Measured 2026-11-20:** paráfrasis 10/10, overall Hit@3 0.96 → 1.00, MRR 0.94 → 0.98,
+  léxico y flexión 1.00; `bench/retrieval.jsonl` sin cambio (0.97/1.00/0.96). Sin keywords
+  las métricas son idénticas al baseline. `tests/test_s22.py` fija el gate en CI.
+- [x] **`cairn history <topic>`**: the superseded rows of a topic from the JSONL (the
+  history already exists; no graph). Implemented over the derived `mem` rows (they keep
+  `superseded`/`archived`); `--json` adds `scope`, order is `(ts, rowid)` and both scopes
+  are merged chronologically.
+- [x] **Windows multiprocess test**: 8 processes appending in CI `windows-latest`;
   `jsonl._LOCK` is only in-process, so `_repair_tail` could truncate another process's
-  half-written line.
+  half-written line. **Measured 2026-11-20:** before the fix, 8 × 25 appends left 190, 195
+  and 197 valid lines of 200 (lost ids and empty lines). Fixed with a file lock
+  (`msvcrt.locking` byte 0 on Windows, `fcntl.flock` on POSIX) around repair + write; the
+  test seeds a torn tail and asserts 200 valid lines and a clean rebuild (5/5 repeat runs).
 
 ### Minors
 

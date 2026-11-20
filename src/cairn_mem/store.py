@@ -15,11 +15,14 @@ from cairn_mem.anchor import is_stale
 from cairn_mem.jsonl import _LOCK, append_jsonl
 from cairn_mem.render import KIND_PRIORITY, MAX_TOPIC, _line, render_l0
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 KINDS = tuple(KIND_PRIORITY)
 MAX_BODY = 500
 MAX_TITLE = 200
 MAX_SOURCE = 100
+# S22: sinónimos con los que el autor quiere encontrar la memoria cuando la
+# consulta no usa sus palabras.
+MAX_KEYWORDS = 200
 MAX_WHY = 2000
 MAX_ANCHOR_PATH = 500
 MAX_ANCHOR_HASH = 64
@@ -230,6 +233,7 @@ CREATE TABLE IF NOT EXISTS mem (
   body        TEXT NOT NULL CHECK (length(body) <= 500),
   why         TEXT,
   source      TEXT,
+  keywords    TEXT,
   anchor_path TEXT,
   anchor_hash TEXT,
   pinned      INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0,1)),
@@ -241,22 +245,22 @@ CREATE INDEX IF NOT EXISTS ix_mem_active_kind_ts
   ON mem(kind, ts DESC, id) WHERE status = 'active';
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(
-  title, body, why, topic_key, anchor_path, content='mem', content_rowid='rowid',
+  title, body, why, topic_key, keywords, anchor_path, content='mem', content_rowid='rowid',
   tokenize='unicode61 remove_diacritics 2'
 );
 CREATE TRIGGER IF NOT EXISTS mem_ai AFTER INSERT ON mem BEGIN
-  INSERT INTO mem_fts(rowid, title, body, why, topic_key, anchor_path)
-  VALUES (new.rowid, new.title, new.body, new.why, new.topic_key, new.anchor_path);
+  INSERT INTO mem_fts(rowid, title, body, why, topic_key, keywords, anchor_path)
+  VALUES (new.rowid, new.title, new.body, new.why, new.topic_key, new.keywords, new.anchor_path);
 END;
 CREATE TRIGGER IF NOT EXISTS mem_ad AFTER DELETE ON mem BEGIN
-  INSERT INTO mem_fts(mem_fts, rowid, title, body, why, topic_key, anchor_path)
-  VALUES ('delete', old.rowid, old.title, old.body, old.why, old.topic_key, old.anchor_path);
+  INSERT INTO mem_fts(mem_fts, rowid, title, body, why, topic_key, keywords, anchor_path)
+  VALUES ('delete', old.rowid, old.title, old.body, old.why, old.topic_key, old.keywords, old.anchor_path);
 END;
 CREATE TRIGGER IF NOT EXISTS mem_au AFTER UPDATE ON mem BEGIN
-  INSERT INTO mem_fts(mem_fts, rowid, title, body, why, topic_key, anchor_path)
-  VALUES ('delete', old.rowid, old.title, old.body, old.why, old.topic_key, old.anchor_path);
-  INSERT INTO mem_fts(rowid, title, body, why, topic_key, anchor_path)
-  VALUES (new.rowid, new.title, new.body, new.why, new.topic_key, new.anchor_path);
+  INSERT INTO mem_fts(mem_fts, rowid, title, body, why, topic_key, keywords, anchor_path)
+  VALUES ('delete', old.rowid, old.title, old.body, old.why, old.topic_key, old.keywords, old.anchor_path);
+  INSERT INTO mem_fts(rowid, title, body, why, topic_key, keywords, anchor_path)
+  VALUES (new.rowid, new.title, new.body, new.why, new.topic_key, new.keywords, new.anchor_path);
 END;
 """
 
@@ -319,6 +323,21 @@ def validate_source(source):
     return source or None
 
 
+def validate_keywords(keywords):
+    """Sinónimos para encontrar la memoria cuando la consulta no usa sus
+    palabras (S22). Mismo borde que el topic: sin controles y corto, porque se
+    indexan y `cairn get` los imprime."""
+    if keywords is None:
+        return None
+    keywords = str(keywords)
+    if _has_controls(keywords):
+        raise ValueError("keywords cannot contain newlines or control characters")
+    keywords = " ".join(keywords.split())
+    if len(keywords) > MAX_KEYWORDS:
+        raise ValueError(f"keywords exceed {MAX_KEYWORDS} characters")
+    return keywords or None
+
+
 def _escapes_root(anchor_path: str) -> bool:
     """El ancla es una ruta POSIX relativa a la raíz. Absoluta, UNC, letra de
     unidad o segmento '..' sale del proyecto — o abre un recurso remoto en
@@ -349,7 +368,7 @@ def parse_event(line: str, number: int) -> dict:
         int(event.get("ts", 0))
     except (TypeError, ValueError, OverflowError) as error:
         raise ValueError(f"{where}: invalid ts") from error
-    for key in ("why", "source", "topic_key", "anchor_path", "anchor_hash"):
+    for key in ("why", "source", "topic_key", "keywords", "anchor_path", "anchor_hash"):
         value = event.get(key)
         if value is None:
             continue
@@ -360,6 +379,7 @@ def parse_event(line: str, number: int) -> dict:
             "why": MAX_WHY,
             "source": MAX_SOURCE,
             "topic_key": MAX_TOPIC,
+            "keywords": MAX_KEYWORDS,
             "anchor_path": MAX_ANCHOR_PATH,
             "anchor_hash": MAX_ANCHOR_HASH,
         }[key]
@@ -425,6 +445,9 @@ class Store:
                 "DROP TABLE IF EXISTS mem_fts;"
                 "DROP TABLE IF EXISTS mem;"
                 "DROP TABLE IF EXISTS meta;"
+                # Versión 0 mientras dura la migración: otro proceso que abra en
+                # esta ventana no repite el DROP encima del rebuild en curso.
+                "PRAGMA user_version = 0;"
             )
         self._conn.executescript(DDL)
         self._syncing = False
@@ -452,6 +475,7 @@ class Store:
         id=None,
         ts=None,
         source=None,
+        keywords=None,
     ) -> str:
         if kind not in KINDS:
             raise ValueError(f"invalid kind: {kind}")
@@ -472,6 +496,7 @@ class Store:
             raise ValueError(f"invalid why or exceeds {MAX_WHY} characters")
         topic_key = validate_topic(topic_key)
         source = validate_source(source)
+        keywords = validate_keywords(keywords)
         if anchor_path is not None and _escapes_root(str(anchor_path)):
             raise ValueError("anchor_path must be a project-relative path")
         if body is not None and _has_controls(body, "\n\t"):
@@ -479,7 +504,7 @@ class Store:
         mid = id or secrets.token_hex(6)
         if ID_PATTERN.fullmatch(mid) is None:
             raise ValueError("id must be 12 lowercase hex characters")
-        reject_secrets(title, body, why, topic_key, anchor_path, source)
+        reject_secrets(title, body, why, topic_key, anchor_path, source, keywords)
         # S20: copia casi literal -> error; el resto, aviso en la salida del CLI.
         # Un `id` existente es una actualización (pin, import idempotente) y un
         # `topic_key` es la vía prevista para reemplazar: ni uno ni otro se filtran.
@@ -505,6 +530,7 @@ class Store:
             event["pinned"] = 1
         for key, value in (
             ("topic_key", topic_key),
+            ("keywords", keywords),
             ("why", why),
             ("source", source),
             ("anchor_path", anchor_path),
@@ -559,7 +585,7 @@ class Store:
             "SELECT m.id, m.kind, m.title, m.body FROM mem_fts "
             "JOIN mem m ON m.rowid = mem_fts.rowid "
             "WHERE mem_fts MATCH ? AND m.status = 'active' "
-            "ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0) LIMIT 10",
+            "ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 3.0, 2.0) LIMIT 10",
             (self._match(terms, "OR"),),
         ).fetchall()
         found = []
@@ -636,6 +662,17 @@ class Store:
         ).fetchall()
         return [{"topic": row["topic_key"], "count": row["count"]} for row in rows]
 
+    def history(self, topic: str) -> list[dict]:
+        """Todas las versiones de un topic, de la más vieja a la más nueva. Las
+        superseded ya viven en `mem`: el JSONL no se relee."""
+        self._sync()
+        rows = self._conn.execute(
+            "SELECT id, ts, kind, topic_key, title, body, why, source, keywords, "
+            "pinned, status FROM mem WHERE topic_key = ? ORDER BY ts, rowid",
+            (topic,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def _set_pin(self, id: str, pinned: int) -> None:
         memory = self.get(id)
         if memory is None:
@@ -655,7 +692,14 @@ class Store:
             "body": memory["body"],
             "pinned": pinned,
         }
-        for key in ("topic_key", "why", "source", "anchor_path", "anchor_hash"):
+        for key in (
+            "topic_key",
+            "keywords",
+            "why",
+            "source",
+            "anchor_path",
+            "anchor_hash",
+        ):
             if memory.get(key):
                 event[key] = memory[key]
         fingerprint, unseen = self._append(event)
@@ -833,12 +877,13 @@ class Store:
                         (topic_key, mid),
                     )
             self._conn.execute(
-                """INSERT INTO mem (id, ts, kind, topic_key, title, body, why, source, anchor_path, anchor_hash, pinned, status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO mem (id, ts, kind, topic_key, title, body, why, source, keywords, anchor_path, anchor_hash, pinned, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(id) DO UPDATE SET
                      ts = excluded.ts, kind = excluded.kind, topic_key = excluded.topic_key,
                      title = excluded.title, body = excluded.body, why = excluded.why,
-                     source = excluded.source, anchor_path = excluded.anchor_path,
+                     source = excluded.source, keywords = excluded.keywords,
+                     anchor_path = excluded.anchor_path,
                      anchor_hash = excluded.anchor_hash, pinned = excluded.pinned,
                      status = excluded.status""",
                 (
@@ -850,6 +895,7 @@ class Store:
                     event["body"],
                     event.get("why"),
                     event.get("source"),
+                    event.get("keywords"),
                     event.get("anchor_path"),
                     event.get("anchor_hash"),
                     int(event.get("pinned") or 0),
@@ -977,7 +1023,7 @@ class Store:
             "snippet(mem_fts, 1, '', '', '…', 12) AS snippet "
             "FROM mem_fts JOIN mem m ON m.rowid = mem_fts.rowid "
             f"WHERE {' AND '.join(where)} "
-            "ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0), m.rowid"
+            "ORDER BY bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 3.0, 2.0), m.rowid"
         )
         if limit is not None:
             sql += " LIMIT ?"

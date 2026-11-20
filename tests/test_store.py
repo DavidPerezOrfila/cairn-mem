@@ -429,7 +429,7 @@ def test_short_write_rolls_back_and_keeps_jsonl_valid(root, monkeypatch):
     path = Path(root) / "events.jsonl"
     size = path.stat().st_size
     monkeypatch.setattr("cairn_mem.jsonl.os.write", lambda fd, data: 1)
-    with pytest.raises(OSError, match="incompleta"):
+    with pytest.raises(OSError, match="incomplete write"):
         s.save(kind="fact", title="falla", body="b")
     assert path.stat().st_size == size
     assert Store(root).search("ok")

@@ -41,18 +41,21 @@ portable to any harness with a shell**.
 ## Events (only 2 operations)
 
 ```json
-{"op":"save","id":"a1b2c3d4e5f6","ts":1788000000000000000,"kind":"gotcha","topic_key":"auth/redirect","title":"...","body":"...","why":"...","anchor_path":"src/auth.py","anchor_hash":"..."}
+{"op":"save","id":"a1b2c3d4e5f6","ts":1788000000000000000,"kind":"gotcha","topic_key":"auth/redirect","keywords":"oauth login redirect","title":"...","body":"...","why":"...","anchor_path":"src/auth.py","anchor_hash":"..."}
 {"op":"archive","id":"a1b2c3d4e5f6","ts":1788000000000000001}
 ```
 
 - `save` with an existing `id` updates the memory; the last one wins.
 - `save` with an active `topic_key` marks the previous one as `superseded`, and that
   happens before the insert.
-- Write: **one `os.write` call with `O_APPEND`**, line < 4 KB. No file lock (one writer
-  per project is the normal case; light concurrency is tested).
+- Write: **one `os.write` call with `O_APPEND`**, line < 4 KB, inside a file lock
+  (`msvcrt.locking` on Windows, `fcntl.flock` elsewhere). The in-process lock is not
+  enough: two processes repairing the tail at once lose each other's lines (measured,
+  S22: 190-197 of 200 events with 8 processes before the lock).
 - Before each append, cairn repairs the tail. If the file does not end in `\n` (a crash
   in the middle of a write), a valid JSON fragment keeps its line and gets the newline;
   an invalid fragment is truncated. That way the next event never lands on a broken line.
+  The repair happens under the same lock, so it cannot cut another writer's line.
 - JSON with `ensure_ascii=False`. Files are always opened with `encoding="utf-8"`
   (Windows).
 
@@ -86,6 +89,8 @@ milliseconds; see `docs/features/s7-incremental-sync.md`.
   memories.
 - `id` must be 12 lowercase hex characters. `topic_key` is at most 100 characters and
   cannot contain control characters, because a newline would inject lines into the L0.
+  `keywords` (S22, at most 200 characters) has the same contract: they are indexed and
+  printed by `cairn get`.
   `render` also collapses id, title and topic when reading, to cover external events
   written before this validation existed.
 - Scrubbing happens since M1, **before** anything reaches the JSONL.
@@ -154,9 +159,10 @@ milliseconds; see `docs/features/s7-incremental-sync.md`.
   prefix); the stem keeps at least 5 characters (`redis` must not become `redi`).
   **AND first and OR if there are no results**, with no quorum: requiring two roots cut
   paraphrase Hit@3 from 0.90 to 0.40 (S6.1). Ranking is
-  `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)` over
-  `title, body, why, topic_key, anchor_path` (title > topic > anchor > body > why), and a
-  `status='active'` filter. No other boosts in v0.1.
+  `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 3.0, 2.0)` over
+  `title, body, why, topic_key, keywords, anchor_path` (title > topic > keywords > anchor
+  > body > why), and a `status='active'` filter. `keywords` (S22) are the synonyms the
+  author declares for queries that do not use the memory's own words. No other boosts.
 - Raw FTS5 queries **fail** with `-`, `:` and `"` (for example `oauth-callback`), so
   sanitizing is required.
 
@@ -205,7 +211,7 @@ milliseconds; see `docs/features/s7-incremental-sync.md`.
 
 ## Commands
 
-`init · save · search · get · archive · check · render · rebuild · session · import · doctor · mcp`
+`init · save · search · get · archive · check · render · rebuild · session · import · doctor · mcp · pin · unpin · purge · topics · history · setup · export`
 
 ## Out of v0.1 (backlog, only with evidence)
 

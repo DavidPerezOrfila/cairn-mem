@@ -7,21 +7,22 @@
   (`setup <harness>` and `export`), S18 (`source`), S19 (hardening of `parse_event` and
   sessions), S20 (secrets v3 by value shape, injection rejection plus the L0 header,
   non-blocking dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan and the
-  agent-facing English L0/MCP) and S21 (`setup` de-dup through `@AGENTS.md`, `CAIRN_LANG`
-  and the write-side A/B) are implemented.** 0.16.0 is published (2026-11-18, tagged
-  `v0.16.0`, Trusted Publishing); S21 is implemented and unreleased. The write-side A/B
-  ran on 2026-11-20 (`empty` 2/30, `plain` 0/30, criterion 1 failed; the control arms were
-  not run and the risk stays open). Pending plan: S22 (`--keywords`, `history`, Windows
-  multiprocess test) and the minors — see `PLAN.md` §4.1.
+  agent-facing English L0/MCP), S21 (`setup` de-dup through `@AGENTS.md`, `CAIRN_LANG`
+  and the write-side A/B) and S22 (`keywords` indexed in FTS, `cairn history <topic>` and
+  the cross-process file lock) are implemented.** 0.16.0 is published (2026-11-18, tagged
+  `v0.16.0`, Trusted Publishing); S21 and S22 are implemented and unreleased (0.17.0). The
+  write-side A/B ran on 2026-11-20 (`empty` 2/30, `plain` 0/30, criterion 1 failed; the
+  control arms were not run and the risk stays open). Pending plan: the minors — see
+  `PLAN.md` §4.1.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (404 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  `tests/` (427 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
   (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
-  tail repair, incremental sync, retrieval, the paraphrase baseline, the secrets corpus,
-  dedupe/pin/purge/topics, the golden set, the integrity audit fixes, `doctor`,
-  `setup`/`export`, `CAIRN_LANG`, the write-side A/B detection, the backlog benches and the
-  bench hygiene.
+  tail repair and the 8-process append, incremental sync, retrieval, the paraphrase gate
+  for `keywords`, the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the
+  integrity audit fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B
+  detection, the backlog benches and the bench hygiene.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -86,10 +87,12 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   (provenance: agent, model or session; ≤ 100 chars, no control characters, same
   treatment as `topic_key`). There is deliberately **no**
   "unreviewed" state: with `--share`, the PR over `events.jsonl` is the human review.
-  `SCHEMA_VERSION = 5` (S20: the `pinned` column; older JSONL without the field replays
-  with 0).
-- Writes: `O_APPEND` plus **one** `os.write` per event. There is an in-process lock
-  (`jsonl._LOCK`) because Windows `O_APPEND` is not atomic between threads.
+  `SCHEMA_VERSION = 6` (S22: the `keywords` column; older JSONL without it replays with
+  NULL. S20 added `pinned`, which replays with 0).
+- Writes: `O_APPEND` plus **one** `os.write` per event, under a file lock
+  (`msvcrt.locking` on byte 0 on Windows, `fcntl.flock` on POSIX) plus the in-process
+  `jsonl._LOCK`, because Windows `O_APPEND` is not atomic between threads and two
+  processes repairing the tail otherwise truncate each other's line.
 - When the database opens, it compares `(size, mtime_ns)` of the JSONL and
   `PRAGMA user_version`. If they differ, it rebuilds automatically (this covers
   `git pull`).
@@ -132,7 +135,8 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
 - **FTS5:** never pass raw text to `MATCH`. Sanitize it (`\w+` → `"t"*`, stopwords
   out, plural trimmed to 5+ characters, prefix), use AND and fall back to OR when there
   are no results. Raw queries fail with `-`, `:` and `"`.
-  Ranking: `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 2.0)`.
+  Ranking: `bm25(mem_fts, 5.0, 1.0, 0.5, 3.0, 3.0, 2.0)` over
+  `title, body, why, topic_key, keywords, anchor_path`.
 - `search` filters (`--kind`, `--topic` exact `topic_key`, `--stale`) go into the
   parameterized SQL WHERE. With `--stale` SQL does **not** apply the LIMIT: the first K by
   bm25 can all be fresh, so the ranking is walked and cut at `limit` stale rows (anchors
@@ -166,7 +170,18 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   pin would outrank everything. At most 5 pins and 800 characters; they render first with
   `📌`. The row travels as a `pinned` field on a `save` event with the same id, **not** as a
   new `op`: older `parse_event`s reject an unknown `op` and a `--share` repo would stop
-  opening. `SCHEMA_VERSION = 5`.
+  opening. `SCHEMA_VERSION = 6` (S22 added the `keywords` column; older JSONL replays
+  without it).
+- **Keywords (S22):** optional synonyms on `save` (`--keywords`, MCP `keywords`): ≤ 200
+  characters, no control characters, whitespace normalized, empty means absent, and they go
+  through `reject_secrets` in `save` and in `doctor`. Sixth FTS column with the `topic_key`
+  weight (3.0); they never render in the L0 and must not change scores when absent.
+- **History (S22):** `cairn history <topic>` reads the derived `mem` rows (superseded and
+  archived included), ordered `(ts, rowid)`, merging project and personal by `ts`; CLI only.
+- **Writes are process-safe (S22):** `jsonl.append_jsonl` holds a file lock
+  (`msvcrt.locking` on byte 0 on Windows, `fcntl.flock` on POSIX) around the tail repair and
+  the single `os.write`. `_LOCK` only serializes threads: without the file lock two
+  processes truncate each other's lines (measured 190-197 of 200 lines with 8 processes).
 - **Purge:** `cairn purge <id>` rewrites `events.jsonl` without every event of that id
   (save, archive, pin) and leaves `events.jsonl.bak`. It exists because the JSONL is
   append-only and `archive` keeps the secret in Git; it warns to rotate the credential.

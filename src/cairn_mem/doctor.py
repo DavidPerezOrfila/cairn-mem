@@ -167,6 +167,7 @@ def _events(root: Path) -> dict:
                     event.get("why"),
                     event.get("source"),
                     event.get("topic_key"),
+                    event.get("keywords"),
                 )
             except ValueError as error:
                 return _check(

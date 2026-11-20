@@ -5,8 +5,8 @@
 {"id":"m05","kind":"decision","title":"Rate limit del login","body":"5 intentos por minuto por IP y usuario","why":"frena fuerza bruta sin bloquear oficinas"}
 {"id":"m06","kind":"convention","title":"Cookies de sesion SameSite","body":"SameSite=Lax y Secure","why":"Strict rompe el retorno desde enlaces externos"}
 {"id":"m07","kind":"convention","title":"API keys en cabecera Authorization","body":"prefijo Bearer y hash guardado en base","why":"en query string quedan escritas en los logs"}
-{"id":"m08","kind":"convention","title":"Cifrado de secretos en reposo","body":"la clave vive en el gestor y se rota cada trimestre","why":"la clave dentro del repo no protege nada"}
-{"id":"m09","kind":"convention","title":"Vistas Oracle en mayusculas","body":"los objetos de BD se nombran en mayusculas y el attribute11 de mtl_system_items_vl es texto numerico","why":"EBS rompe si el nombre no coincide con el diccionario"}
+{"id":"m08","kind":"convention","title":"Cifrado de secretos en reposo","body":"la clave vive en el gestor y se rota cada trimestre","why":"la clave dentro del repo no protege nada","keywords":"guardo contraseñas almacenar gestionar"}
+{"id":"m09","kind":"convention","title":"Vistas Oracle en mayusculas","body":"los objetos de BD se nombran en mayusculas y el attribute11 de mtl_system_items_vl es texto numerico","why":"EBS rompe si el nombre no coincide con el diccionario","keywords":"nombrar objetos BD vistas mayúsculas"}
 {"id":"m10","kind":"decision","title":"Migracion Postgres expand-contract","body":"anadir columna, desplegar, rellenar y borrar","why":"hay trafico 24/7 y no admite downtime"}
 {"id":"m11","kind":"gotcha","title":"Consultas N+1 en SQLAlchemy","body":"usar selectinload en las relaciones de la lista","why":"cada fila lanza una consulta extra"}
 {"id":"m12","kind":"gotcha","title":"Timeout del proxy nginx","body":"subir client_max_body_size y proxy_read_timeout a 120s","why":"las subidas pesadas se cortan a mitad"}
