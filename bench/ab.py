@@ -81,10 +81,12 @@ FILES = {
 
 
 def _snippet() -> str:
-    lines = SNIPPET.read_text(encoding="utf-8").splitlines()[3:]
-    while lines and lines[-1].strip().startswith("```"):
-        lines.pop()
-    return "\n".join(lines).strip() + "\n"
+    """El bloque de `docs/AGENT_SNIPPET.md`, que debe ser idéntico al que escribe
+    `cairn setup` (lo fija `tests/test_ab_write.py`)."""
+    text = SNIPPET.read_text(encoding="utf-8")
+    start = text.index("```markdown") + len("```markdown")
+    end = text.index("```", start)
+    return text[start:end].strip() + "\n"
 
 
 def _prepare(directory: Path, arm: str) -> None:

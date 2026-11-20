@@ -20,6 +20,14 @@ def _module(name: str):
     return module
 
 
+def test_snippet_matches_what_setup_writes():
+    """El A/B tiene que medir el bloque real: hasta 2026-11-20 cortaba por número de
+    línea y metía dos frases de prosa y una valla en AGENTS.md."""
+    from cairn_mem.setup import SNIPPET as PRODUCT
+
+    assert _module("ab")._snippet().strip() == PRODUCT.strip()
+
+
 def test_prepare_seeds_each_arm(tmp_path):
     module = _module("ab_write")
     plain = tmp_path / "plain"
@@ -29,7 +37,9 @@ def test_prepare_seeds_each_arm(tmp_path):
 
     empty = tmp_path / "empty"
     module._prepare(empty, "empty")
-    assert (empty / "AGENTS.md").exists()
+    text = (empty / "AGENTS.md").read_text(encoding="utf-8")
+    assert text.startswith("## Project memory (cairn-mem)")
+    assert "Before you reply" in text and "the user's reason" in text
     assert not (empty / ".cairn" / "events.jsonl").exists()
 
     poison = tmp_path / "poison"
@@ -89,6 +99,25 @@ def test_main_counts_a_saved_gotcha_and_cleans_up(monkeypatch, tmp_path, capsys)
     assert "empty" in out and "guardado 1/1" in out
     assert "plain" in out and "guardado 0/1" in out
     assert not list(tmp_path.iterdir())
+
+
+def test_json_rows_carry_the_saved_text(monkeypatch, tmp_path, capsys):
+    """Criterio 2 del protocolo: el veredicto se lee en las filas, no solo se cuenta."""
+    module = _module("ab_write")
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda **kwargs: str(tmp_path / "run"))
+
+    def fake_run(directory, prompt, timeout=240):
+        store = Store(str(directory / ".cairn"))
+        store.save(kind="gotcha", title="UTC", body="epoch en segundos")
+        store.close()
+        return {"answer": "ok", "tokens": 5, "tools": 1, "exit": 0}
+
+    monkeypatch.setattr(module, "_run", fake_run)
+    assert module.main(["--arms", "empty", "--reps", "1", "--json"]) == 0
+    row = json.loads(capsys.readouterr().out)[0]
+    assert row["saves"] == [
+        {"kind": "gotcha", "title": "UTC", "body": "epoch en segundos", "why": None}
+    ]
 
 
 def test_json_rows_carry_the_arm_and_the_result(monkeypatch, tmp_path, capsys):
