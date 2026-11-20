@@ -9,11 +9,10 @@
   non-blocking dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan and the
   agent-facing English L0/MCP), S21 (`setup` de-dup through `@AGENTS.md`, `CAIRN_LANG`
   and the write-side A/B) and S22 (`keywords` indexed in FTS, `cairn history <topic>` and
-  the cross-process file lock) are implemented.** 0.16.0 is published (2026-11-18, tagged
-  `v0.16.0`, Trusted Publishing); S21 and S22 are implemented and unreleased (0.17.0). The
-  write-side A/B ran on 2026-11-20 (`empty` 2/30, `plain` 0/30, criterion 1 failed; the
-  control arms were not run and the risk stays open). Pending plan: the minors — see
-  `PLAN.md` §4.1.
+  the cross-process file lock) are implemented.** 0.17.0 is published (2026-11-20, tagged
+  `v0.17.0`, Trusted Publishing). The write-side A/B ran on 2026-11-20 (`empty` 2/30,
+  `plain` 0/30, criterion 1 failed; the control arms were not run and the risk stays
+  open). Pending plan: the minors — see `PLAN.md` §4.1.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.

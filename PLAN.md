@@ -242,8 +242,8 @@ Each round is a slice: tests first, gate, review and its own release.
 | S18   | Procedencia opcional de la memoria: `source` en `save` (CLI/MCP), validado e indexado. Sin estado "sin revisar": el PR sobre `events.jsonl` ya es la revisión humana                                                                                 | 0.13.0                | [`docs/features/s18-source-provenance.md`](docs/features/s18-source-provenance.md)             |
 | S19   | Hardening del borde: `parse_event` acota y controla todo el metadato (`why` ≤ 2000 tolerando el `\n` histórico, topic/anchor caps, `title` sin controles); `Sessions` solo sirve registros completos (id 12 hex + summary)                              | 0.14.0                | `tests/test_store.py`, `tests/test_sessions.py`, `docs/DECISIONS.md`                            |
 | S20   | Auditoría externa: secretos v3 por forma del valor y formatos (Oracle/SAS/Fernet/Azure/sk-/Slack), rechazo de inyección con cabecera en el L0, dedupe no bloqueante (aviso a 0,3-0,9, bloqueo a 0,9), `pin`/`unpin` solo CLI, `purge`, `topics`, `doctor` reescanea secretos y L0/MCP en inglés | 0.16.0                | [`docs/features/s20-security-dedupe-pin.md`](docs/features/s20-security-dedupe-pin.md)         |
-| S21   | A/B de escritura (`bench/ab_write.py`: ¿el agente guarda el gotcha que acaba de descubrir? con controles stale, envenenado y 100 distractores; criterios escritos antes de medir), `setup` sin bloque duplicado cuando el fichero importa `@AGENTS.md`, `CAIRN_LANG` (inglés por defecto en CLI/`doctor`/`setup`, `es` opt-in; el núcleo y el MCP siempre en inglés) | pendiente (0.17.0) | [`docs/features/s21-write-ab-lang-setup.md`](docs/features/s21-write-ab-lang-setup.md) |
-| S22   | `keywords` indexado en FTS (`SCHEMA_VERSION = 6`), `cairn history <topic>` y lock de fichero entre procesos (el test de 8 procesos midió la pérdida de eventos) | pendiente (0.17.0) | [`docs/features/s22-retrieval-fields.md`](docs/features/s22-retrieval-fields.md) |
+| S21   | A/B de escritura (`bench/ab_write.py`: ¿el agente guarda el gotcha que acaba de descubrir? con controles stale, envenenado y 100 distractores; criterios escritos antes de medir), `setup` sin bloque duplicado cuando el fichero importa `@AGENTS.md`, `CAIRN_LANG` (inglés por defecto en CLI/`doctor`/`setup`, `es` opt-in; el núcleo y el MCP siempre en inglés) | 0.17.0 | [`docs/features/s21-write-ab-lang-setup.md`](docs/features/s21-write-ab-lang-setup.md) |
+| S22   | `keywords` indexado en FTS (`SCHEMA_VERSION = 6`), `cairn history <topic>` y lock de fichero entre procesos (el test de 8 procesos midió la pérdida de eventos) | 0.17.0 | [`docs/features/s22-retrieval-fields.md`](docs/features/s22-retrieval-fields.md) |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -313,9 +313,8 @@ from the public index in an empty venv (`init`, `save`, `search`, `pin`, `topics
 
 ## 4.1 Pending rounds (2026-11-18 audit)
 
-S21 and S22 are implemented and unreleased (0.17.0). Each one started only after the
-previous was measured; keep the one-round-per-release rule and add its row to the §4
-table when it ships.
+S21 and S22 shipped in 0.17.0. Each one started only after the previous was measured; keep
+the one-round-per-release rule and add its row to the §4 table when it ships.
 
 ### S21: write-side A/B, setup de-dup, languages (P1)
 
