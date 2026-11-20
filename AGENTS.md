@@ -16,7 +16,7 @@
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (428 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  `tests/` (429 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
   (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
   tail repair and the 8-process append, incremental sync, retrieval, the paraphrase gate
   for `keywords`, the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the
@@ -90,10 +90,12 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   "unreviewed" state: with `--share`, the PR over `events.jsonl` is the human review.
   `SCHEMA_VERSION = 6` (S22: the `keywords` column; older JSONL without it replays with
   NULL. S20 added `pinned`, which replays with 0).
-- Writes: `O_APPEND` plus **one** `os.write` per event, under a file lock
-  (`msvcrt.locking` on byte 0 on Windows, `fcntl.flock` on POSIX) plus the in-process
-  `jsonl._LOCK`, because Windows `O_APPEND` is not atomic between threads and two
-  processes repairing the tail otherwise truncate each other's line.
+- Writes: `O_APPEND` plus **one** `os.write` per event, under a file lock on
+  `<file>.lock` (`msvcrt.locking` on byte 0 on Windows, `fcntl.flock` on POSIX) plus the
+  in-process `jsonl._LOCK`, because Windows `O_APPEND` is not atomic between threads and
+  two processes repairing the tail otherwise truncate each other's line. The lock lives in
+  its own file (S24): a locked byte 0 of `events.jsonl` cannot be *read* by another process
+  on Windows, so a concurrent `rebuild` died with `PermissionError`.
 - When the database opens, it compares `(size, mtime_ns)` of the JSONL and
   `PRAGMA user_version`. If they differ, it rebuilds automatically (this covers
   `git pull`).
@@ -179,10 +181,14 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   weight (3.0); they never render in the L0 and must not change scores when absent.
 - **History (S22):** `cairn history <topic>` reads the derived `mem` rows (superseded and
   archived included), ordered `(ts, rowid)`, merging project and personal by `ts`; CLI only.
-- **Writes are process-safe (S22):** `jsonl.append_jsonl` holds a file lock
+- **Writes are process-safe (S22, S24):** `jsonl.append_jsonl` holds a file lock
   (`msvcrt.locking` on byte 0 on Windows, `fcntl.flock` on POSIX) around the tail repair and
   the single `os.write`. `_LOCK` only serializes threads: without the file lock two
   processes truncate each other's lines (measured 190-197 of 200 lines with 8 processes).
+  The lock is taken on `<file>.lock` (S24), never on the log: a locked byte 0 of a Windows
+  file fails to read from another process (2 of 5 runs of the concurrent test died in
+  `rebuild` with `PermissionError`), so the log must stay unlocked. `*.lock` is in the
+  managed `.gitignore` entries.
 - **Purge:** `cairn purge <id>` rewrites `events.jsonl` without every event of that id
   (save, archive, pin) and leaves `events.jsonl.bak`. It exists because the JSONL is
   append-only and `archive` keeps the secret in Git; it warns to rotate the credential.
