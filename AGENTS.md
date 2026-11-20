@@ -16,7 +16,7 @@
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (427 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  `tests/` (428 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
   (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
   tail repair and the 8-process append, incremental sync, retrieval, the paraphrase gate
   for `keywords`, the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the
@@ -40,6 +40,7 @@ pip install -e ".[dev]"                            # required; without it pytest
 pytest -q
 pytest tests/test_store.py::test_save_and_get -q   # one test
 ruff check src tests bench
+mypy src                                            # tipos; CI falla con cualquier error
 python bench/bench_mcp.py --reps 20                 # MCP tool-call latency (10k)
 python bench/bench_sync.py --reps 40                # 2 writers incremental sync (10k)
 python bench/bench_retrieval.py --distractors 10000 # ranking al crecer el índice
@@ -64,9 +65,10 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   modules you already deleted from the tree. One wheel included the old importer
   because of an orphan `build/lib/`.
 - CI lives in `.github/workflows/ci.yml`: ubuntu/macos/windows × Python 3.10 and 3.14
-  (tests and ruff). There is no ruff config and no pre-commit, so also verify locally
-  (pytest, ruff and the criteria in `PLAN.md`).
-- Python 3.10+, **standard library only** in the core. `dev` only adds pytest and ruff.
+  (tests, ruff and mypy). There is no ruff config and no pre-commit, so also verify locally
+  (pytest, ruff, mypy and the criteria in `PLAN.md`).
+- Python 3.10+, **standard library only** in the core. `dev` only adds pytest, ruff and
+  mypy.
 
 ## Architecture
 
