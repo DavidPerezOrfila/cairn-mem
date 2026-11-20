@@ -48,6 +48,13 @@ Tres huecos de la auditoría del 2026-11-18:
   atrás.
 - Los criterios no dependen del escenario: el único cambio permitido fue el
   escenario, y está documentado con fecha.
+- **Resultado (2026-11-20):** `bench/ab_write.py --arms empty,plain --reps 30` →
+  `empty` 2/30 (IC95 0,018-0,213) y `plain` 0/30 (0,000-0,114), 0 exits
+  non-zero. El criterio 1 (cota inferior ≥ 0,5 y sin solape con `plain`) falla:
+  el snippet no basta para que este modelo guarde la decisión. Los brazos de
+  control no se corrieron porque su margen de 0,20 no es medible a 2/30. Números
+  en [`docs/AB_RESULTS.md`](../../docs/AB_RESULTS.md); el riesgo "el agente no
+  guarda memorias" sigue abierto en `PLAN.md` §6.
 
 ## Tests
 

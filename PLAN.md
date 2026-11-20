@@ -317,13 +317,19 @@ one-round-per-release rule and add its row to the §4 table when it ships.
 
 ### S21: write-side A/B, setup de-dup, languages (P1)
 
-- [x] **A/B v2, write side.** `bench/ab_write.py`: one session per run on a toy repo with
-  a real bug; the task is to fix it, and the run only counts when `events.jsonl` gained a
-  **new** `save` whose text matches the gotcha (`utc|tz|timezone|tzinfo|datetime`). Arms:
+- [x] **A/B v2, write side.** `bench/ab_write.py`: one session per run on a toy repo where
+  the agent moves `/health`'s `time` to epoch seconds because the data team reads it from
+  another timezone, so the reason exists only in the request, not in the code. The run only
+  counts when `events.jsonl` gained a **new** `save` whose text matches the topic
+  (`epoch|utc|tz|timezone|iso|timestamp`). Arms:
   `plain` (control), `empty`, `stale`, `poison` and `distractors` (100 fillers). Criteria
   pre-registered in [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md) (n ≥ 30 per
   arm, Wilson 95%, the `empty` lower bound ≥ 0.5 and no overlap with `plain`, controls
-  within 0.20 of `empty`). **Pending: the n = 30 run.** The harness is covered by
+  within 0.20 of `empty`). **Measured 2026-11-20** (`--arms empty,plain`, n = 30): `empty`
+  2/30 (IC95 0.018-0.213), `plain` 0/30 (0.000-0.114), 0 non-zero exits. Criterion 1 fails
+  (lower bound 0.5 and the intervals overlap), so the three control arms were not run and
+  the risk "the agent does not save memories" stays open. Numbers in
+  [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md). The harness is covered by
   `tests/test_ab_write.py` (detection, Wilson and cleanup with a fake run). Smoke on
   2026-11-19 with the final scenario: `plain` 0/1, `empty` 0/1 (a probe confirmed the
   model reads the snippet, so the zero is the model not saving).
@@ -372,8 +378,11 @@ reopens it.
   duplicates would measure the fixture.
 - `sqlite-vec`. **Closed:** paraphrase Hit@3 0.90 ≥ 0.8 at 52 and 10,052 memories.
   Reopen if paraphrase Hit@3 falls below 0.8 on the dataset or a real corpus.
-- Passive capture through a git hook. **Closed:** in the A/B the agent saved without a hook
-  (16/16). Reopen if sessions show the agent not saving and the snippet rule is not enough.
+- Passive capture through a git hook. **Closed:** the retrieval A/B had the agent read the
+  memory without a hook (16/16). Reopen if sessions show the agent not saving and the
+  snippet rule is not enough. **Trigger met, unmeasured fix (2026-11-20):** the write-side
+  A/B scored `empty` 2/30, so the agent does not save after learning. The choice (hook vs a
+  shorter, imperative snippet) is not part of S21 and needs its own measurement.
 - `anchor_cache` table in `cairn.db`. **Closed after its trigger fired:** 200 anchors of
   256 KiB (50 MB) added 81 ms to the p50 of `save`. The safe part is applied instead
   (`render_l0` hashes the candidate anchors in 8 threads: 81 → 58 ms), because reusing a
@@ -386,7 +395,7 @@ reopens it.
 
 | Risk                                                              | Mitigation                                                                                                   |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| The agent does not save memories                                  | Clear rules in the snippet plus an optional `Stop` hook. Measure in the A/B                                  |
+| The agent does not save memories                                  | Clear rules in the snippet plus an optional `Stop` hook. Measured 2026-11-20: write-side 2/30 (`empty`) vs retrieval 16/16; still open |
 | The agent saves junk                                              | A "do NOT save..." rule, a 500-character limit and `topic_key` to replace old entries                        |
 | Stale due to a whole-file anchor (false positives on large files) | It only warns (`⚠ revisar`), it does not hide. Measure the rate in the A/B. Anchor to the most specific file |
 | Windows startup latency (antivirus, pipx shim)                    | Measure end-to-end in M4. Minimal imports                                                                    |
