@@ -106,10 +106,11 @@ def import_legacy(db_path, dry_run=False) -> dict:
                     report["rejected"] += 1
                     continue
             sid = _id(row["id"])
-            if not dry_run and target.get(sid):
-                report["skipped"] += 1
-                continue
             if not dry_run:
+                assert target is not None
+                if target.get(sid):
+                    report["skipped"] += 1
+                    continue
                 try:
                     target.save(summary, id=sid, ts=_ts(row["created_at"]))
                 except ValueError:
@@ -129,9 +130,11 @@ def import_legacy(db_path, dry_run=False) -> dict:
             continue
 
         mid = _id(row["id"])
-        if not dry_run and store.get(mid):
-            report["skipped"] += 1
-            continue
+        if not dry_run:
+            assert store is not None
+            if store.get(mid):
+                report["skipped"] += 1
+                continue
         body, why = _split(row["content"])
         # Título vacío o larguísimo no debe perder la memoria migrada.
         title = (row["title"] or "").strip() or body[:MAX_TITLE] or "untitled"
@@ -144,6 +147,7 @@ def import_legacy(db_path, dry_run=False) -> dict:
                 report["rejected"] += 1
                 continue
         else:
+            assert store is not None
             try:
                 store.save(
                     kind=KIND_BY_TYPE.get(row["type"], "fact"),
@@ -192,7 +196,7 @@ def _ts(value):
     return int(moment.timestamp() * 1_000_000_000)
 
 
-def _split(content: str) -> tuple[str, str]:
+def _split(content: str) -> tuple[str, str | None]:
     """`What` -> body; `Why/Where/Learned` -> why. Sin secciones: todo a body."""
     content = (content or "").strip()
     matches = list(SECTION.finditer(content))

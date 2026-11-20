@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+from cairn_mem import __version__
 from cairn_mem.anchor import is_stale, resolve_anchor
 from cairn_mem.i18n import t
 from cairn_mem.paths import data_dir, personal_dir
@@ -139,7 +140,7 @@ def _cmd_save(ns) -> int:
     )
     similar = [row for row in store.similar(ns.title, ns.body) if row["id"] != mid]
     if ns.json:
-        payload = {"id": mid}
+        payload: dict[str, object] = {"id": mid}
         if similar:
             payload["similar"] = similar
         _print_json(payload)
@@ -403,7 +404,11 @@ def _cmd_import(ns) -> int:
     if ns.json:
         _print_json(report)
         return 0
-    prefix = t("would import", "se importarían") if ns.dry_run else t("imported", "importadas")
+    prefix = (
+        t("would import", "se importarían")
+        if ns.dry_run
+        else t("imported", "importadas")
+    )
     print(
         t(
             f"{prefix} {report['memories']} memories and {report['sessions']} sessions "
@@ -480,8 +485,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
 
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+
     init = sub.add_parser(
-        "init", help=t("creates .cairn/ (local-only by default)", "crea .cairn/ (local-only por defecto)")
+        "init",
+        help=t(
+            "creates .cairn/ (local-only by default)",
+            "crea .cairn/ (local-only por defecto)",
+        ),
     )
     init.add_argument(
         "--share",
@@ -518,7 +529,9 @@ def _parser() -> argparse.ArgumentParser:
     save.add_argument("--json", action="store_true")
     save.set_defaults(handler=_cmd_save)
 
-    search = sub.add_parser("search", help=t("searches active memories", "busca memorias activas"))
+    search = sub.add_parser(
+        "search", help=t("searches active memories", "busca memorias activas")
+    )
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=5)
     search.add_argument("--kind", choices=KINDS)
@@ -548,7 +561,9 @@ def _parser() -> argparse.ArgumentParser:
     get.add_argument("--json", action="store_true")
     get.set_defaults(handler=_cmd_get)
 
-    archive = sub.add_parser("archive", help=t("archives a memory", "archiva una memoria"))
+    archive = sub.add_parser(
+        "archive", help=t("archives a memory", "archiva una memoria")
+    )
     archive.add_argument("id")
     archive.set_defaults(handler=_cmd_archive)
 
@@ -629,9 +644,7 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--json", action="store_true")
     check.set_defaults(handler=_cmd_check)
 
-    session = sub.add_parser(
-        "session", help=t("session recaps", "resúmenes de sesión")
-    )
+    session = sub.add_parser("session", help=t("session recaps", "resúmenes de sesión"))
     session_sub = session.add_subparsers(dest="session_command", required=True)
     session_save = session_sub.add_parser(
         "save", help=t("saves a recap", "guarda un resumen")
@@ -662,7 +675,10 @@ def _parser() -> argparse.ArgumentParser:
     session_get.set_defaults(handler=_cmd_session_get)
 
     importer = sub.add_parser(
-        "import", help=t("imports memory from another tool", "importa memoria de otra herramienta")
+        "import",
+        help=t(
+            "imports memory from another tool", "importa memoria de otra herramienta"
+        ),
     )
     importer.add_argument("source", choices=["legacy"])
     importer.add_argument(
@@ -675,7 +691,8 @@ def _parser() -> argparse.ArgumentParser:
     importer.set_defaults(handler=_cmd_import)
 
     mcp = sub.add_parser(
-        "mcp", help=t("serves MCP over stdio (JSON-RPC)", "sirve MCP por stdio (JSON-RPC)")
+        "mcp",
+        help=t("serves MCP over stdio (JSON-RPC)", "sirve MCP por stdio (JSON-RPC)"),
     )
     mcp.add_argument(
         "--read-only",
@@ -732,7 +749,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     export.add_argument(
         "--out",
-        help=t("output file (stdout by default)", "fichero de salida (por defecto stdout)"),
+        help=t(
+            "output file (stdout by default)", "fichero de salida (por defecto stdout)"
+        ),
     )
     export.set_defaults(handler=_cmd_export)
     return p

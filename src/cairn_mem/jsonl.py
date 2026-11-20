@@ -2,10 +2,11 @@
 
 import json
 import os
+import sys
 import threading
 from pathlib import Path
 
-if os.name == "nt":
+if sys.platform == "win32":
     import msvcrt
 else:
     import fcntl
@@ -22,7 +23,7 @@ def _lock(fd: int) -> None:
     """Serializa procesos enteros: `_LOCK` solo cubre hilos. Sin esto, el
     `_repair_tail` de un proceso trunca la línea a medias de otro (medido: 190 de
     200 eventos con 8 procesos en Windows, con líneas vacías)."""
-    if os.name == "nt":
+    if sys.platform == "win32":
         os.lseek(fd, 0, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_LOCK, 1)  # reintenta ~10 s
     else:
@@ -30,7 +31,7 @@ def _lock(fd: int) -> None:
 
 
 def _unlock(fd: int) -> None:
-    if os.name == "nt":
+    if sys.platform == "win32":
         os.lseek(fd, 0, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
     else:

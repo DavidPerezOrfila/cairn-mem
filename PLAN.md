@@ -371,9 +371,13 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
 
 ### Minors
 
-- [ ] `cairn --version` (nothing prints the version today; MCP does it in `serverInfo`).
-- [ ] Classifiers list 3.10-3.14 (today only 3.10 and 3.14).
-- [ ] 13 mypy errors.
+- [x] `cairn --version` (nothing printed the version; MCP does it in `serverInfo`).
+  `action="version"` on the root parser plus one test in `tests/test_cli.py`.
+- [x] Classifiers list 3.10-3.14.
+- [x] 0 mypy errors (were 13): `TypedDict` for `HARNESSES`, annotated `Server` caches,
+  `dict[str, object]` for the `save` payload, `_split` returns `str | None` and two asserts
+  in the importer's dry-run paths, and `sys.platform` instead of `os.name` so mypy prunes
+  the `fcntl` branch. `mypy` joins the `dev` extras and CI so the count stays 0.
 - Dropped: lazy imports (Windows pays process startup, MCP is the answer; Linux imports
   were 46 ms). Git history email: **not** rewritten; going forward commits use the GitHub
   noreply address.

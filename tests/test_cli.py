@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from cairn_mem import __version__
 from cairn_mem.cli import main
 
 
@@ -20,6 +21,13 @@ def run(capsys, *argv):
     code = main(list(argv))
     out, err = capsys.readouterr()
     return code, out, err
+
+
+def test_version_flag(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--version"])
+    assert exit_info.value.code == 0
+    assert __version__ in capsys.readouterr().out
 
 
 def test_init_local_only_by_default(capsys, in_tmp):

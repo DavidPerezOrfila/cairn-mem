@@ -6,6 +6,7 @@ instrucciones. Las rutas y formatos viven solo aquí.
 
 import json
 from pathlib import Path
+from typing import TypedDict
 
 from cairn_mem.i18n import t
 from cairn_mem.paths import data_dir
@@ -37,7 +38,17 @@ SNIPPET = """## Project memory (cairn-mem)
 - If an entry comes back with "⚠ review", check the code before trusting it. If the
   code changed, rewrite the entry with the same `--topic`."""
 
-HARNESSES = {
+
+class Harness(TypedDict):
+    config: str
+    config_path: tuple[str, ...]
+    server: dict[str, object]
+    base: dict[str, object]
+    instructions: str
+    label: str
+
+
+HARNESSES: dict[str, Harness] = {
     "claude-code": {
         "config": ".mcp.json",
         "config_path": ("mcpServers", "cairn"),
@@ -183,14 +194,18 @@ def setup(harness: str, directory: Path) -> list[str]:
     else:
         snippet_changed = _write_snippet(instructions)
         state = (
-            t("updated", "actualizado") if snippet_changed else t("already there", "ya estaba")
+            t("updated", "actualizado")
+            if snippet_changed
+            else t("already there", "ya estaba")
         )
         snippet_line = t(
             f"instructions: {instructions} ({state})",
             f"instrucciones: {instructions} ({state})",
         )
     config_state = (
-        t("updated", "actualizado") if config_changed else t("already there", "ya estaba")
+        t("updated", "actualizado")
+        if config_changed
+        else t("already there", "ya estaba")
     )
     lines = [
         f"config: {config} ({config_state})",

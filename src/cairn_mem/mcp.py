@@ -176,8 +176,8 @@ READ_TOOLS = frozenset({"search", "get", "context", "session_list", "session_get
 class Server:
     def __init__(self, read_only: bool = False):
         self.read_only = read_only
-        self._store = None
-        self._personal = None
+        self._store: Store | None = None
+        self._personal: Store | None = None
 
     def store(self) -> Store:
         if self._store is None:
