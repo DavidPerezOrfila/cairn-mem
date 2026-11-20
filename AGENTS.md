@@ -8,15 +8,17 @@
   sessions), S20 (secrets v3 by value shape, injection rejection plus the L0 header,
   non-blocking dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan and the
   agent-facing English L0/MCP), S21 (`setup` de-dup through `@AGENTS.md`, `CAIRN_LANG`
-  and the write-side A/B) and S22 (`keywords` indexed in FTS, `cairn history <topic>` and
-  the cross-process file lock) are implemented.** 0.17.0 is published (2026-11-20, tagged
-  `v0.17.0`, Trusted Publishing). The write-side A/B ran on 2026-11-20 (`empty` 2/30,
-  `plain` 0/30, criterion 1 failed; the control arms were not run and the risk stays
-  open). Pending plan: the minors — see `PLAN.md` §4.1.
+  and the write-side A/B), S22 (`keywords` indexed in FTS, `cairn history <topic>` and
+  the cross-process file lock), S23 (imperative snippet; write side 2/30 -> 17/30) and S24
+  (the lock lives in `<file>.lock` so readers are not blocked) are implemented.** 0.17.0 is
+  published (2026-11-20, tagged `v0.17.0`, Trusted Publishing). The write-side A/B ran on
+  2026-11-20: `empty` 2/30, `plain` 0/30, then the imperative snippet 17/30; criterion 1
+  (LB >= 0.5) still fails and the risk stays open, next lever the `Stop` hook. Pending plan:
+  the `Stop` hook round and the minors — see `PLAN.md` §4.1.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (429 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  `tests/` (431 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
   (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
   tail repair and the 8-process append, incremental sync, retrieval, the paraphrase gate
   for `keywords`, the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the

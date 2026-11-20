@@ -53,6 +53,45 @@ n ≥ 30 per arm, Wilson 95% interval, runs with `exit != 0` excluded and report
 4. **Harness health:** if more than 10% of the runs in any arm exit non-zero, the scenario
    is broken; fix the bench before reading the numbers.
 
+## Round 2 (S23): the imperative snippet (written 2026-11-20, before the run)
+
+Round 1 (`empty` 2/30) leaves two candidate levers: the wording of the snippet and a Stop
+hook. This round measures **only the wording**, with everything else frozen (scenario,
+model, predicate, timeout).
+
+New arm, `imperative`: the same empty `.cairn` as `empty`; the only difference is the
+`AGENTS.md` text (`bench/ab_write.py:IMPERATIVE`). The save rule becomes an obligation with
+a moment ("Before you reply, ask: did I learn a reason that lives only in this
+conversation?") and says that the user's reason goes into `--why`. That is the failure this
+scenario probes: the why exists only in the request.
+
+Controls are reused, not re-run: `empty` 2/30 (IC95 0.018-0.213) and `plain` 0/30,
+measured on 2026-11-20 with the same scenario and model.
+
+1. **Primary:** `imperative`'s Wilson lower bound ≥ 0.5 (at least 21/30) and its interval
+   does not overlap `empty`'s (LB > 0.213).
+2. **No junk:** at least 20 of the winners must be about the timezone change, read by hand
+   in the `--json` rows. The verdict is only published after reading them.
+3. **Cost:** the token mean of the sessions must not exceed the round 1 `empty` mean
+   (17,635 without the winners; 21,826 overall) by more than 25%.
+4. **Harness health:** more than 10% of non-zero exits in the arm breaks the run, not the
+   result.
+
+If it fails, the wording lever is closed and the next round measures the Stop hook on its
+own; the risk stays open.
+
+**Outcome (2026-11-20):** 17/30 (IC95 0.392-0.726), 30/30 exits 0, 18,188 tokens. Criterion
+1 fails (LB 0.392 < 0.5); the text is shipped anyway because it is 8.5x the control at -17 %
+tokens (`docs/AB_RESULTS.md`). The next round is the Stop hook, with its own criteria.
+
+### Harness defect found while round 2 ran (2026-11-20)
+
+`bench/ab.py:_snippet()` cut the doc by line number, so the `empty` control's `AGENTS.md`
+started with two prose lines of the doc and a stray ` ```markdown ` fence. Round 1's numbers
+stand for that exact text: the defect adds noise to the control, it does not change its rule.
+Fixed to extract the fenced block, and `tests/test_ab_write.py` now asserts the block equals
+`cairn_mem.setup.SNIPPET`, so the measured text and the installed text cannot drift again.
+
 ## Limits
 
 - One model, one scenario, one language: it measures what the snippet achieves with that

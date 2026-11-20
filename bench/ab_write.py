@@ -1,9 +1,9 @@
 """A/B de escritura: ¿el agente guarda el gotcha que acaba de descubrir? (S21).
 
-Una sesión por corrida: un repo de juguete cuyo test exige una variable de entorno que solo
-CI exporta; el agente lo descubre y después se mira si `events.jsonl` ganó un `save` con las
-palabras del gotcha. El protocolo y los criterios están escritos ANTES de medir en
-`bench/ab_write_protocol.md`.
+Una sesión por corrida sobre un repo de juguete: el usuario explica el porqué de un cambio
+(de ISO local a epoch) que no está en el código; después se mira si `events.jsonl` ganó un
+`save` nuevo con las palabras del gotcha. El protocolo y los criterios están escritos ANTES
+de medir en `bench/ab_write_protocol.md`.
 
 Requiere el CLI `opencode` en PATH, como `bench/ab.py`.
 """
@@ -186,6 +186,13 @@ def main(argv=None) -> int:
                         "exit": result["exit"],
                         "saved": bool(gotchas),
                         "saved_ids": [event["id"] for event in gotchas],
+                        "saves": [
+                            {
+                                key: event.get(key)
+                                for key in ("kind", "title", "body", "why")
+                            }
+                            for event in gotchas
+                        ],
                         "tokens": result["tokens"],
                         "tools": result["tools"],
                         "answer": result["answer"][:200],

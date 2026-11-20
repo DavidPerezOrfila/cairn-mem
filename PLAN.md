@@ -244,6 +244,7 @@ Each round is a slice: tests first, gate, review and its own release.
 | S20   | Auditoría externa: secretos v3 por forma del valor y formatos (Oracle/SAS/Fernet/Azure/sk-/Slack), rechazo de inyección con cabecera en el L0, dedupe no bloqueante (aviso a 0,3-0,9, bloqueo a 0,9), `pin`/`unpin` solo CLI, `purge`, `topics`, `doctor` reescanea secretos y L0/MCP en inglés | 0.16.0                | [`docs/features/s20-security-dedupe-pin.md`](docs/features/s20-security-dedupe-pin.md)         |
 | S21   | A/B de escritura (`bench/ab_write.py`: ¿el agente guarda el gotcha que acaba de descubrir? con controles stale, envenenado y 100 distractores; criterios escritos antes de medir), `setup` sin bloque duplicado cuando el fichero importa `@AGENTS.md`, `CAIRN_LANG` (inglés por defecto en CLI/`doctor`/`setup`, `es` opt-in; el núcleo y el MCP siempre en inglés) | 0.17.0 | [`docs/features/s21-write-ab-lang-setup.md`](docs/features/s21-write-ab-lang-setup.md) |
 | S22   | `keywords` indexado en FTS (`SCHEMA_VERSION = 6`), `cairn history <topic>` y lock de fichero entre procesos (el test de 8 procesos midió la pérdida de eventos) | 0.17.0 | [`docs/features/s22-retrieval-fields.md`](docs/features/s22-retrieval-fields.md) |
+| S23   | Snippet imperativo (antídoto a "write-side 2/30"): obligación con momento, el porqué del usuario va en `--why`; medido 17/30 frente a 2/30 al -17 % de tokens, criterio primario incumplido (LB 0,392 < 0,5); dos defectos del banco de escritura corregidos | sin release | [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md) |
 | S24   | El lock entre procesos pasa a `<fichero>.lock`: bloquear byte 0 de `events.jsonl` impedía leerlo desde otro proceso en Windows y el `rebuild` moría con `PermissionError` (2 de 5 corridas del test concurrente) | sin release | `tests/test_jsonl.py`, `docs/DECISIONS.md` |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
@@ -370,6 +371,23 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
   (`msvcrt.locking` byte 0 on Windows, `fcntl.flock` on POSIX) around repair + write; the
   test seeds a torn tail and asserts 200 valid lines and a clean rebuild (5/5 repeat runs).
 
+### S23: the imperative snippet (write side)
+
+- [x] **Round 2 of the write-side A/B.** `--arms imperative --reps 30`: the save rule
+  becomes an obligation with a moment and says the user's reason goes into `--why`.
+  **Measured 2026-11-20:** 17/30 (IC95 0.392-0.726) against 2/30 (0.018-0.213), 18,188
+  tokens against 21,826, 30/30 `exit == 0`. Criterion 1 **fails** (LB 0.392 < 0.5) and is
+  reported as such; criterion 2 was not verifiable because the rows did not carry the saved
+  text. Numbers in [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md).
+- [x] **Shipped the better text anyway,** on the measured axes (8.5x saves, -17 % tokens):
+  `SNIPPET` in `setup.py` and the block in `docs/AGENT_SNIPPET.md`, pinned equal by
+  `tests/test_ab_write.py` and `tests/test_setup.py`.
+- [x] **Two bench defects:** `ab._snippet()` sliced the doc by line number (round 1's
+  control carried two prose lines and a stray fence) and the `--json` rows lost the saved
+  text (`saves` now carries kind/title/body/why, so the next round can be audited).
+- [ ] Next lever: a `Stop` hook that asks for the decisions when the session goes idle. Its
+  criteria go in `bench/ab_write_protocol.md` before it runs; the risk stays open at 57 %.
+
 ### Minors
 
 - [x] `cairn --version` (nothing printed the version; MCP does it in `serverInfo`).
@@ -402,9 +420,9 @@ reopens it.
   Reopen if paraphrase Hit@3 falls below 0.8 on the dataset or a real corpus.
 - Passive capture through a git hook. **Closed:** the retrieval A/B had the agent read the
   memory without a hook (16/16). Reopen if sessions show the agent not saving and the
-  snippet rule is not enough. **Trigger met, unmeasured fix (2026-11-20):** the write-side
-  A/B scored `empty` 2/30, so the agent does not save after learning. The choice (hook vs a
-  shorter, imperative snippet) is not part of S21 and needs its own measurement.
+  snippet rule is not enough. **Trigger met, measured (2026-11-20):** the write-side A/B
+  scored `empty` 2/30, so the agent does not save after learning. S23 measured the wording
+  lever (17/30, criterion LB 0.392 < 0.5) and shipped it; the `Stop` hook is the next round.
 - `anchor_cache` table in `cairn.db`. **Closed after its trigger fired:** 200 anchors of
   256 KiB (50 MB) added 81 ms to the p50 of `save`. The safe part is applied instead
   (`render_l0` hashes the candidate anchors in 8 threads: 81 → 58 ms), because reusing a
@@ -417,7 +435,7 @@ reopens it.
 
 | Risk                                                              | Mitigation                                                                                                   |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| The agent does not save memories                                  | Clear rules in the snippet plus an optional `Stop` hook. Measured 2026-11-20: write-side 2/30 (`empty`) vs retrieval 16/16; still open |
+| The agent does not save memories                                  | Clear rules in the snippet plus an optional `Stop` hook. Measured 2026-11-20: write-side 2/30 (`empty`) -> 17/30 with the imperative snippet (S23), retrieval 16/16; the criterion (LB >= 0.5) still fails, so the risk stays open and the `Stop` hook is the next round |
 | The agent saves junk                                              | A "do NOT save..." rule, a 500-character limit and `topic_key` to replace old entries                        |
 | Stale due to a whole-file anchor (false positives on large files) | It only warns (`⚠ revisar`), it does not hide. Measure the rate in the A/B. Anchor to the most specific file |
 | Windows startup latency (antivirus, pipx shim)                    | Measure end-to-end in M4. Minimal imports                                                                    |

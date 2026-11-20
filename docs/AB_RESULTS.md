@@ -86,3 +86,50 @@ learned is 2/30. "Save decisions with a reason" as prose is not enough. Candidat
 steps, none measured or implemented: a `Stop` hook that asks the session for the decisions
 it took, and a shorter, imperative snippet. Until one is measured, the risk row "the agent
 does not save memories" in `PLAN.md` §6 stays open.
+
+# Write-side A/B, round 2: the imperative snippet (2026-11-20)
+
+`python bench/ab_write.py --arms imperative --reps 30 --json` (Windows 11, Python 3.14.10,
+OpenCode 2.3.2 default model). Same scenario, predicate and timeout as round 1; the only
+change is the `AGENTS.md` text: the save rule becomes an obligation with a moment ("Before
+you reply, ask: did I learn a reason that lives only in this conversation?") and says that
+the user's reason goes into `--why`. Criteria for this arm were written before the run in
+[`bench/ab_write_protocol.md`](../bench/ab_write_protocol.md).
+
+| Arm | Saved | Wilson 95 % | Tokens (mean) | Tool calls (mean) |
+|---|---|---|---|---|
+| `empty` (round 1 snippet, reused) | 2/30 | 0.018-0.213 | 21,826 | 7.4 |
+| `imperative` | 17/30 | 0.392-0.726 | 18,188 | 8.5 |
+
+The control is round 1's, not re-run: same scenario, model and machine, the same day.
+
+## Verdict against the criteria
+
+1. **Primary: FAILS.** 17/30 gives a Wilson lower bound of 0.392 against the required 0.5.
+   The interval does not overlap the control's (0.392 > 0.213) and the point estimate is
+   8.5x the control's, but the pre-registered bar was "the snippet makes the agent save",
+   and 57 % is not that. The goal was not moved after seeing the number.
+2. **No junk: NOT VERIFIABLE after the fact.** Round 2's rows carry the saved ids but not
+   their text, and the bench deletes the temp repo. The harness now puts `kind`, `title`,
+   `body` and `why` of every counted save in the row (`saves`), so the next round can be
+   read. A harness gap, recorded, not a result.
+3. **Cost: PASSES.** 18,188 tokens against the control's 21,826 (-17 %): the obligation
+   does not cost more tokens.
+4. **Harness health: PASSES.** 30/30 runs `exit == 0`.
+
+## What this means
+
+Wording moved the rate from 2/30 to 17/30 at a lower token cost, so the imperative text is
+shipped as the snippet (`cairn_mem.setup.SNIPPET` and `docs/AGENT_SNIPPET.md`, pinned equal
+by a test) even though it fails the bar: it is better on every measured axis and nothing
+else changed. The shipped text adds back the `--personal` and "⚠ review" lines the
+candidate dropped; round 3 re-measures it as its control.
+
+The risk "the agent does not save memories" stays open at 57 %. The next lever is a `Stop`
+hook that asks for the decisions when the session goes idle; it gets its own round and its
+own criteria, written before it runs.
+
+Two harness defects found while running round 2, both fixed: `bench/ab.py:_snippet()`
+sliced the doc by line number, so round 1's control carried two prose lines and a stray
+fence in `AGENTS.md` (those numbers stand for that text; a test now pins the block to
+`cairn_mem.setup.SNIPPET`), and the rows lost the saved text (above).
