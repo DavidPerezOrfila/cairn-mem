@@ -9,9 +9,10 @@
   non-blocking dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan and the
   agent-facing English L0/MCP) and S21 (`setup` de-dup through `@AGENTS.md`, `CAIRN_LANG`
   and the write-side A/B) are implemented.** 0.16.0 is published (2026-11-18, tagged
-  `v0.16.0`, Trusted Publishing); S21 is implemented and unreleased. Pending plan: the
-  n = 30 run of `bench/ab_write.py`, S22 (`--keywords`, `history`, Windows multiprocess
-  test) and the minors — see `PLAN.md` §4.1.
+  `v0.16.0`, Trusted Publishing); S21 is implemented and unreleased. The write-side A/B
+  ran on 2026-11-20 (`empty` 2/30, `plain` 0/30, criterion 1 failed; the control arms were
+  not run and the risk stays open). Pending plan: S22 (`--keywords`, `history`, Windows
+  multiprocess test) and the minors — see `PLAN.md` §4.1.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.

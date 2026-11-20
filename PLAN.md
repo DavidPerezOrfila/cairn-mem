@@ -323,7 +323,11 @@ one-round-per-release rule and add its row to the §4 table when it ships.
   `plain` (control), `empty`, `stale`, `poison` and `distractors` (100 fillers). Criteria
   pre-registered in [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md) (n ≥ 30 per
   arm, Wilson 95%, the `empty` lower bound ≥ 0.5 and no overlap with `plain`, controls
-  within 0.20 of `empty`). **Pending: the n = 30 run.** The harness is covered by
+  within 0.20 of `empty`). **Measured 2026-11-20** (`--arms empty,plain`, n = 30): `empty`
+  2/30 (IC95 0.018-0.213), `plain` 0/30 (0.000-0.114), 0 non-zero exits. Criterion 1 fails
+  (lower bound 0.5 and the intervals overlap), so the three control arms were not run and
+  the risk "the agent does not save memories" stays open. Numbers in
+  [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md). The harness is covered by
   `tests/test_ab_write.py` (detection, Wilson and cleanup with a fake run). Smoke on
   2026-11-19 with the final scenario: `plain` 0/1, `empty` 0/1 (a probe confirmed the
   model reads the snippet, so the zero is the model not saving).
@@ -386,7 +390,7 @@ reopens it.
 
 | Risk                                                              | Mitigation                                                                                                   |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| The agent does not save memories                                  | Clear rules in the snippet plus an optional `Stop` hook. Measure in the A/B                                  |
+| The agent does not save memories                                  | Clear rules in the snippet plus an optional `Stop` hook. Measured 2026-11-20: write-side 2/30 (`empty`) vs retrieval 16/16; still open |
 | The agent saves junk                                              | A "do NOT save..." rule, a 500-character limit and `topic_key` to replace old entries                        |
 | Stale due to a whole-file anchor (false positives on large files) | It only warns (`⚠ revisar`), it does not hide. Measure the rate in the A/B. Anchor to the most specific file |
 | Windows startup latency (antivirus, pipx shim)                    | Measure end-to-end in M4. Minimal imports                                                                    |
