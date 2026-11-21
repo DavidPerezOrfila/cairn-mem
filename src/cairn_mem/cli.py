@@ -22,6 +22,7 @@ GITIGNORE = (
     "MEMORY.md",
     ".MEMORY.md.*",
     "sessions.jsonl",
+    "events.jsonl.bak",
     "*.lock",
 )
 

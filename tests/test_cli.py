@@ -62,18 +62,19 @@ def test_init_preserves_foreign_gitignore_lines(capsys, in_tmp):
         "custom.txt\nevents.jsonl\n", encoding="utf-8"
     )
     assert run(capsys, "init", "--share")[0] == 0
-    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "custom.txt" in ignore and "events.jsonl" not in ignore
     assert run(capsys, "init")[0] == 0
-    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "custom.txt" in ignore and "events.jsonl" in ignore
 
 
 def test_init_is_idempotent_and_share_can_be_reenabled(capsys, in_tmp):
     assert run(capsys, "init")[0] == 0
     assert run(capsys, "init", "--share")[0] == 0
-    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "events.jsonl" not in ignore
+    assert "events.jsonl.bak" in ignore  # el .bak de purge nunca se versiona
 
 
 def test_init_refuses_nested_store(capsys, in_tmp, monkeypatch):
@@ -88,7 +89,7 @@ def test_init_refuses_nested_store(capsys, in_tmp, monkeypatch):
 
 def test_init_share_tracks_events(capsys, in_tmp):
     run(capsys, "init", "--share")
-    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8")
+    ignore = (in_tmp / ".cairn" / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "events.jsonl" not in ignore
 
 

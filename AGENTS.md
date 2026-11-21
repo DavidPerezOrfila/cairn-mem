@@ -18,9 +18,10 @@
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (431 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  `tests/` (433 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
   (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
-  tail repair and the 8-process append, incremental sync, retrieval, the paraphrase gate
+  tail repair and the 8-process append, the purge under a concurrent append and its Git-excluded
+  backup, incremental sync, retrieval, the paraphrase gate
   for `keywords`, the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the
   integrity audit fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B
   detection, the backlog benches and the bench hygiene.
@@ -189,11 +190,17 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   processes truncate each other's lines (measured 190-197 of 200 lines with 8 processes).
   The lock is taken on `<file>.lock` (S24), never on the log: a locked byte 0 of a Windows
   file fails to read from another process (2 of 5 runs of the concurrent test died in
-  `rebuild` with `PermissionError`), so the log must stay unlocked. `*.lock` is in the
-  managed `.gitignore` entries.
+  `rebuild` with `PermissionError`), so the log must stay unlocked. `*.lock` and
+  `events.jsonl.bak` are in the managed `.gitignore` entries: the backup keeps the purged
+  secret and a `--share` repo would send it with `git add .`.
 - **Purge:** `cairn purge <id>` rewrites `events.jsonl` without every event of that id
   (save, archive, pin) and leaves `events.jsonl.bak`. It exists because the JSONL is
   append-only and `archive` keeps the secret in Git; it warns to rotate the credential.
+  It takes `_LOCK` plus the `<file>.lock` file lock around the read **and** the replace
+  (`_remove_events`): without it a concurrent `save` lands in the old file and `os.replace`
+  discards it, and on Windows the replace fails with the log open in another process. The
+  lock covers the whole rewrite (measured 2026-11-21: 50 ms at 10k events, 487 ms at 100k
+  / 19.8 MiB, against the ~10 s `msvcrt.locking` wait); `rebuild` runs outside it.
 - Minimal imports at startup. CLI end-to-end SLO: p95 `search` < 350 ms and `save` <
   500 ms, startup included. In-process MCP tool call: < 50 ms.
 - **MCP:** stdout carries protocol only (NDJSON in binary, `\n`). Logs go to stderr. No
