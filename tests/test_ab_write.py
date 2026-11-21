@@ -50,6 +50,55 @@ def test_prepare_seeds_each_arm(tmp_path):
     assert rows and rows[0]["topic_key"] == "health/time-format"
 
 
+def test_stop_arm_installs_the_hook_and_the_others_do_not(tmp_path):
+    """Criterio 5 del protocolo: el brazo `stop` es `imperative` + el hook, y solo él."""
+    module = _module("ab_write")
+    stop = tmp_path / "stop"
+    module._prepare(stop, "stop")
+    hook = stop / ".opencode" / "plugins" / "cairn-stop" / "index.ts"
+    assert "session.execution.succeeded" in hook.read_text(encoding="utf-8")
+    assert ".cairn-nudge.log" in hook.read_text(encoding="utf-8")
+    assert (stop / "AGENTS.md").read_text(encoding="utf-8") == module._snippet()
+
+    imperative = tmp_path / "imperative"
+    module._prepare(imperative, "imperative")
+    assert not (imperative / ".opencode").exists()
+
+
+def test_nudges_come_from_the_hook_log(monkeypatch, tmp_path, capsys):
+    module = _module("ab_write")
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda **kwargs: str(tmp_path / "run"))
+
+    def fake_run(directory, prompt, timeout=240):
+        (directory / ".cairn-nudge.log").write_text("ses_1\nses_1\n", encoding="utf-8")
+        return {"answer": "ok", "tokens": 5, "tools": 1, "exit": 0}
+
+    monkeypatch.setattr(module, "_run", fake_run)
+    assert module.main(["--arms", "stop", "--reps", "1", "--json"]) == 0
+    row = json.loads(capsys.readouterr().out)[0]
+    assert row["nudges"] == 2 and row["saved"] is False
+
+
+def test_arms_run_interleaved_by_rep(monkeypatch, tmp_path, capsys):
+    """Protocolo ronda 3: los dos brazos se intercalan para que la deriva del modelo no
+    favorezca a uno."""
+    module = _module("ab_write")
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda **kwargs: str(tmp_path / "run"))
+    monkeypatch.setattr(
+        module,
+        "_run",
+        lambda directory, prompt, timeout=240: {
+            "answer": "",
+            "tokens": 1,
+            "tools": 0,
+            "exit": 0,
+        },
+    )
+    assert module.main(["--arms", "imperative,stop", "--reps", "2", "--json"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [row["arm"] for row in rows] == ["imperative", "stop", "imperative", "stop"]
+
+
 def test_only_new_saves_that_mention_the_gotcha_count(tmp_path):
     module = _module("ab_write")
     project = tmp_path / "p"

@@ -387,8 +387,26 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
 - [x] **Two bench defects:** `ab._snippet()` sliced the doc by line number (round 1's
   control carried two prose lines and a stray fence) and the `--json` rows lost the saved
   text (`saves` now carries kind/title/body/why, so the next round can be audited).
-- [ ] Next lever: a `Stop` hook that asks for the decisions when the session goes idle. Its
-  criteria go in `bench/ab_write_protocol.md` before it runs; the risk stays open at 57 %.
+- [x] Next lever: a `Stop` hook that asks for the decisions when the session goes idle. Its
+  criteria were pre-registered in
+  [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md) §"Round 3 (S27)" (2026-11-21,
+  before any run): arm `stop` = the shipped snippet plus one nudge per session.
+  **Measured 2026-11-21:** 30/30 (IC95 0.886-1.000) against `imperative` 20/30
+  (0.488-0.808) in the same interleaved run, 16,329 tokens against 14,673 (1.11x), 7
+  sessions nudged once and all 7 saved after the nudge, 60/60 exits 0. Criteria 1-6 pass,
+  so the risk row closes and the hook ships with the snippet (S28, below).
+
+### S28: the Stop hook install path
+
+- [ ] `cairn setup` writes the hook per harness: an OpenCode plugin from one asset, and for
+  Claude Code its own `Stop` hook if the mechanism differs. The hook must filter sessions by
+  their project directory (the plugin API is server-wide; an unscoped probe nudged other
+  projects, S27) and nudge at most once per session.
+- [ ] The install is idempotent and only touches the repo, like the rest of `setup`; the
+  shipped text is pinned to the measured one by a test, so the bench artefact cannot drift
+  from what users get.
+- [ ] Re-run `python bench/ab_write.py --arms imperative,stop --reps 10` against the
+  installed hook (not the asset) as a smoke; the 30/30 measurement stands as the result.
 
 ### Minors
 
@@ -449,7 +467,8 @@ reopens it.
   memory without a hook (16/16). Reopen if sessions show the agent not saving and the
   snippet rule is not enough. **Trigger met, measured (2026-11-20):** the write-side A/B
   scored `empty` 2/30, so the agent does not save after learning. S23 measured the wording
-  lever (17/30, criterion LB 0.392 < 0.5) and shipped it; the `Stop` hook is the next round.
+  lever (17/30, criterion LB 0.392 < 0.5) and shipped it; the `Stop` hook closed the gap on
+  2026-11-21 (30/30 against `imperative` 20/30, same run).
 - `anchor_cache` table in `cairn.db`. **Closed after its trigger fired:** 200 anchors of
   256 KiB (50 MB) added 81 ms to the p50 of `save`. The safe part is applied instead
   (`render_l0` hashes the candidate anchors in 8 threads: 81 → 58 ms), because reusing a
@@ -462,7 +481,7 @@ reopens it.
 
 | Risk                                                              | Mitigation                                                                                                   |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| The agent does not save memories                                  | Clear rules in the snippet plus an optional `Stop` hook. Measured 2026-11-20: write-side 2/30 (`empty`) -> 17/30 with the imperative snippet (S23), retrieval 16/16; the criterion (LB >= 0.5) still fails, so the risk stays open and the `Stop` hook is the next round |
+| The agent does not save memories                                  | Clear rules in the snippet plus the `Stop` hook. **Closed by measurement 2026-11-21:** with the hook 30/30 (IC95 0.886-1.000) against 20/30 (0.488-0.808) for the text alone, same run, 1.11x tokens; the install path ships in S28 |
 | The agent saves junk                                              | A "do NOT save..." rule, a 500-character limit and `topic_key` to replace old entries                        |
 | Stale due to a whole-file anchor (false positives on large files) | It only warns (`⚠ revisar`), it does not hide. Measure the rate in the A/B. Anchor to the most specific file |
 | Windows startup latency (antivirus, pipx shim)                    | Measure end-to-end in M4. Minimal imports                                                                    |
