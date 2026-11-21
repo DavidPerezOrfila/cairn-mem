@@ -388,7 +388,10 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
   control carried two prose lines and a stray fence) and the `--json` rows lost the saved
   text (`saves` now carries kind/title/body/why, so the next round can be audited).
 - [ ] Next lever: a `Stop` hook that asks for the decisions when the session goes idle. Its
-  criteria go in `bench/ab_write_protocol.md` before it runs; the risk stays open at 57 %.
+  criteria are pre-registered in [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md)
+  §"Round 3 (S27)" (2026-11-21, before any run): arm `stop` = the shipped snippet plus one
+  nudge per session; primary bar LB ≥ 0.5, paired against `imperative` in the same run. Not
+  measured yet; the risk stays open at 57 %.
 
 ### Minors
 

@@ -60,7 +60,8 @@ hook. This round measures **only the wording**, with everything else frozen (sce
 model, predicate, timeout).
 
 New arm, `imperative`: the same empty `.cairn` as `empty`; the only difference is the
-`AGENTS.md` text (`bench/ab_write.py:IMPERATIVE`). The save rule becomes an obligation with
+`AGENTS.md` text (`bench/ab.py:_snippet()`, the same block `setup.py` writes). The save rule
+becomes an obligation with
 a moment ("Before you reply, ask: did I learn a reason that lives only in this
 conversation?") and says that the user's reason goes into `--why`. That is the failure this
 scenario probes: the why exists only in the request.
@@ -92,6 +93,62 @@ stand for that exact text: the defect adds noise to the control, it does not cha
 Fixed to extract the fenced block, and `tests/test_ab_write.py` now asserts the block equals
 `cairn_mem.setup.SNIPPET`, so the measured text and the installed text cannot drift again.
 
+## Round 3 (S27): the Stop hook (written 2026-11-21, before the run)
+
+Round 2 closed the wording lever at 17/30. The remaining lever from the §6 risk row is a
+hook that fires when the session goes idle. This round measures **only the hook**: the
+scenario, the predicate and the model stay frozen.
+
+### The arm
+
+`stop`: the same empty `.cairn` and the same `AGENTS.md` as `imperative`, plus one
+harness-side hook installed in the repo before the session. When a turn ends without a
+cairn `save` in that session, the harness sends **one** short prompt asking for the reason
+the user gave. The hook only asks: it never writes the memory itself, because the reason is
+the model's to state, and an auto-save would measure a bypass instead of a behaviour.
+
+- **One nudge per session, never more.** After the second silence the session ends. An
+  unbounded hook would loop and burn tokens; that is a harness defect, not a result.
+- **Not in any other arm.** `plain`, `empty` and `imperative` stay hookless: the delta is
+  the hook and nothing else.
+- **Its text is data for the run.** It lives in one directory the bench copies per run, and
+  once `cairn setup` installs it, a test pins that copy to the installed text, the same way
+  `tests/test_ab_write.py` pins `SNIPPET`. Measured text and shipped text cannot drift.
+- **Not shipped by `setup` until the numbers exist.** The round measures first; a passing
+  hook gets its own install path after the measurement.
+- The hook is OpenCode's, because the bench runs `opencode run --auto`. Claude Code's `Stop`
+  hook is a different mechanism and needs its own arm; nothing here is a claim about it.
+
+### Criteria
+
+n = 30 per arm, Wilson 95 %, `exit != 0` excluded and reported. Both arms run in **one
+invocation, interleaved** (`--arms imperative,stop`), because the shipped snippet adds back
+the `--personal` and `⚠ review` lines the round 2 candidate dropped and model drift would
+otherwise favour one arm.
+
+1. **Primary:** `stop`'s Wilson lower bound ≥ 0.5 (at least 21/30) on the unchanged
+   predicate. Same bar as rounds 1 and 2, so the risk row can close on one number.
+2. **Improvement over the wording alone:** `stop`'s lower bound exceeds `imperative`'s upper
+   bound **in the same run**. If `imperative` reproduces 17/30 (UB 0.726), that is 27/30.
+   Without this the hook is not better than the text it would ship with.
+3. **No junk:** at least 20 of `stop`'s winners are about the timezone change, read by hand
+   in the `--json` rows. The verdict is published only after reading them.
+4. **Cost:** the token mean of `stop` must not exceed 1.75x `imperative`'s mean in the same
+   run. One extra turn per session is expected; more means the agent is talking to itself.
+5. **The hook fires:** every `stop` session that ends without a save has at least one nudge
+   line in the hook's own log, and no session has more than one. If the hook does not fire,
+   the arm is void, not a zero result.
+6. **Harness health:** more than 10 % non-zero exits in either arm breaks the run.
+
+### Decision rule
+
+- 1 and 2 pass: ship the hook with the snippet, record the numbers in
+  [`docs/AB_RESULTS.md`](../docs/AB_RESULTS.md), tick the §4.1 bullet and close the risk row.
+- 1 passes, 2 fails: the hook helps but not measurably over the text; shipping it needs a
+  row in [`docs/DECISIONS.md`](../docs/DECISIONS.md) saying so, and the risk row stays open.
+- 1 fails: the hook lever is closed with its numbers, no install path is written, and the
+  risk row stays open with the next candidate named.
+
 ## Limits
 
 - One model, one scenario, one language: it measures what the snippet achieves with that
@@ -110,6 +167,7 @@ Fixed to extract the fenced block, and `tests/test_ab_write.py` now asserts the 
 python bench/ab_write.py --arms plain,empty --reps 1     # smoke: 2 sessions
 python bench/ab_write.py --reps 30                       # the measurement in the criteria
 python bench/ab_write.py --reps 30 --json                # full rows
+python bench/ab_write.py --arms imperative,stop --reps 30 --json  # round 3
 ```
 
 Results go to [`docs/AB_RESULTS.md`](../docs/AB_RESULTS.md).
