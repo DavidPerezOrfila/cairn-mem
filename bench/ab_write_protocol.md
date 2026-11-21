@@ -149,6 +149,16 @@ otherwise favour one arm.
 - 1 fails: the hook lever is closed with its numbers, no install path is written, and the
   risk row stays open with the next candidate named.
 
+### Outcome (2026-11-21)
+
+30/30 (IC95 0.886-1.000) against `imperative`'s 20/30 (0.488-0.808) in the same run, 16,329
+tokens against 14,673 (1.11x), 7 sessions nudged once and all 7 saved afterwards, 60/60
+exits 0. All six criteria pass, so the decision rule's first branch applies: the hook ships
+with the snippet and the risk row closes. Numbers in
+[`docs/AB_RESULTS.md`](../docs/AB_RESULTS.md). Shipping means writing the install path in
+`cairn setup` (S28); the bench arm is already the artefact.
+
+
 ## Limits
 
 - One model, one scenario, one language: it measures what the snippet achieves with that

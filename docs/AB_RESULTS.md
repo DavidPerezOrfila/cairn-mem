@@ -133,3 +133,57 @@ Two harness defects found while running round 2, both fixed: `bench/ab.py:_snipp
 sliced the doc by line number, so round 1's control carried two prose lines and a stray
 fence in `AGENTS.md` (those numbers stand for that text; a test now pins the block to
 `cairn_mem.setup.SNIPPET`), and the rows lost the saved text (above).
+
+# Write-side A/B, round 3: the Stop hook (2026-11-21)
+
+`python bench/ab_write.py --arms imperative,stop --reps 30 --json` (Windows 11, Python
+3.14.10, OpenCode 2.3.2, deepseek-v4.1-flash). Both arms in **one invocation,
+interleaved**, because the shipped snippet is not the round 2 candidate. Criteria written
+before the run in [`bench/ab_write_protocol.md`](../bench/ab_write_protocol.md)
+§"Round 3 (S27)".
+
+The arm: the same `AGENTS.md` and empty `.cairn` as `imperative`, plus a local OpenCode
+plugin (`bench/assets/stop/index.ts`) that waits for `session.execution.succeeded`, counts
+`save` events in `.cairn/events.jsonl`, and when the count did not move sends **one**
+prompt asking for the reason. It never writes the memory itself and only acts on sessions
+whose `location.directory` is its own project.
+
+| Arm | Saved | Wilson 95 % | Tokens (mean) | Tool calls | Sessions nudged |
+|---|---|---|---|---|---|
+| `imperative` (snippet only) | 20/30 | 0.488-0.808 | 14,673 | 8.9 | 0 |
+| `stop` (snippet + hook) | 30/30 | 0.886-1.000 | 16,329 | 10.0 | 7 |
+
+## Verdict against the criteria
+
+1. **Primary: PASSES.** 30/30, Wilson lower bound 0.886 against the required 0.5; ten
+   sessions more than the text alone in the same run.
+2. **Improvement over the wording alone: PASSES.** Lower bound 0.886 exceeds `imperative`'s
+   upper bound 0.808 for that run.
+3. **No junk: PASSES.** All 30 winners record the timezone reason (titles and `why` read in
+   the `--json` rows), not keyword noise.
+4. **Cost: PASSES.** 1.11x the text-only arm (16,329 against 14,673 tokens), well inside the
+   1.75x bound: the extra turn is paid only when the first turn wrote nothing.
+5. **The hook fires: PASSES.** Seven sessions ended their first turn without a save; each
+   got exactly one nudge and each saved in the nudge turn. Zero sessions ended unsaved and
+   zero got more than one nudge. `imperative` shows zero nudges, so the delta is the hook.
+6. **Harness health: PASSES.** 60/60 runs `exit == 0`.
+
+`imperative` scored 20/30 here against 17/30 in round 2: the shipped text adds the
+`--personal` and "⚠ review" lines the candidate dropped, and the model drifts. That is
+why the paired comparison, not round 2's number, is the criterion.
+
+## A harness finding worth keeping
+
+The plugin API is server-wide: a plugin subscribed to `session.execution.succeeded` receives
+events from **every** session on the shared service, and a first version of the probe nudged
+sessions in other projects until its instance was unloaded. The shipped hook filters by
+`session.location.directory` (and skips `parentID`), and that filter was verified: a session
+in another directory gets no nudge. Any future cairn hook needs the same guard.
+
+## What this means
+
+The hook closes the gap the text could not: 100 % against 67 % with the same instructions and
+the same model, for 11 % more tokens. The risk row "the agent does not save memories" is
+closed by measurement. The install path (`cairn setup` writing the hook per harness) is the
+next round; nothing is shipped by `setup` yet.
+
