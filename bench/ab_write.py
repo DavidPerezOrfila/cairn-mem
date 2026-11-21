@@ -22,6 +22,8 @@ from cairn_mem.store import Store
 
 GOTCHA = re.compile(r"\b(epoch|utc|tz|timezone|iso|timestamp)\b", re.IGNORECASE)
 
+HOOK = Path(__file__).resolve().parent / "assets" / "stop"
+
 TASK = (
     "Trabaja en este proyecto. El equipo de datos consume el campo `time` de /health desde "
     "otra zona horaria y no puede parsear ISO local: pásalo a epoch en segundos, deja los "
@@ -97,6 +99,9 @@ def _prepare(directory: Path, arm: str) -> None:
             encoding="utf-8",
             newline="\n",
         )
+    if arm == "stop":
+        # El hook de OpenCode se carga solo desde .opencode/plugins/.
+        shutil.copytree(HOOK, directory / ".opencode" / "plugins" / "cairn-stop")
 
 
 def _save_ids(path: Path) -> set[str]:
@@ -139,6 +144,16 @@ def _gotcha_saves(path: Path, before: set[str]) -> list[dict]:
     return found
 
 
+def _nudges(directory: Path) -> int:
+    """Líneas del log del hook: una por sesión avisada (criterio 5 del protocolo)."""
+    log = directory / ".cairn-nudge.log"
+    if not log.exists():
+        return 0
+    return sum(
+        1 for line in log.read_text(encoding="utf-8").splitlines() if line.strip()
+    )
+
+
 def wilson(wins: int, total: int, z: float = 1.96) -> tuple[float, float]:
     """Intervalo de Wilson al 95%, el que no se sale de [0, 1] con n pequeño."""
     if total == 0:
@@ -171,8 +186,8 @@ def main(argv=None) -> int:
     tmp = Path(tempfile.mkdtemp(prefix="cairn-abw-"))
     rows = []
     try:
-        for arm in arms:
-            for rep in range(ns.reps):
+        for rep in range(ns.reps):
+            for arm in arms:
                 project = tmp / f"{arm}-{rep}"
                 _prepare(project, arm)
                 events = project / ".cairn" / "events.jsonl"
@@ -186,6 +201,7 @@ def main(argv=None) -> int:
                         "exit": result["exit"],
                         "saved": bool(gotchas),
                         "saved_ids": [event["id"] for event in gotchas],
+                        "nudges": _nudges(project),
                         "saves": [
                             {
                                 key: event.get(key)
@@ -212,10 +228,11 @@ def main(argv=None) -> int:
         low, high = wilson(wins, len(subset))
         tokens = sum(row["tokens"] for row in subset) / max(1, len(subset))
         tools = sum(row["tools"] for row in subset) / max(1, len(subset))
+        nudges = sum(row["nudges"] for row in subset) / max(1, len(subset))
         print(
             f"{arm:>11}: guardado {wins}/{len(subset)} "
             f"({wins / max(1, len(subset)):.0%}, IC95 {low:.2f}-{high:.2f}) · "
-            f"tokens {tokens:,.0f} · llamadas {tools:.1f}"
+            f"tokens {tokens:,.0f} · llamadas {tools:.1f} · avisos {nudges:.1f}"
         )
     return 0
 
