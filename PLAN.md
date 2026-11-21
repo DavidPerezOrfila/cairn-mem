@@ -246,6 +246,8 @@ Each round is a slice: tests first, gate, review and its own release.
 | S22   | `keywords` indexado en FTS (`SCHEMA_VERSION = 6`), `cairn history <topic>` y lock de fichero entre procesos (el test de 8 procesos midió la pérdida de eventos) | 0.17.0 | [`docs/features/s22-retrieval-fields.md`](docs/features/s22-retrieval-fields.md) |
 | S23   | Snippet imperativo (antídoto a "write-side 2/30"): obligación con momento, el porqué del usuario va en `--why`; medido 17/30 frente a 2/30 al -17 % de tokens, criterio primario incumplido (LB 0,392 < 0,5); dos defectos del banco de escritura corregidos | sin release | [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md) |
 | S24   | El lock entre procesos pasa a `<fichero>.lock`: bloquear byte 0 de `events.jsonl` impedía leerlo desde otro proceso en Windows y el `rebuild` moría con `PermissionError` (2 de 5 corridas del test concurrente) | sin release | `tests/test_jsonl.py`, `docs/DECISIONS.md` |
+| S25   | `purge` toma el lock del append (`_LOCK` + `<fichero>.lock`) alrededor de la lectura y del replace: un `save` concurrente entre ambos caía en el fichero viejo y se perdía | sin release | `tests/test_s20.py`, `docs/DECISIONS.md` |
+| S26   | `events.jsonl.bak` entra en las entradas gestionadas del `.gitignore` (y en `doctor`) | `purge` escribe la copia con el secreto dentro; en `--share` un `git add .` la commiteaba (medido: `git status` mostraba `?? .cairn/events.jsonl.bak`) | sin release | `tests/test_s20.py`, `tests/test_cli.py` |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -400,6 +402,31 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
 - Dropped: lazy imports (Windows pays process startup, MCP is the answer; Linux imports
   were 46 ms). Git history email: **not** rewritten; going forward commits use the GitHub
   noreply address.
+
+## 4.2 Audit 2026-11-21: findings
+
+Whole-repo audit (bugs, risk, scale, missing test, speed, lean). Load assumed: one
+developer with up to 8 local agent processes sharing the repo and the personal scope, 10k
+memories, 20 KB recaps. S25 and S26 are fixed in this round; the rest stay open, most
+important first. Moving one into a round needs its test, as always.
+
+| # | Group | Finding | Where | Status |
+|---|-------|---------|-------|--------|
+| 1 | Must fix | `purge` read and replaced `events.jsonl` outside the cross-process lock: a concurrent `save` was lost (test fails without the fix) | `store.py` `purge` / `_remove_events` | done, S25 |
+| 2 | Must fix | `events.jsonl.bak` (the purged secret) was not gitignored: `git add .` committed it | `cli.py` `GITIGNORE`, `doctor.py` | done, S26 |
+| 3 | Must fix | `doctor` re-scans secrets in `events.jsonl` but not in `sessions.jsonl` nor `anchor_path` | `doctor.py` `_events`, `_sessions` | open |
+| 4 | Must fix | A torn tail cut inside a multi-byte UTF-8 char aborts the whole decode before the torn-tail tolerance | `store.py` `rebuild`, `doctor.py`, `sessions.py` | open |
+| 5 | Must fix | `Store.save` raises `TypeError` on a non-string `body` and never validates `anchor_hash`, so a caller can write an event the rebuild rejects | `store.py` `save` | open |
+| 6 | Should fix | MCP `archive` does not fall back to the personal scope, unlike CLI `archive` and MCP `get` | `mcp.py` `_archive` | open |
+| 7 | Should fix | The MCP internal error message is Spanish (`"error interno"`), breaking the English-only MCP edge | `mcp.py` `serve` | open |
+| 8 | Should fix | `GITIGNORE` is duplicated in `cli.py`/`doctor.py` and already drifted (`cairn.db-*` missing); `_date` duplicated in `export.py`; four CLI commands repeat the scope lookup | `cli.py`, `doctor.py`, `export.py` | open |
+| 9 | Should fix | `_ignore_sessions` does nothing for the personal scope (it has no `.gitignore`) and MCP `save_session` never calls it | `cli.py`, `mcp.py` | open |
+| 10 | Should fix | No test for a corrupt `cairn.db` in `doctor` nor for a torn multi-byte UTF-8 tail | `tests/test_doctor.py`, `tests/test_jsonl.py` | open |
+| 11 | Nice to have | `render_l0` rebuilds the joined string for every candidate instead of tracking `used` | `render.py` | open |
+| 12 | Nice to have | `_catch_up` runs one `SELECT 1 FROM mem WHERE id = ?` per appended event | `store.py` `_catch_up` | open |
+
+Not checked: `bench/ab.py` and `bench/ab_write.py` against a live `opencode` CLI (model
+tokens) and the PyPI trusted-publisher settings in GitHub.
 
 ## 5. Backlog (closed with evidence, 2026-11-16)
 

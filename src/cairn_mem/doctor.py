@@ -22,11 +22,13 @@ from cairn_mem.store import (
 
 MAX_L0 = 3000
 # `events.jsonl` depende de `--share`: init lo ignora en modo local y lo versiona en share.
+# `events.jsonl.bak` lo escribe `purge` con el secreto dentro: nunca se versiona.
 GITIGNORE_ENTRIES = (
     "MEMORY.md",
     "cairn.db",
     ".MEMORY.md.*",
     "sessions.jsonl",
+    "events.jsonl.bak",
     "*.lock",
 )
 

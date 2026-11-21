@@ -12,7 +12,7 @@ from itertools import zip_longest
 from pathlib import Path
 
 from cairn_mem.anchor import is_stale
-from cairn_mem.jsonl import _LOCK, append_jsonl
+from cairn_mem.jsonl import _LOCK, _lock, _open_lock, _unlock, append_jsonl
 from cairn_mem.render import KIND_PRIORITY, MAX_TOPIC, _line, render_l0
 
 SCHEMA_VERSION = 6
@@ -619,36 +619,55 @@ class Store:
         `events.jsonl.bak` y reescribe. La credencial se rota aparte."""
         if ID_PATTERN.fullmatch(id) is None:
             raise ValueError("id must be 12 lowercase hex characters")
+        # Misma sección crítica que el append: `_LOCK` cubre los hilos y el lock
+        # de `<fichero>.lock` los procesos. Sin él, un `save` ajeno entre la
+        # lectura y el replace se perdería para siempre (y en Windows el replace
+        # fallaría con el log abierto por otro proceso).
+        # shortcut: el lock cubre la reescritura completa; medido 50 ms a 10k
+        # eventos y 487 ms a 100k (19.8 MiB), frente a los ~10 s que espera
+        # `msvcrt.locking` antes de rendirse. Subir a un swap optimista solo si un
+        # log real se acerca a millones de eventos.
+        with _LOCK:
+            lock_fd = _open_lock(self.events)
+            try:
+                _lock(lock_fd)
+                try:
+                    removed = self._remove_events(id)
+                finally:
+                    _unlock(lock_fd)
+            finally:
+                os.close(lock_fd)
+        self.rebuild()
+        return removed
+
+    def _remove_events(self, id: str) -> int:
+        """Reescribe el JSONL sin `id`. Se llama con el lock tomado."""
         raw = self.events.read_bytes() if self.events.exists() else b""
         lines = raw.splitlines()
         torn_tail = bool(lines) and not raw.endswith(b"\n")
         kept, removed = [], 0
-        # Misma sección crítica que el append: sin ella, un save de este proceso
-        # entre la lectura y el replace se perdería.
-        with _LOCK:
-            for number, line in enumerate(lines):
-                if not line.strip():
+        for number, line in enumerate(lines):
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                if number == len(lines) - 1 and torn_tail:
+                    kept.append(line)  # crash a mitad de write: se conserva
                     continue
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    if number == len(lines) - 1 and torn_tail:
-                        kept.append(line)  # crash a mitad de write: se conserva
-                        continue
-                    raise ValueError(
-                        f"events.jsonl line {number + 1}: invalid JSON; not purged"
-                    )
-                if isinstance(event, dict) and event.get("id") == id:
-                    removed += 1
-                else:
-                    kept.append(line)
-            if not removed:
-                raise ValueError(f"memory {id} does not exist")
-            self.events.with_suffix(".jsonl.bak").write_bytes(raw)
-            tmp = self.events.with_name(f".events.jsonl.{secrets.token_hex(4)}")
-            tmp.write_bytes(b"\n".join(kept) + (b"\n" if kept else b""))
-            os.replace(tmp, self.events)
-        self.rebuild()
+                raise ValueError(
+                    f"events.jsonl line {number + 1}: invalid JSON; not purged"
+                )
+            if isinstance(event, dict) and event.get("id") == id:
+                removed += 1
+            else:
+                kept.append(line)
+        if not removed:
+            raise ValueError(f"memory {id} does not exist")
+        self.events.with_suffix(".jsonl.bak").write_bytes(raw)
+        tmp = self.events.with_name(f".events.jsonl.{secrets.token_hex(4)}")
+        tmp.write_bytes(b"\n".join(kept) + (b"\n" if kept else b""))
+        os.replace(tmp, self.events)
         return removed
 
     def topics(self) -> list[dict]:

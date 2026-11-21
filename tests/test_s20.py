@@ -1,6 +1,11 @@
 """Tests de S20: secretos v3, dedupe, pines humanos, purge y topics."""
 
 import json
+import os
+import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -178,6 +183,31 @@ def test_purge_unknown_id_fails(store):
         store.purge("no-es-un-id")
 
 
+def test_purge_backup_never_reaches_git(capsys, store, in_tmp):
+    """El `.bak` conserva el secreto que se acaba de purgar: en `--share` no
+    puede quedar listo para un `git add .`."""
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git no está disponible")
+    subprocess.run([git, "init", "-q"], cwd=in_tmp, check=True)
+    assert run(capsys, "init", "--share")[0] == 0
+    secret = store.save(kind="fact", title="t", body="el token era AKIAIOSFODNN7")
+    assert run(capsys, "purge", secret)[0] == 0
+    backup = in_tmp / ".cairn" / "events.jsonl.bak"
+    assert backup.exists() and "AKIAIOSFODNN7" in backup.read_text(encoding="utf-8")
+    status = subprocess.run(
+        [git, "status", "--porcelain", "--untracked-files=all"],
+        cwd=in_tmp,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert "events.jsonl.bak" not in status.stdout
+    code, out, _ = run(capsys, "doctor")
+    assert code == 0 and "ok    gitignore" in out
+
+
 def test_purge_refuses_a_corrupt_middle_line(store, root):
     mid = store.save(kind="fact", title="t", body="b")
     path = Path(root) / "events.jsonl"
@@ -189,6 +219,84 @@ def test_purge_refuses_a_corrupt_middle_line(store, root):
     with pytest.raises(ValueError, match="invalid JSON"):
         store.purge(mid)
     assert mid in path.read_text(encoding="utf-8")
+
+
+PURGE_CHILD = """
+import sys, time
+from pathlib import Path
+from cairn_mem.jsonl import append_jsonl
+
+events, marker = Path(sys.argv[1]), Path(sys.argv[2])
+deadline = time.time() + 60
+while not marker.exists():
+    if time.time() > deadline:
+        raise SystemExit("el purge nunca llegó al replace")
+    time.sleep(0.01)
+append_jsonl(
+    events,
+    {
+        "op": "save",
+        "id": "aaaaaaaaaaaa",
+        "ts": 2**62,
+        "kind": "fact",
+        "title": "durante el purge",
+        "body": "b",
+    },
+)
+"""
+
+
+def test_purge_does_not_lose_a_concurrent_append(store, root, tmp_path, monkeypatch):
+    """El purge reescribe el log: un `save` de otro proceso entre la lectura y el
+    replace no puede perderse. Sin el lock, el append cae en el fichero viejo y
+    `os.replace` lo tira (o falla en Windows con el log abierto)."""
+    keep = store.save(kind="fact", title="queda", body="b")
+    secret = store.save(kind="fact", title="secreto", body="c")
+    events = Path(root) / "events.jsonl"
+    marker = tmp_path / "go"
+    source = str(Path(__file__).resolve().parents[1] / "src")
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            [source, os.environ.get("PYTHONPATH", "")]
+        ).strip(os.pathsep),
+    }
+    child = subprocess.Popen(
+        [sys.executable, "-c", PURGE_CHILD, str(events), str(marker)],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    real_replace = os.replace
+    calls = []
+
+    def replace_after_the_child_is_waiting(source_path, target_path):
+        # El primer replace es el del purge: avisa al hijo y dale tiempo a pedir
+        # el lock antes de sustituir el fichero.
+        if not calls:
+            calls.append(True)
+            marker.touch()
+            time.sleep(0.4)
+        return real_replace(source_path, target_path)
+
+    monkeypatch.setattr("cairn_mem.store.os.replace", replace_after_the_child_is_waiting)
+    try:
+        removed = store.purge(secret)
+    finally:
+        if child.poll() is None:
+            try:
+                _, err = child.communicate(timeout=120)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                _, err = child.communicate()
+        else:
+            _, err = child.communicate()
+
+    assert removed == 1
+    assert child.returncode == 0, err.decode(errors="replace")
+    assert calls, "el purge no llegó a reemplazar el fichero"
+    assert store.get(secret) is None and store.get(keep) is not None
+    assert store.get("aaaaaaaaaaaa")["title"] == "durante el purge"
 
 
 # --- topics ---
