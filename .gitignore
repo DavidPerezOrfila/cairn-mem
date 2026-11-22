@@ -10,3 +10,4 @@ __pycache__/
 .cairn/cairn.db
 .cairn/cairn.db-*
 .cairn/MEMORY.md
+.claude/hillclimb/

@@ -248,6 +248,8 @@ Each round is a slice: tests first, gate, review and its own release.
 | S24   | El lock entre procesos pasa a `<fichero>.lock`: bloquear byte 0 de `events.jsonl` impedía leerlo desde otro proceso en Windows y el `rebuild` moría con `PermissionError` (2 de 5 corridas del test concurrente) | sin release | `tests/test_jsonl.py`, `docs/DECISIONS.md` |
 | S25   | `purge` toma el lock del append (`_LOCK` + `<fichero>.lock`) alrededor de la lectura y del replace: un `save` concurrente entre ambos caía en el fichero viejo y se perdía | sin release | `tests/test_s20.py`, `docs/DECISIONS.md` |
 | S26   | `events.jsonl.bak` entra en las entradas gestionadas del `.gitignore` (y en `doctor`) | `purge` escribe la copia con el secreto dentro; en `--share` un `git add .` la commiteaba (medido: `git status` mostraba `?? .cairn/events.jsonl.bak`) | sin release | `tests/test_s20.py`, `tests/test_cli.py` |
+| S27   | Ronda 3 del A/B de escritura: el snippet más un `Stop` hook que empuja una vez por sesión. Medido 30/30 (IC95 0,886-1,000) contra `imperative` 20/30 en la misma corrida, 1,11x tokens; el riesgo "el agente no guarda" queda cerrado por medición | sin release | [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md) §"Round 3 (S27)", [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md) |
+| S28   | `setup opencode` instala el hook `Stop` medido desde un asset del paquete; el instalador y el banco comparten un solo fichero (`setup.install_hook`), así que lo medido y lo instalado no pueden divergir. Claude Code se queda abierto: su `Stop` es otro mecanismo sin brazo | sin release | `tests/test_setup.py`, `docs/DECISIONS.md` |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -418,6 +420,27 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
   **Measured 2026-11-22:** `imperative` 7/10, `stop` 8/10, 20/20 exits 0, 2 sessions nudged.
   The plugin loads from the installed path and fires once per session; n = 10 is noise for
   the rate, so round 3's 30/30 stays the number. In [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md).
+
+### Pending (2026-11-23, MCP tool-selection eval and the Claude Code arm)
+
+The audit's Group 3 finding (one-sentence MCP tool descriptions, no parameter descriptions) is
+fixed in `mcp.py` and validated by `bench/eval_mcp_tools.py`, a 20-case eval of tool selection
+graded programmatically over the opencode trace (`tools.cairn.*` calls inside `execute`,
+final-answer contains for the read cases, forbidden-tool checks for the negatives).
+
+- [ ] **Run the `v1` arm to completion.** Baseline measured: 17/20 PASS (85 %), 263,539 tokens
+  (`failures: c04` saved nothing, `c17` missed `stale=true`, `c18` called `get` with a
+  non-12-hex id). `v1` was interrupted at 4/20 (3 PASS, 94,232 tokens); the budget cap is
+  `--max-tokens 1200000`. Re-run:
+  `python bench/eval_mcp_tools.py --arm v1 --reps 1 --max-tokens 1200000` (~260k tokens more).
+- [ ] **Compare baseline vs `v1` and build the report** with the lite builder on
+  `.claude/hillclimb/mcp-tools/`, then decide whether the description diff is kept as measured.
+- [ ] **The Claude Code `Stop` arm (S28 remainder)**: a `Stop` arm for `bench/ab_write.py`
+  (its `Stop` is a settings-file hook that blocks the turn), criteria pre-registered in
+  `bench/ab_write_protocol.md` before measuring, n ≥ 30 per arm, and only then
+  `setup claude-code` installs it.
+- [ ] **Release 0.18.0 decision**: S24-S28 plus the description fix are shipped without a
+  release; tag when the user decides.
 
 ### Minors
 

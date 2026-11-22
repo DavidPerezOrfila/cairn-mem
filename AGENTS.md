@@ -2,38 +2,22 @@
 
 ## State and scope
 
-- **M6-M9 are closed; S1-S7.1, S9, S9.1, S10, S10.1, S11, S12, S13, S14, S15 (complete:
-  annotations, `--read-only` and `search --kind/--topic/--stale` with `partial`), S16
-  (`setup <harness>` and `export`), S18 (`source`), S19 (hardening of `parse_event` and
-  sessions), S20 (secrets v3 by value shape, injection rejection plus the L0 header,
-  non-blocking dedupe, human `pin`/`unpin`, `purge`, `topics`, `doctor` secret scan and the
-  agent-facing English L0/MCP), S21 (`setup` de-dup through `@AGENTS.md`, `CAIRN_LANG`
-  and the write-side A/B), S22 (`keywords` indexed in FTS, `cairn history <topic>` and
-  the cross-process file lock), S23 (imperative snippet; write side 2/30 -> 17/30), S24
-  (the lock lives in `<file>.lock` so readers are not blocked) and S27 (the write-side
-  `Stop` hook: the arm in `bench/ab_write.py`, the plugin in
-  `src/cairn_mem/assets/stop/`, 30/30 against 20/30 for the text alone) are implemented.**
-  S28 is implemented for OpenCode (2026-11-22: `setup opencode` installs the measured hook;
-  the bench installs it by the same path) and open for Claude Code, whose `Stop` is another
-  mechanism without an arm. 0.17.0 is
-  published (2026-11-20, tagged `v0.17.0`, Trusted Publishing). The write-side A/B ran on
-  2026-11-20 (`empty` 2/30, `plain` 0/30) and on 2026-11-21 round 3 (snippet 20/30, snippet
-  plus one nudge 30/30, IC95 0.886-1.000): the risk "the agent does not save" is closed by
-  measurement. Pending plan: the Claude Code arm and the minors — see
-  `PLAN.md` §4.1.
+- **State:** `0.17.0` is published (2026-11-20, tag `v0.17.0`, Trusted Publishing). Every round
+  through S28 is implemented except the Claude Code `Stop` arm. The changelog, the open items
+  and the conditions that reopen them live in `PLAN.md` §4, §4.1 and §5; this file carries the
+  current contract only, never a restatement of them.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (457 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
-  (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
-  tail repair and the 8-process append, the purge under a concurrent append and its Git-excluded
-  backup, incremental sync, retrieval, the paraphrase gate
-  for `keywords`, the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the
-  integrity audit fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B
-  detection, the backlog benches and the bench hygiene.
+  `tests/` (463 collected: 459 pass plus 4 `xfail` corpus gaps) covers the CLI, the store, the
+  L0, anchors, MCP (annotations, read-only mode, `source` and search filters), sessions,
+  import, the JSONL tail repair and the 8-process append, the purge under a concurrent append
+  and its Git-excluded backup, incremental sync, retrieval, the paraphrase gate for `keywords`,
+  the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the integrity audit
+  fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B detection, the backlog
+  benches and the bench hygiene.
 - **The 2026-11-21 audit is closed (2026-11-22):** every finding in `PLAN.md` §4.2 has a fix
-  and a test (436 -> 454 tests; the S28 hook tests bring it to 457). The next round is S28,
-  the `Stop` hook install path.
+  and a test (the config BOM fix brought it to 459).
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -72,7 +56,7 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
 - Publishing goes through `.github/workflows/publish.yml` (Trusted Publishing,
   OIDC, attestations PEP 740): push a tag `v*` and it builds and publishes; no PyPI
   token in the repo. The PyPI pending publisher (owner/repo/workflow
-  `publish.yml`) must be registered once before the first tag. Still delete `dist/`
+  `publish.yml`) is registered (`0.17.0` was published this way). Still delete `dist/`
   **and** `build/` when building locally: `uv build` reuses `build/lib` and packages
   modules you already deleted from the tree. One wheel included the old importer
   because of an orphan `build/lib/`.

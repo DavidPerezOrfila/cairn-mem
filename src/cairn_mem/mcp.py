@@ -46,22 +46,37 @@ TOOLS = [
     {
         "name": "save",
         "description": (
-            "Save a project memory. The same topic replaces the previous one."
+            "Save a project memory: a decision, convention or gotcha together with the "
+            "reason that explains it. The same topic replaces the previous memory; "
+            "without topic a new memory is created. body is capped at 500 characters, "
+            "why at 2000. A near-duplicate (Jaccard >= 0.9) is refused with the existing "
+            "id, weaker matches return as `similar:` lines. Secrets are rejected, never "
+            "redacted. Use scope=personal for knowledge that applies to any repo."
         ),
         "annotations": WRITE_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "kind": {"type": "string", "enum": list(KINDS)},
-                "title": {"type": "string"},
-                "body": {"type": "string", "maxLength": 500},
-                "why": {"type": "string"},
-                "topic": {"type": "string"},
-                "source": {"type": "string", "maxLength": 100},
-                "keywords": {"type": "string", "maxLength": 200},
-                "anchor": {"type": "string"},
-                "id": {"type": "string"},
-                "scope": {"type": "string", "enum": ["project", "personal"]},
+                "kind": {"type": "string", "enum": list(KINDS),
+                         "description": "convention, decision, gotcha or fact."},
+                "title": {"type": "string", "maxLength": 200,
+                          "description": "Short label, no control characters."},
+                "body": {"type": "string", "maxLength": 500,
+                         "description": "The change or convention; one memory."},
+                "why": {"type": "string", "maxLength": 2000,
+                        "description": "The reason, ideally the user's own words."},
+                "topic": {"type": "string", "maxLength": 100,
+                          "description": "Stable key; a save with the same topic supersedes it."},
+                "source": {"type": "string", "maxLength": 100,
+                           "description": "Provenance: agent, model or session."},
+                "keywords": {"type": "string", "maxLength": 200,
+                             "description": "Synonyms for search, never rendered in the L0."},
+                "anchor": {"type": "string", "maxLength": 500,
+                           "description": "POSIX path relative to the project root."},
+                "id": {"type": "string",
+                       "description": "Existing 12-hex id, to update in place."},
+                "scope": {"type": "string", "enum": ["project", "personal"],
+                          "description": "Defaults to the current project."},
             },
             "required": ["kind", "title", "body"],
             "additionalProperties": False,
@@ -69,17 +84,28 @@ TOOLS = [
     },
     {
         "name": "search",
-        "description": "Search active memories by text (BM25) in the project and personal scope.",
+        "description": (
+            "Search active memories by text across the project and personal scope. "
+            "Query terms are sanitized for FTS5 and ranked with BM25; when the AND "
+            "query finds nothing it retries as OR and sets `partial` in every row. "
+            "Filters: kind, exact topic, and stale (only memories whose anchor file "
+            "changed). Archived and superseded memories are not searched; use get."
+        ),
         "annotations": READ_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string"},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 20},
-                "kind": {"type": "string", "enum": list(KINDS)},
-                "topic": {"type": "string", "maxLength": 100},
-                "stale": {"type": "boolean"},
-                "scope": {"type": "string", "enum": list(SCOPES)},
+                "query": {"type": "string", "description": "Free text; operators are stripped."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20,
+                          "description": "Rows returned; default 10."},
+                "kind": {"type": "string", "enum": list(KINDS),
+                         "description": "Restrict to one kind."},
+                "topic": {"type": "string", "maxLength": 100,
+                          "description": "Exact topic_key match."},
+                "stale": {"type": "boolean",
+                          "description": "Only rows whose anchor file changed or is unreadable."},
+                "scope": {"type": "string", "enum": list(SCOPES),
+                          "description": "project, personal or both; default both."},
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -87,11 +113,20 @@ TOOLS = [
     },
     {
         "name": "get",
-        "description": "Return one full memory by id.",
+        "description": (
+            "Return one full memory by id, including archived and superseded rows. "
+            "The id is 12 lowercase hex characters, as returned by search or save. "
+            "Use search first when you do not have an exact id; a wrong id is an error."
+        ),
         "annotations": READ_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
-            "properties": {"id": {"type": "string"}},
+            "properties": {
+                "id": {"type": "string",
+                       "description": "12 lowercase hex characters."},
+                "scope": {"type": "string", "enum": ["project", "personal"],
+                          "description": "Defaults to the project, falls back to personal."},
+            },
             "required": ["id"],
             "additionalProperties": False,
         },
@@ -99,21 +134,28 @@ TOOLS = [
     {
         "name": "context",
         "description": (
-            "Project memory (L0) plus the last project session recap, "
-            "to load at the start of a task."
+            "Load the project memory (L0) plus the last project session recap, to "
+            "start a task with. Read-only and free; call it before answering about "
+            "the project's decisions, conventions or gotchas."
         ),
         "annotations": READ_ANNOTATIONS,
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "save_session",
-        "description": "Save the current session recap (continuity, not memory).",
+        "description": (
+            "Save the current session recap (continuity, not memory): what was done "
+            "and what is pending. Sessions do not enter search or the L0. Use at "
+            "session close; a new recap with the same id replaces its last line."
+        ),
         "annotations": WRITE_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "summary": {"type": "string"},
-                "scope": {"type": "string", "enum": ["project", "personal"]},
+                "summary": {"type": "string",
+                            "description": "Done and pending; up to 20k characters."},
+                "scope": {"type": "string", "enum": ["project", "personal"],
+                          "description": "Defaults to the current project."},
             },
             "required": ["summary"],
             "additionalProperties": False,
@@ -121,13 +163,19 @@ TOOLS = [
     },
     {
         "name": "archive",
-        "description": "Archive a memory: it stops appearing in search and in the L0.",
+        "description": (
+            "Archive a memory by id: it stops appearing in search and in the L0 but "
+            "stays in history. Destructive for the active set; the id is required, so "
+            "search first and confirm with the user when the request names no id."
+        ),
         "annotations": DESTRUCTIVE_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "id": {"type": "string"},
-                "scope": {"type": "string", "enum": ["project", "personal"]},
+                "id": {"type": "string",
+                       "description": "12 lowercase hex characters, from search."},
+                "scope": {"type": "string", "enum": ["project", "personal"],
+                          "description": "Defaults to the project, falls back to personal."},
             },
             "required": ["id"],
             "additionalProperties": False,
@@ -135,26 +183,36 @@ TOOLS = [
     },
     {
         "name": "session_list",
-        "description": "List recent sessions, newest first (preview).",
+        "description": (
+            "List recent session recaps, newest first, as previews. Use it to find "
+            "an id for session_get; the full text comes from session_get."
+        ),
         "annotations": READ_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
-                "scope": {"type": "string", "enum": ["project", "personal"]},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50,
+                          "description": "Rows returned; default 10."},
+                "scope": {"type": "string", "enum": ["project", "personal"],
+                          "description": "Defaults to the current project."},
             },
             "additionalProperties": False,
         },
     },
     {
         "name": "session_get",
-        "description": "Return one full session recap by id.",
+        "description": (
+            "Return one full session recap by id (12 lowercase hex, from "
+            "session_list). Use scope=personal for recaps saved in the personal "
+            "scope; they are not part of project memory."
+        ),
         "annotations": READ_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "id": {"type": "string"},
-                "scope": {"type": "string", "enum": ["project", "personal"]},
+                "id": {"type": "string", "description": "12 lowercase hex characters."},
+                "scope": {"type": "string", "enum": ["project", "personal"],
+                          "description": "Defaults to the current project."},
             },
             "required": ["id"],
             "additionalProperties": False,
