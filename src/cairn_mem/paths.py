@@ -3,6 +3,33 @@
 import os
 from pathlib import Path
 
+# Lo que `init` marca como ignorado en `.cairn/`. El `.bak` de `purge` lleva el
+# secreto dentro; `*.lock` es el sidecar del append entre procesos.
+GITIGNORE_ENTRIES = (
+    "cairn.db",
+    "cairn.db-*",
+    "MEMORY.md",
+    ".MEMORY.md.*",
+    "sessions.jsonl",
+    "events.jsonl.bak",
+    "*.lock",
+)
+
+
+def ignore_sessions(root) -> None:
+    """`init` ignora `sessions.jsonl`, pero el scope personal no pasa por init y
+    el MCP escribe recaps sin el CLI."""
+    path = Path(root) / ".gitignore"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = (
+        path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    )
+    if "sessions.jsonl" in lines:
+        return
+    path.write_text(
+        "\n".join([*lines, "sessions.jsonl"]) + "\n", encoding="utf-8", newline="\n"
+    )
+
 
 def data_dir() -> Path:
     env = os.environ.get("CAIRN_DIR")

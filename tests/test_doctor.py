@@ -170,3 +170,64 @@ def test_doctor_fails_when_the_l0_exceeds_the_budget(capsys, in_tmp):
     code, out, _ = run(capsys, "doctor")
 
     assert code == 1 and "3001/3000" in out
+
+
+def test_doctor_scans_secrets_in_sessions(capsys, in_tmp):
+    """Auditoría 2026-11-21 #3: el recap va a Git con --share y doctor no lo
+    reescaneaba."""
+    run(capsys, "init")
+    path = in_tmp / ".cairn" / "sessions.jsonl"
+    path.write_text(
+        json.dumps({"op": "session", "id": "aaaaaaaaaaaa", "summary": "token " + "ghp_" + "a" * 36})
+        + "\n",
+        encoding="utf-8",
+    )
+
+    code, out, _ = run(capsys, "doctor")
+
+    assert code == 1 and "fail  secrets" in out and "sessions.jsonl" in out
+
+
+def test_doctor_scans_secrets_in_anchor_path(capsys, in_tmp):
+    """Auditoría #3: anchor_path también viaja en el JSONL versionado."""
+    run(capsys, "init")
+    event = {
+        "op": "save",
+        "id": "aaaaaaaaaaaa",
+        "ts": 1,
+        "kind": "fact",
+        "title": "t",
+        "body": "b",
+        "anchor_path": "https://user:pass@example.com/x.py",
+    }
+    (in_tmp / ".cairn" / "events.jsonl").write_text(
+        json.dumps(event) + "\n", encoding="utf-8"
+    )
+
+    code, out, _ = run(capsys, "doctor")
+
+    assert code == 1 and "fail  secrets" in out
+
+
+def test_doctor_tolerates_a_torn_multibyte_tail(capsys, in_tmp):
+    """Auditoría #4: un crash corta la última línea a mitad de carácter UTF-8."""
+    run(capsys, "init")
+    run(capsys, "save", "--kind", "fact", "--title", "t", "--body", "b")
+    path = in_tmp / ".cairn" / "events.jsonl"
+    path.write_bytes(path.read_bytes() + b'{"op":"save","body":"\xc3')
+
+    code, out, _ = run(capsys, "doctor")
+
+    assert code == 0 and "ok    events" in out
+
+
+def test_doctor_reports_a_corrupt_db(capsys, in_tmp):
+    """Auditoría #10: sin prueba, un `cairn.db` corrupto podía tumbar doctor."""
+    store = in_tmp / ".cairn"
+    store.mkdir()
+    (store / "events.jsonl").touch()
+    (store / "cairn.db").write_bytes(b"not a sqlite database")
+
+    code, out, _ = run(capsys, "doctor")
+
+    assert code == 1 and "fail  index" in out

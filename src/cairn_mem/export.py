@@ -4,13 +4,7 @@ Para un harness que no puede ejecutar `cairn`: una foto legible del store, sin
 marcas de stale (eso exige hashear anclas; para eso están `search` y `check`).
 """
 
-import time
-
-from cairn_mem.store import KIND_PRIORITY
-
-
-def _date(ts) -> str:
-    return time.strftime("%Y-%m-%d %H:%M", time.localtime(int(ts) / 1e9))
+from cairn_mem.store import KIND_PRIORITY, format_ts
 
 
 def _meta(row) -> str:
@@ -58,7 +52,7 @@ def render_markdown(store, sessions=None, limit: int = 0) -> str:
         for record in records:
             lines += [
                 "",
-                f"### {record['id']} — {_date(record.get('ts', 0))}",
+                f"### {record['id']} — {format_ts(record.get('ts', 0))}",
                 "",
                 record["summary"].strip(),
             ]

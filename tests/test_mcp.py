@@ -246,6 +246,30 @@ def test_archive_tool_missing_memory():
     assert "does not exist" in text(response)
 
 
+def test_archive_tool_falls_back_to_personal(in_tmp):
+    """Auditoría 2026-11-21 #6: el CLI y `get` buscan en ambos scopes; archive
+    solo miraba el proyecto."""
+    server = Server()
+    memory_id = text(
+        call(server, "save", kind="fact", title="T", body="B", scope="personal")
+    )
+
+    assert text(call(server, "archive", id=memory_id)) == f"archived {memory_id}"
+    rows = {row["id"]: row for row in server.personal().dump()}
+    assert rows[memory_id]["status"] == "archived"
+
+
+def test_save_session_ignores_sessions_in_gitignore(in_tmp):
+    """Auditoría #9: el MCP nunca llamaba a `_ignore_sessions` y el scope
+    personal no tiene `.gitignore`."""
+    server = Server()
+    call(server, "save_session", summary="recap")
+    call(server, "save_session", summary="recap global", scope="personal")
+
+    for root in (in_tmp / ".cairn", in_tmp / "home"):
+        assert "sessions.jsonl" in (root / ".gitignore").read_text(encoding="utf-8")
+
+
 def test_session_list_and_get_roundtrip():
     server = Server()
     call(server, "save_session", summary="## Goal\nS1 primera")
@@ -506,6 +530,22 @@ def test_serve_ndjson_and_parse_error():
     assert json.loads(lines[0])["result"] == {}
     assert json.loads(lines[1])["error"]["code"] == -32700
     assert b"\r\n" not in out.getvalue()
+
+
+def test_serve_internal_error_is_english(monkeypatch):
+    """Auditoría 2026-11-21 #7: el borde MCP es solo inglés; el error interno
+    era la única cadena en español."""
+
+    def boom(self, request):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(Server, "handle", boom)
+    out = io.BytesIO()
+    payload = b'{"jsonrpc":"2.0","id":1,"method":"ping"}\n'
+
+    assert serve(stdin=io.BytesIO(payload), stdout=out) == 0
+
+    assert json.loads(out.getvalue())["error"]["message"] == "internal error"
 
 
 def test_stdio_subprocess_roundtrip(in_tmp):

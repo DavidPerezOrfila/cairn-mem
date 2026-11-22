@@ -11,26 +11,18 @@ from pathlib import Path
 
 from cairn_mem.anchor import is_stale
 from cairn_mem.i18n import t
+from cairn_mem.paths import GITIGNORE_ENTRIES
 from cairn_mem.sessions import Sessions
 from cairn_mem.store import (
     SCHEMA_VERSION,
     Store,
+    decode_jsonl,
     fingerprint,
     parse_event,
     reject_secrets,
 )
 
 MAX_L0 = 3000
-# `events.jsonl` depende de `--share`: init lo ignora en modo local y lo versiona en share.
-# `events.jsonl.bak` lo escribe `purge` con el secreto dentro: nunca se versiona.
-GITIGNORE_ENTRIES = (
-    "MEMORY.md",
-    "cairn.db",
-    ".MEMORY.md.*",
-    "sessions.jsonl",
-    "events.jsonl.bak",
-    "*.lock",
-)
 
 
 def _check(status: str, name: str, detail: str) -> dict:
@@ -154,7 +146,7 @@ def _events(root: Path) -> dict:
             "fail", "events", t(f"unreadable: {error}", f"no se pudo leer: {error}")
         )
     try:
-        lines = raw.decode("utf-8-sig").splitlines()
+        lines = decode_jsonl(raw).splitlines()
     except UnicodeDecodeError:
         return _check("fail", "events", t("not valid UTF-8", "no es UTF-8 válido"))
     last = max((i for i, line in enumerate(lines) if line.strip()), default=-1)
@@ -180,6 +172,7 @@ def _events(root: Path) -> dict:
                     event.get("source"),
                     event.get("topic_key"),
                     event.get("keywords"),
+                    event.get("anchor_path"),
                 )
             except ValueError as error:
                 return _check(
@@ -210,6 +203,17 @@ def _sessions(root: Path) -> dict:
         return _check(
             "fail", "sessions", t(f"unreadable: {error}", f"no se pudo leer: {error}")
         )
+    # S20: el recap también acaba en Git con --share; el detector de escritura
+    # no ve lo que ya está guardado.
+    for record in records:
+        try:
+            reject_secrets(record["summary"])
+        except ValueError as error:
+            return _check(
+                "fail",
+                "secrets",
+                f"sessions.jsonl {record['id']}: {error}",
+            )
     return _check(
         "ok", "sessions", t(f"{len(records)} recaps", f"{len(records)} recaps")
     )

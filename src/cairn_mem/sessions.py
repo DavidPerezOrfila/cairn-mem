@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from cairn_mem.jsonl import append_jsonl
-from cairn_mem.store import ID_PATTERN, reject_secrets
+from cairn_mem.store import ID_PATTERN, decode_jsonl, reject_secrets
 
 MAX_SUMMARY = 20000
 WINDOW = 64 * 1024
@@ -116,7 +116,7 @@ class Sessions:
     def _records(self) -> dict[str, tuple[int, dict]]:
         if not self.path.exists():
             return {}
-        text = self.path.read_text(encoding="utf-8-sig")
+        text = decode_jsonl(self.path.read_bytes())
         torn_tail = not text.endswith("\n")
         lines = text.splitlines()
         last = max((i for i, line in enumerate(lines) if line.strip()), default=-1)
