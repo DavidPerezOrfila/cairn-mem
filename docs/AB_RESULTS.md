@@ -187,3 +187,17 @@ the same model, for 11 % more tokens. The risk row "the agent does not save memo
 closed by measurement. The install path (`cairn setup` writing the hook per harness) is the
 next round; nothing is shipped by `setup` yet.
 
+## Install-path smoke (S28, 2026-11-22)
+
+`python bench/ab_write.py --arms imperative,stop --reps 10 --json` with the hook installed by
+`cairn setup opencode` (the bench now calls `setup.install_hook`, not a copy of the asset),
+same machine and model as round 3.
+
+| Arm | Saved | Exits 0 | Nudges |
+| --- | ----- | ------- | ------ |
+| `imperative` | 7/10 | 10/10 | 0 |
+| `stop` (installed hook) | 8/10 | 10/10 | 2 |
+
+The smoke checks the install path, not the rate: the plugin loads from
+`.opencode/plugins/cairn-stop/`, fires once per session (2 sessions), and every run exits 0.
+At n = 10 the difference is inside the noise; round 3's 30/30 remains the measurement.

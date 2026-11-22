@@ -142,11 +142,13 @@ retires a memory that no longer applies.
 ### Any other harness
 
 `cairn setup claude-code` writes `.mcp.json` and appends the snippet to `CLAUDE.md`;
-`cairn setup opencode` writes `opencode.json` (`mcp.servers.cairn`) and `AGENTS.md`. Both
-merge into an existing config, keep their own other keys, and are idempotent. Use
-`--dir <path>` to configure another root. If `CLAUDE.md` already imports `@AGENTS.md`,
-`setup claude-code` skips the snippet (and removes a block an older setup left there), so
-Claude does not read the rules twice.
+`cairn setup opencode` writes `opencode.json` (`mcp.servers.cairn`), `AGENTS.md` and the
+measured `Stop` hook (`.opencode/plugins/cairn-stop/index.ts`: one prompt per session when
+a turn ends without a `save`). Both merge into an existing config, keep their own other
+keys, and are idempotent. Use `--dir <path>` to configure another root. If `CLAUDE.md`
+already imports `@AGENTS.md`, `setup claude-code` skips the snippet (and removes a block an
+older setup left there), so Claude does not read the rules twice. Claude Code's `Stop` hook
+is a different mechanism and is not installed until it has its own measurement.
 
 For anything else, copy the snippet from
 [`docs/AGENT_SNIPPET.md`](docs/AGENT_SNIPPET.md) into your `AGENTS.md` or `CLAUDE.md`. The
@@ -232,7 +234,7 @@ why the agent believes something.
 | `cairn session save\|list\|get [--personal]` | Session recaps, separate from curated memory |
 | `cairn import legacy --db <path> [--dry-run]` | Migrate observations from another SQLite store |
 | `cairn doctor [--personal]` | Check SQLite/FTS5, JSONL lines, DB sync, L0 budget, stale anchors, `.gitignore` and duplicate installs |
-| `cairn setup claude-code\|opencode [--dir <path>]` | Write the MCP config and the rules snippet for that harness |
+| `cairn setup claude-code\|opencode [--dir <path>]` | Write the MCP config, the rules snippet and, for OpenCode, the `Stop` hook |
 | `cairn export [--personal] [--sessions N] [--out <path>]` | Dump active memory (and recaps) as Markdown for a harness without cairn |
 | `cairn mcp` | Serve MCP over stdio |
 

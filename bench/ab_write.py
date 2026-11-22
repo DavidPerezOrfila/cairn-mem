@@ -18,11 +18,10 @@ from pathlib import Path
 
 from ab import _run, _snippet
 
+from cairn_mem.setup import install_hook
 from cairn_mem.store import Store
 
 GOTCHA = re.compile(r"\b(epoch|utc|tz|timezone|iso|timestamp)\b", re.IGNORECASE)
-
-HOOK = Path(__file__).resolve().parent / "assets" / "stop"
 
 TASK = (
     "Trabaja en este proyecto. El equipo de datos consume el campo `time` de /health desde "
@@ -100,8 +99,9 @@ def _prepare(directory: Path, arm: str) -> None:
             newline="\n",
         )
     if arm == "stop":
-        # El hook de OpenCode se carga solo desde .opencode/plugins/.
-        shutil.copytree(HOOK, directory / ".opencode" / "plugins" / "cairn-stop")
+        # La ruta real del usuario (S28): el banco mide el hook que instala `setup`,
+        # no una copia del árbol de assets.
+        install_hook("opencode", directory)
 
 
 def _save_ids(path: Path) -> set[str]:

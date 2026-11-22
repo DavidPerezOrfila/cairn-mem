@@ -398,15 +398,26 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
 
 ### S28: the Stop hook install path
 
-- [ ] `cairn setup` writes the hook per harness: an OpenCode plugin from one asset, and for
+- [x] `cairn setup` writes the hook per harness: an OpenCode plugin from one asset, and for
   Claude Code its own `Stop` hook if the mechanism differs. The hook must filter sessions by
   their project directory (the plugin API is server-wide; an unscoped probe nudged other
-  projects, S27) and nudge at most once per session.
-- [ ] The install is idempotent and only touches the repo, like the rest of `setup`; the
+  projects, S27) and nudge at most once per session. **Shipped 2026-11-22 for OpenCode only:**
+  the asset lives in `src/cairn_mem/assets/stop/index.ts` (package data, in the wheel and the
+  sdist) and `setup opencode` writes `.opencode/plugins/cairn-stop/index.ts`. Claude Code's
+  `Stop` is a different mechanism (settings file, it blocks the turn) and has no arm in
+  `bench/ab_write.py`, which only runs `opencode run`; installing it unmeasured would break
+  the rule that a lever ships with a measurement. It stays open with its own arm as the
+  condition.
+- [x] The install is idempotent and only touches the repo, like the rest of `setup`; the
   shipped text is pinned to the measured one by a test, so the bench artefact cannot drift
-  from what users get.
-- [ ] Re-run `python bench/ab_write.py --arms imperative,stop --reps 10` against the
+  from what users get. **One file, not a copy:** `bench/ab_write.py` now installs the hook
+  through `setup.install_hook` (the user path) instead of copying `bench/assets/stop`, and
+  `tests/test_setup.py` asserts the installed bytes equal `HOOK_ASSET`.
+- [x] Re-run `python bench/ab_write.py --arms imperative,stop --reps 10` against the
   installed hook (not the asset) as a smoke; the 30/30 measurement stands as the result.
+  **Measured 2026-11-22:** `imperative` 7/10, `stop` 8/10, 20/20 exits 0, 2 sessions nudged.
+  The plugin loads from the installed path and fires once per session; n = 10 is noise for
+  the rate, so round 3's 30/30 stays the number. In [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md).
 
 ### Minors
 

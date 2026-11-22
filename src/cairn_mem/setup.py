@@ -43,6 +43,7 @@ class Harness(TypedDict):
     server: dict[str, object]
     base: dict[str, object]
     instructions: str
+    hook: str | None
     label: str
 
 
@@ -53,6 +54,7 @@ HARNESSES: dict[str, Harness] = {
         "server": {"command": "cairn", "args": ["mcp"]},
         "base": {},
         "instructions": "CLAUDE.md",
+        "hook": None,
         "label": "Claude Code",
     },
     "opencode": {
@@ -61,9 +63,28 @@ HARNESSES: dict[str, Harness] = {
         "server": {"type": "local", "command": ["cairn", "mcp"]},
         "base": {"$schema": SCHEMA},
         "instructions": "AGENTS.md",
+        "hook": ".opencode/plugins/cairn-stop/index.ts",
         "label": "OpenCode",
     },
 }
+
+# El hook medido en S27 (30/30 contra 20/30 del texto solo). Es el mismo fichero
+# que copia `bench/ab_write.py`: medido e instalado no pueden divergir.
+HOOK_ASSET = Path(__file__).parent / "assets" / "stop" / "index.ts"
+
+
+def install_hook(harness: str, directory: Path) -> bool:
+    """Copia el hook del harness si cambió. `False` si no tiene hook medido."""
+    relative = HARNESSES[harness]["hook"]
+    if relative is None:
+        return False
+    path = directory / relative
+    text = HOOK_ASSET.read_text(encoding="utf-8")
+    if path.exists() and path.read_text(encoding="utf-8") == text:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return True
 
 
 def _nested(keys, value, base):
@@ -209,6 +230,20 @@ def setup(harness: str, directory: Path) -> list[str]:
         f"config: {config} ({config_state})",
         snippet_line,
     ]
+    if spec["hook"] is None:
+        lines.append(
+            t(
+                "hook: not installed (the nudge is measured for OpenCode only)",
+                "hook: no instalado (el aviso está medido solo para OpenCode)",
+            )
+        )
+    else:
+        hook_state = (
+            t("updated", "actualizado")
+            if install_hook(harness, directory)
+            else t("already there", "ya estaba")
+        )
+        lines.append(f"hook: {directory / spec['hook']} ({hook_state})")
     try:
         data_dir()
     except FileNotFoundError:
