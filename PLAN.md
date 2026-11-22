@@ -421,6 +421,27 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
   The plugin loads from the installed path and fires once per session; n = 10 is noise for
   the rate, so round 3's 30/30 stays the number. In [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md).
 
+### Pending (2026-11-23, MCP tool-selection eval and the Claude Code arm)
+
+The audit's Group 3 finding (one-sentence MCP tool descriptions, no parameter descriptions) is
+fixed in `mcp.py` and validated by `bench/eval_mcp_tools.py`, a 20-case eval of tool selection
+graded programmatically over the opencode trace (`tools.cairn.*` calls inside `execute`,
+final-answer contains for the read cases, forbidden-tool checks for the negatives).
+
+- [ ] **Run the `v1` arm to completion.** Baseline measured: 17/20 PASS (85 %), 263,539 tokens
+  (`failures: c04` saved nothing, `c17` missed `stale=true`, `c18` called `get` with a
+  non-12-hex id). `v1` was interrupted at 4/20 (3 PASS, 94,232 tokens); the budget cap is
+  `--max-tokens 1200000`. Re-run:
+  `python bench/eval_mcp_tools.py --arm v1 --reps 1 --max-tokens 1200000` (~260k tokens more).
+- [ ] **Compare baseline vs `v1` and build the report** with the lite builder on
+  `.claude/hillclimb/mcp-tools/`, then decide whether the description diff is kept as measured.
+- [ ] **The Claude Code `Stop` arm (S28 remainder)**: a `Stop` arm for `bench/ab_write.py`
+  (its `Stop` is a settings-file hook that blocks the turn), criteria pre-registered in
+  `bench/ab_write_protocol.md` before measuring, n ≥ 30 per arm, and only then
+  `setup claude-code` installs it.
+- [ ] **Release 0.18.0 decision**: S24-S28 plus the description fix are shipped without a
+  release; tag when the user decides.
+
 ### Minors
 
 - [x] `cairn --version` (nothing printed the version; MCP does it in `serverInfo`).
