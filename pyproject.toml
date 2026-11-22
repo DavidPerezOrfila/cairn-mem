@@ -40,5 +40,8 @@ cairn-mem = "cairn_mem.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+cairn_mem = ["assets/stop/*.ts"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

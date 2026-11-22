@@ -51,11 +51,15 @@ def test_prepare_seeds_each_arm(tmp_path):
 
 
 def test_stop_arm_installs_the_hook_and_the_others_do_not(tmp_path):
-    """Criterio 5 del protocolo: el brazo `stop` es `imperative` + el hook, y solo él."""
+    """Criterio 5 del protocolo: el brazo `stop` es `imperative` + el hook, y solo él.
+    Desde S28 instala el hook por la ruta real (`install_hook`), no una copia."""
+    from cairn_mem.setup import HOOK_ASSET
+
     module = _module("ab_write")
     stop = tmp_path / "stop"
     module._prepare(stop, "stop")
     hook = stop / ".opencode" / "plugins" / "cairn-stop" / "index.ts"
+    assert hook.read_bytes() == HOOK_ASSET.read_bytes()
     assert "session.execution.succeeded" in hook.read_text(encoding="utf-8")
     assert ".cairn-nudge.log" in hook.read_text(encoding="utf-8")
     assert (stop / "AGENTS.md").read_text(encoding="utf-8") == module._snippet()

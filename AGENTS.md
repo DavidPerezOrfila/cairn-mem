@@ -11,17 +11,20 @@
   and the write-side A/B), S22 (`keywords` indexed in FTS, `cairn history <topic>` and
   the cross-process file lock), S23 (imperative snippet; write side 2/30 -> 17/30), S24
   (the lock lives in `<file>.lock` so readers are not blocked) and S27 (the write-side
-  `Stop` hook: the arm in `bench/ab_write.py`, the plugin in `bench/assets/stop/`, 30/30
-  against 20/30 for the text alone) are implemented.** 0.17.0 is
+  `Stop` hook: the arm in `bench/ab_write.py`, the plugin in
+  `src/cairn_mem/assets/stop/`, 30/30 against 20/30 for the text alone) are implemented.**
+  S28 is implemented for OpenCode (2026-11-22: `setup opencode` installs the measured hook;
+  the bench installs it by the same path) and open for Claude Code, whose `Stop` is another
+  mechanism without an arm. 0.17.0 is
   published (2026-11-20, tagged `v0.17.0`, Trusted Publishing). The write-side A/B ran on
   2026-11-20 (`empty` 2/30, `plain` 0/30) and on 2026-11-21 round 3 (snippet 20/30, snippet
   plus one nudge 30/30, IC95 0.886-1.000): the risk "the agent does not save" is closed by
-  measurement. Pending plan: the hook's install path (S28) and the minors — see `PLAN.md`
-  §4.1.
+  measurement. Pending plan: the Claude Code arm and the minors — see
+  `PLAN.md` §4.1.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (454 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  `tests/` (457 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
   (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
   tail repair and the 8-process append, the purge under a concurrent append and its Git-excluded
   backup, incremental sync, retrieval, the paraphrase gate
@@ -29,7 +32,8 @@
   integrity audit fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B
   detection, the backlog benches and the bench hygiene.
 - **The 2026-11-21 audit is closed (2026-11-22):** every finding in `PLAN.md` §4.2 has a fix
-  and a test (436 -> 454 tests). The next round is S28, the `Stop` hook install path.
+  and a test (436 -> 454 tests; the S28 hook tests bring it to 457). The next round is S28,
+  the `Stop` hook install path.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -241,8 +245,11 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   with code 1 and prints the block to paste. A new harness is one row plus one test
   against a fixture; do not add a format nobody verified. Since S21, when the instructions
   file is not `AGENTS.md` and already imports `@AGENTS.md`, `setup` writes no block there
-  and removes one that an older setup left (the harness reads the same block twice
-  otherwise).
+  and removes one that an older setup left. Since S28, `setup opencode` installs the measured
+  `Stop` hook (`assets/stop/index.ts` in the package, package data in wheel and sdist) into
+  `.opencode/plugins/cairn-stop/index.ts`, idempotently, and `install_hook` is the same
+  function `bench/ab_write.py` calls, so measured and installed cannot drift. Claude Code has
+  no hook: its `Stop` is another mechanism and has no measurement.
 - **Export:** `cairn export` is a snapshot of active memories grouped by kind, plus the
   last N recaps only when `--sessions N` is given. No stale marks: that would hash every
   anchor and turn a copy into `check`. It must stay byte-identical across runs.

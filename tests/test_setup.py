@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from cairn_mem.cli import main
-from cairn_mem.setup import BEGIN, END, HARNESSES, SNIPPET
+from cairn_mem.setup import BEGIN, END, HARNESSES, HOOK_ASSET, SNIPPET
 
 
 @pytest.fixture(autouse=True)
@@ -153,3 +153,28 @@ def test_snippet_matches_the_documentation(in_tmp):
     fenced = re.search(r"```markdown\n(.*?)```", doc, re.DOTALL)
     assert fenced is not None
     assert fenced.group(1).strip() == SNIPPET.strip()
+
+
+def test_opencode_installs_the_measured_hook(capsys, in_tmp):
+    """S28: el hook que se instala es byte a byte el que midió S27."""
+    assert run(capsys, "setup", "opencode")[0] == 0
+    hook = in_tmp / HARNESSES["opencode"]["hook"]
+    assert hook.read_text(encoding="utf-8") == HOOK_ASSET.read_text(encoding="utf-8")
+    assert "session.execution.succeeded" in hook.read_text(encoding="utf-8")
+
+
+def test_hook_install_is_idempotent(capsys, in_tmp):
+    assert run(capsys, "setup", "opencode")[0] == 0
+    hook = in_tmp / HARNESSES["opencode"]["hook"]
+    before = hook.read_bytes()
+    code, out, _ = run(capsys, "setup", "opencode")
+    assert code == 0 and hook.read_bytes() == before
+    assert f"hook: {hook}" in out and "already there" in out
+
+
+def test_claude_code_gets_no_hook(capsys, in_tmp):
+    """El `Stop` de Claude Code es otro mecanismo y no tiene medición: no se
+    instala un aviso sin su brazo (protocolo, ronda 3)."""
+    code, out, _ = run(capsys, "setup", "claude-code")
+    assert code == 0 and "not installed" in out
+    assert not (in_tmp / ".opencode").exists()
