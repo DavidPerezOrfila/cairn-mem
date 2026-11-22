@@ -424,6 +424,24 @@ def fingerprint(path: Path) -> tuple[str, str]:
     return (str(stat.st_size), str(stat.st_mtime_ns))
 
 
+def format_ts(ts) -> str:
+    """Fecha local de un `ts` en ns, tal como la imprimen CLI y export."""
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(int(ts) / 1e9))
+
+
+def decode_jsonl(raw: bytes) -> str:
+    """UTF-8 sin BOM. Un crash puede rasgar la última línea a mitad de un
+    carácter multibyte: esa cola se descarta antes de decodificar, porque el
+    rebuild ya tolera la última línea sin `\\n`. Un byte inválido en medio del
+    fichero sigue fallando."""
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        if raw.endswith(b"\n"):
+            raise
+        return raw[: raw.rfind(b"\n") + 1].decode("utf-8-sig")
+
+
 class Store:
     def __init__(self, root: str):
         self.root = Path(root)
@@ -484,9 +502,12 @@ class Store:
             raise ValueError("the title is empty")
         if len(title) > MAX_TITLE:
             raise ValueError(f"title exceeds {MAX_TITLE} characters")
-        if len(body) > MAX_BODY:
+        # El borde comparte contrato con parse_event: un body/ancla inválido aquí
+        # escribiría un evento que el rebuild rechaza y deja el store ilegible.
+        if not isinstance(body, str) or len(body) > MAX_BODY:
             raise ValueError(
-                f"body exceeds {MAX_BODY} characters; split it into two memories"
+                f"invalid body or exceeds {MAX_BODY} characters; "
+                "split it into two memories"
             )
         if why is not None and (
             not isinstance(why, str) or len(why) > MAX_WHY or _has_controls(why, "\n\t")
@@ -497,8 +518,20 @@ class Store:
         topic_key = validate_topic(topic_key)
         source = validate_source(source)
         keywords = validate_keywords(keywords)
-        if anchor_path is not None and _escapes_root(str(anchor_path)):
+        if anchor_path is not None and (
+            not isinstance(anchor_path, str)
+            or len(anchor_path) > MAX_ANCHOR_PATH
+            or _has_controls(anchor_path)
+        ):
+            raise ValueError(f"invalid anchor_path or exceeds {MAX_ANCHOR_PATH}")
+        if anchor_path is not None and _escapes_root(anchor_path):
             raise ValueError("anchor_path must be a project-relative path")
+        if anchor_hash is not None and (
+            not isinstance(anchor_hash, str)
+            or len(anchor_hash) > MAX_ANCHOR_HASH
+            or _has_controls(anchor_hash)
+        ):
+            raise ValueError(f"invalid anchor_hash or exceeds {MAX_ANCHOR_HASH}")
         if body is not None and _has_controls(body, "\n\t"):
             raise ValueError("body contains control characters")
         mid = id or secrets.token_hex(6)
@@ -846,7 +879,7 @@ class Store:
         raw = self.events.read_bytes() if self.events.exists() else b""
         if raw:
             try:
-                text = raw.decode("utf-8-sig")
+                text = decode_jsonl(raw)
             except UnicodeDecodeError as error:
                 raise ValueError("events.jsonl is not valid UTF-8") from error
             lines = text.splitlines()
@@ -974,14 +1007,22 @@ class Store:
             self.rebuild()
             return
         ids = [event.get("id") for event in events]
-        known = any(
-            event.get("op") == "archive"
-            or self._conn.execute("SELECT 1 FROM mem WHERE id = ?", (mid,)).fetchone()
-            for event, mid in zip(events, ids)
-        )
-        if known or len(set(ids)) != len(ids):
+        if len(set(ids)) != len(ids) or any(
+            event.get("op") == "archive" for event in events
+        ):
             self.rebuild()
             return
+        if ids:
+            # Bloques: SQLITE_MAX_VARIABLE_NUMBER es 999 en builds antiguos y un
+            # `git pull` grande puede traer más eventos que eso de una vez.
+            for start in range(0, len(ids), 500):
+                chunk = ids[start : start + 500]
+                placeholders = ",".join("?" * len(chunk))
+                if self._conn.execute(
+                    f"SELECT 1 FROM mem WHERE id IN ({placeholders})", chunk
+                ).fetchone():
+                    self.rebuild()
+                    return
         if events:
             with self._conn:
                 for event in events:

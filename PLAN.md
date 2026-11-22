@@ -432,16 +432,24 @@ important first. Moving one into a round needs its test, as always.
 |---|-------|---------|-------|--------|
 | 1 | Must fix | `purge` read and replaced `events.jsonl` outside the cross-process lock: a concurrent `save` was lost (test fails without the fix) | `store.py` `purge` / `_remove_events` | done, S25 |
 | 2 | Must fix | `events.jsonl.bak` (the purged secret) was not gitignored: `git add .` committed it | `cli.py` `GITIGNORE`, `doctor.py` | done, S26 |
-| 3 | Must fix | `doctor` re-scans secrets in `events.jsonl` but not in `sessions.jsonl` nor `anchor_path` | `doctor.py` `_events`, `_sessions` | open |
-| 4 | Must fix | A torn tail cut inside a multi-byte UTF-8 char aborts the whole decode before the torn-tail tolerance | `store.py` `rebuild`, `doctor.py`, `sessions.py` | open |
-| 5 | Must fix | `Store.save` raises `TypeError` on a non-string `body` and never validates `anchor_hash`, so a caller can write an event the rebuild rejects | `store.py` `save` | open |
-| 6 | Should fix | MCP `archive` does not fall back to the personal scope, unlike CLI `archive` and MCP `get` | `mcp.py` `_archive` | open |
-| 7 | Should fix | The MCP internal error message is Spanish (`"error interno"`), breaking the English-only MCP edge | `mcp.py` `serve` | open |
-| 8 | Should fix | `GITIGNORE` is duplicated in `cli.py`/`doctor.py` and already drifted (`cairn.db-*` missing); `_date` duplicated in `export.py`; four CLI commands repeat the scope lookup | `cli.py`, `doctor.py`, `export.py` | open |
-| 9 | Should fix | `_ignore_sessions` does nothing for the personal scope (it has no `.gitignore`) and MCP `save_session` never calls it | `cli.py`, `mcp.py` | open |
-| 10 | Should fix | No test for a corrupt `cairn.db` in `doctor` nor for a torn multi-byte UTF-8 tail | `tests/test_doctor.py`, `tests/test_jsonl.py` | open |
-| 11 | Nice to have | `render_l0` rebuilds the joined string for every candidate instead of tracking `used` | `render.py` | open |
-| 12 | Nice to have | `_catch_up` runs one `SELECT 1 FROM mem WHERE id = ?` per appended event | `store.py` `_catch_up` | open |
+| 3 | Must fix | `doctor` re-scans secrets in `events.jsonl` but not in `sessions.jsonl` nor `anchor_path` | `doctor.py` `_events`, `_sessions` | done, 2026-11-22 |
+| 4 | Must fix | A torn tail cut inside a multi-byte UTF-8 char aborts the whole decode before the torn-tail tolerance | `store.py` `rebuild`, `doctor.py`, `sessions.py` | done, 2026-11-22 |
+| 5 | Must fix | `Store.save` raises `TypeError` on a non-string `body` and never validates `anchor_hash`, so a caller can write an event the rebuild rejects | `store.py` `save` | done, 2026-11-22 |
+| 6 | Should fix | MCP `archive` does not fall back to the personal scope, unlike CLI `archive` and MCP `get` | `mcp.py` `_archive` | done, 2026-11-22 |
+| 7 | Should fix | The MCP internal error message is Spanish (`"error interno"`), breaking the English-only MCP edge | `mcp.py` `serve` | done, 2026-11-22 |
+| 8 | Should fix | `GITIGNORE` is duplicated in `cli.py`/`doctor.py` and already drifted (`cairn.db-*` missing); `_date` duplicated in `export.py`; four CLI commands repeat the scope lookup | `cli.py`, `doctor.py`, `export.py` | done, 2026-11-22 |
+| 9 | Should fix | `_ignore_sessions` does nothing for the personal scope (it has no `.gitignore`) and MCP `save_session` never calls it | `cli.py`, `mcp.py` | done, 2026-11-22 |
+| 10 | Should fix | No test for a corrupt `cairn.db` in `doctor` nor for a torn multi-byte UTF-8 tail | `tests/test_doctor.py`, `tests/test_jsonl.py` | done, 2026-11-22 |
+| 11 | Nice to have | `render_l0` rebuilds the joined string for every candidate instead of tracking `used` | `render.py` | done, 2026-11-22 |
+| 12 | Nice to have | `_catch_up` runs one `SELECT 1 FROM mem WHERE id = ?` per appended event | `store.py` `_catch_up` | done, 2026-11-22 |
+
+Closed on 2026-11-22 in one batch, with a test per fix (436 → 454 tests): `decode_jsonl`
+trims a torn tail before decoding; `save` validates `body`/`anchor_path`/`anchor_hash`
+with the `parse_event` contract; `doctor` re-scans secrets in `sessions.jsonl` and
+`anchor_path`; `GITIGNORE_ENTRIES` and `ignore_sessions` live in `paths.py` and
+`format_ts` in `store.py`; MCP `archive` falls back to the personal scope,
+`save_session` writes the personal `.gitignore` and the internal error is English;
+`render_l0` tracks `used`; `_catch_up` checks every appended id in one query.
 
 Not checked: `bench/ab.py` and `bench/ab_write.py` against a live `opencode` CLI (model
 tokens) and the PyPI trusted-publisher settings in GitHub.

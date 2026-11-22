@@ -5,26 +5,20 @@ import json
 import os
 import sqlite3
 import sys
-import time
 from pathlib import Path
 
 from cairn_mem import __version__
 from cairn_mem.anchor import is_stale, resolve_anchor
 from cairn_mem.i18n import t
-from cairn_mem.paths import data_dir, personal_dir
+from cairn_mem.paths import (
+    GITIGNORE_ENTRIES,
+    data_dir,
+    ignore_sessions,
+    personal_dir,
+)
 from cairn_mem.sessions import Sessions
 from cairn_mem.setup import HARNESSES, setup
-from cairn_mem.store import KINDS, Store, search_scopes
-
-GITIGNORE = (
-    "cairn.db",
-    "cairn.db-*",
-    "MEMORY.md",
-    ".MEMORY.md.*",
-    "sessions.jsonl",
-    "events.jsonl.bak",
-    "*.lock",
-)
+from cairn_mem.store import KINDS, Store, format_ts, search_scopes
 
 
 def _root(ns) -> Path:
@@ -67,10 +61,6 @@ def _scopes() -> list[Store]:
     return stores
 
 
-def _date(ts) -> str:
-    return time.strftime("%Y-%m-%d %H:%M", time.localtime(int(ts) / 1e9))
-
-
 def _print_json(value) -> None:
     print(json.dumps(value, ensure_ascii=False))
 
@@ -78,7 +68,7 @@ def _print_json(value) -> None:
 def _write_gitignore(root: Path, share: bool) -> None:
     """Conserva las líneas que no gestiona cairn; solo actualiza las suyas."""
     path = root / ".gitignore"
-    managed = {"events.jsonl", *GITIGNORE}
+    managed = {"events.jsonl", *GITIGNORE_ENTRIES}
     kept = []
     if path.exists():
         kept = [
@@ -86,7 +76,7 @@ def _write_gitignore(root: Path, share: bool) -> None:
             for line in path.read_text(encoding="utf-8").splitlines()
             if line.strip() and line not in managed
         ]
-    lines = [*kept, *GITIGNORE]
+    lines = [*kept, *GITIGNORE_ENTRIES]
     if not share:
         lines.append("events.jsonl")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
@@ -276,7 +266,7 @@ def _cmd_purge(ns) -> int:
 def _cmd_topics(ns) -> int:
     rows = []
     for store in _scopes():
-        scope = "personal" if store.root == personal_dir() else "project"
+        scope = _scope_of(store)
         rows += [{**row, "scope": scope} for row in store.topics()]
     if ns.json:
         _print_json(rows)
@@ -292,7 +282,7 @@ def _cmd_topics(ns) -> int:
 def _cmd_history(ns) -> int:
     rows = []
     for store in _scopes():
-        scope = "personal" if store.root == personal_dir() else "project"
+        scope = _scope_of(store)
         rows += [{**row, "scope": scope} for row in store.history(ns.topic)]
     rows.sort(key=lambda row: (row["ts"], row["id"]))
     if ns.json:
@@ -303,7 +293,7 @@ def _cmd_history(ns) -> int:
         for row in rows:
             tag = "  [personal]" if row["scope"] == "personal" else ""
             print(
-                f"{row['id']}  {_date(row['ts'])}  {row['kind']}  "
+                f"{row['id']}  {format_ts(row['ts'])}  {row['kind']}  "
                 f"{row['status']}  {row['title']}{tag}"
             )
     return 0
@@ -357,28 +347,20 @@ def _cmd_check(ns) -> int:
     return 0
 
 
-def _ignore_sessions(root) -> None:
-    """Sesiones locales: `init` las ignora, pero el scope personal no pasa por init."""
-    path = Path(root) / ".gitignore"
-    if not path.exists():
-        return
-    lines = path.read_text(encoding="utf-8").splitlines()
-    if "sessions.jsonl" not in lines:
-        path.write_text(
-            "\n".join([*lines, "sessions.jsonl"]) + "\n", encoding="utf-8", newline="\n"
-        )
+def _scope_of(store: Store) -> str:
+    return "personal" if store.root == personal_dir() else "project"
 
 
 def _cmd_session_save(ns) -> int:
-    root = personal_dir() if ns.personal else data_dir()
-    _ignore_sessions(root)
+    root = _root(ns)
+    ignore_sessions(root)
     sid = Sessions(str(root)).save(ns.summary)
     _print_json({"id": sid}) if ns.json else print(sid)
     return 0
 
 
 def _cmd_session_list(ns) -> int:
-    root = personal_dir() if ns.personal else data_dir()
+    root = _root(ns)
     records = Sessions(str(root)).all(limit=ns.limit)
     if ns.json:
         _print_json(records)
@@ -387,12 +369,12 @@ def _cmd_session_list(ns) -> int:
     else:
         for record in records:
             first = " ".join(record["summary"].split())[:80]
-            print(f"{record['id']}  {_date(record.get('ts', 0))}  {first}")
+            print(f"{record['id']}  {format_ts(record.get('ts', 0))}  {first}")
     return 0
 
 
 def _cmd_session_get(ns) -> int:
-    root = personal_dir() if ns.personal else data_dir()
+    root = _root(ns)
     record = Sessions(str(root)).get(ns.id)
     if record is None:
         raise ValueError(
@@ -445,7 +427,7 @@ def _cmd_setup(ns) -> int:
 def _cmd_export(ns) -> int:
     from cairn_mem.export import render_markdown
 
-    root = personal_dir() if ns.personal else data_dir()
+    root = _root(ns)
     if not root.exists():
         raise FileNotFoundError(
             t(f"no {root}; run 'cairn init'", f"no existe {root}; ejecuta 'cairn init'")

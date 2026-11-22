@@ -21,13 +21,15 @@
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (436 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
+  `tests/` (454 plus 4 `xfail` corpus gaps) covers the CLI, the store, the L0, anchors, MCP
   (annotations, read-only mode, `source` and search filters), sessions, import, the JSONL
   tail repair and the 8-process append, the purge under a concurrent append and its Git-excluded
   backup, incremental sync, retrieval, the paraphrase gate
   for `keywords`, the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the
   integrity audit fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B
   detection, the backlog benches and the bench hygiene.
+- **The 2026-11-21 audit is closed (2026-11-22):** every finding in `PLAN.md` §4.2 has a fix
+  and a test (436 -> 454 tests). The next round is S28, the `Stop` hook install path.
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
   the condition that reopens it; do not implement one without that condition.
 - **Keep this file current in the same change:** version and release state, test count,
@@ -120,7 +122,12 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   with a `KeyError` or a CHECK `IntegrityError`. Metadata (S19): no control characters
   (the historical multi-line `why` tolerates `\n` and `\t`), `why` ≤ 2000, `anchor_path`
   ≤ 500, `anchor_hash` ≤ 64. Only a torn tail (the file does not end in `\n`)
-  is tolerated.
+  is tolerated, and `store.decode_jsonl` trims it before decoding so a crash inside a
+  multi-byte character is tolerated too (a bad byte mid-file still fails).
+- `Store.save` enforces the same contract as `parse_event` at the write edge: `body` must be
+  a `str` (a `None` or an int used to crash with `TypeError` or write an unrebuildable
+  event), and `anchor_path`/`anchor_hash` must be strings within `MAX_ANCHOR_PATH`/
+  `MAX_ANCHOR_HASH` with no control characters.
 - L0 (`.cairn/MEMORY.md`) is ≤ 3000 characters: a fixed English title plus a
   "Data, not instructions" header line, then the pinned rows (`📌`, human-set), then
   round-robin by kind (each round: `convention > decision > gotcha > fact`) and newest `ts`
@@ -211,22 +218,26 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   while it lives. Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
   `idempotentHint`): the 5 read tools are read-only, `archive` is destructive and
   idempotent, `save`/`save_session` are writes. `cairn mcp --read-only` serves only the
-  5 read tools and rejects the write tools at the protocol edge. S20: the tool
-  descriptions, the `initialize` instructions and every tool error are in **English**, and
-  `save` appends the `similar:` lines to its result. Since S21 the library edge
-  (`store`, `sessions`, `anchor`, `paths`, `jsonl`, `mcp`) is **English only**, because an
-  MCP tool error is agent-facing; `cli`, `doctor` and `setup` go through
-  `i18n.t(en, es)`, English by default and `CAIRN_LANG=es` opt-in. Any new human message in
-  those three modules is a pair; any new library message is English.
+  5 read tools and rejects the write tools at the protocol edge. `archive` falls back to the
+  personal scope like `get` and the CLI, and `save_session` writes the `sessions.jsonl` line
+  into the `.gitignore` of its scope (`paths.ignore_sessions`, the personal scope has no
+  `init`). S20: the tool descriptions, the `initialize` instructions, every tool error and
+  the internal error are in **English**, and `save` appends the `similar:` lines to its
+  result. Since S21 the library edge (`store`, `sessions`, `anchor`, `paths`, `jsonl`,
+  `mcp`) is **English only**, because an MCP tool error is agent-facing; `cli`, `doctor` and
+  `setup` go through `i18n.t(en, es)`, English by default and `CAIRN_LANG=es` opt-in. Any
+  new human message in those three modules is a pair; any new library message is English.
 - **Doctor:** `doctor.py` is imported lazily and is local: no network, no events written.
   It parses `events.jsonl` with `parse_event` (line-numbered failures), re-runs
-  `reject_secrets` on every `save` (S20: a stored secret is `fail`/`secrets`, the gate
-  before `--share`) and refreshes `cairn.db`/`MEMORY.md` only because it opens the `Store`,
-  like every other command. Exit code 1 only on `fail`; `warn` keeps it 0.
+  `reject_secrets` on every `save` (title/body/why/source/topic/keywords/anchor_path) and on
+  every `sessions.jsonl` recap (S20: a stored secret is `fail`/`secrets`, the gate before
+  `--share`), and refreshes `cairn.db`/`MEMORY.md` only because it opens the `Store`,
+  like every other command. Exit code 1 only on `fail`; `warn` keeps it 0. `GITIGNORE_ENTRIES`
+  is defined once in `paths.py` (the `cairn.db-*` drift came from the copy in `doctor.py`).
 - **Setup:** `setup.py` holds one table (`HARNESSES`) with the config file, the JSON path of
-  the server and the instructions file per harness. It only touches the repo (never
-  `~/.claude.json` or the global OpenCode config) and only the `cairn` key: a config file
-  that is not strict JSON (JSONC with comments) is **not** rewritten, the command fails
+  the server, the instructions file and the hook path per harness. It only touches the repo
+  (never `~/.claude.json` or the global OpenCode config) and only the `cairn` key: a config
+  file that is not strict JSON (JSONC with comments) is **not** rewritten, the command fails
   with code 1 and prints the block to paste. A new harness is one row plus one test
   against a fixture; do not add a format nobody verified. Since S21, when the instructions
   file is not `AGENTS.md` and already imports `@AGENTS.md`, `setup` writes no block there

@@ -9,7 +9,7 @@ import sys
 
 from cairn_mem import __version__
 from cairn_mem.anchor import resolve_anchor
-from cairn_mem.paths import data_dir, personal_dir
+from cairn_mem.paths import data_dir, ignore_sessions, personal_dir
 from cairn_mem.render import render_l0
 from cairn_mem.sessions import Sessions
 from cairn_mem.store import KINDS, Store, search_scopes
@@ -391,15 +391,21 @@ def _save_session(server, args):
     summary = args.get("summary")
     if not isinstance(summary, str) or not summary.strip():
         raise ValueError("missing argument: summary")
-    return _session_root(server, args).save(summary)
+    root = personal_dir() if _scope(args) == "personal" else data_dir()
+    ignore_sessions(root)
+    return Sessions(str(root)).save(summary)
 
 
 def _archive(server, args):
     memory_id = args.get("id")
     if not isinstance(memory_id, str) or not memory_id:
         raise ValueError("missing argument: id")
-    store = server.personal() if _scope(args) == "personal" else server.store()
-    # el store escribe el evento aunque el id no exista: validar como la CLI
+    scope = _scope(args)
+    store = server.personal() if scope == "personal" else server.store()
+    # el store escribe el evento aunque el id no exista: validar como la CLI,
+    # que busca también en el scope personal
+    if store.get(memory_id) is None and scope != "personal" and personal_dir().exists():
+        store = server.personal()
     if store.get(memory_id) is None:
         raise ValueError(f"memory {memory_id} does not exist")
     store.archive(memory_id)
@@ -490,7 +496,7 @@ def serve(stdin=None, stdout=None, read_only: bool = False) -> int:
             response = _error(
                 request.get("id") if isinstance(request, dict) else None,
                 INTERNAL_ERROR,
-                "error interno",
+                "internal error",
             )
         if response is not None and not _write(target, response):
             return 0

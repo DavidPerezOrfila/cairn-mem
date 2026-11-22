@@ -72,6 +72,20 @@ def test_non_object_torn_tail_is_ignored(tmp_path):
     assert [record["id"] for record in sessions.all()] == ["aaaaaaaaaaaa"]
 
 
+def test_torn_tail_inside_a_multibyte_char_is_ignored(tmp_path):
+    """Auditoría 2026-11-21 #4: el decode del fichero entero fallaba con
+    UnicodeDecodeError antes de llegar a la tolerancia de cola rasgada."""
+    sessions = Sessions(str(tmp_path))
+    sessions.path.write_text(
+        '{"op":"session","id":"aaaaaaaaaaaa","ts":1,"summary":"ok"}\n',
+        encoding="utf-8",
+    )
+    sessions.path.write_bytes(sessions.path.read_bytes() + b'{"op":"session","body":"\xc3')
+
+    assert [record["id"] for record in sessions.all()] == ["aaaaaaaaaaaa"]
+    assert sessions.last()["id"] == "aaaaaaaaaaaa"
+
+
 def test_empty_summary_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="empty"):
         Sessions(str(tmp_path)).save("   ")

@@ -294,6 +294,36 @@ def test_external_append_between_saves_is_not_lost(root):
     assert s.get("dddddddddddd")["title"] == "externa"
 
 
+def test_external_append_over_the_variable_limit_is_applied(root):
+    """Auditoría 2026-11-21 #12: un `git pull` grande (1000 eventos de golpe) debe
+    pasar por el catch-up; el `IN (...)` se trocea porque
+    SQLITE_MAX_VARIABLE_NUMBER es 999 en builds antiguos."""
+    s = Store(root)
+    s.save(kind="fact", title="uno", body="a")
+    lines = [
+        json.dumps(
+            {
+                "op": "save",
+                "id": f"{number:012x}",
+                "ts": 1000 + number,
+                "kind": "fact",
+                "title": f"externa {number}",
+                "body": "cola externa",
+            }
+        )
+        + "\n"
+        for number in range(1000)
+    ]
+    with open(f"{root}/events.jsonl", "a", encoding="utf-8", newline="\n") as f:
+        f.writelines(lines)
+
+    s.save(kind="fact", title="dos", body="c")
+
+    fresh = Store(root)
+    assert fresh.get("000000000001")["title"] == "externa 1"
+    assert fresh.search("cola externa")
+
+
 def test_external_append_during_apply_triggers_rebuild(root, monkeypatch):
     """La huella se captura tras el append, no tras el apply."""
     s = Store(root)
@@ -1161,3 +1191,53 @@ def test_why_multiline_history_survives_the_round_trip(store, root):
     rebuild de la historia."""
     mid = store.save(kind="fact", title="x", body="y", why="línea uno\nlínea dos")
     assert Store(root).get(mid)["why"] == "línea uno\nlínea dos"
+
+
+def test_save_rejects_a_non_string_body(store):
+    """Auditoría 2026-11-21 #5: `len(None)` daba TypeError y, peor, un body
+    numérico escribía un evento que el rebuild rechaza."""
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body=None)
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body=42)
+
+
+@pytest.mark.parametrize(
+    "field, bad",
+    [
+        ("anchor_path", 7),
+        ("anchor_path", "p" * 501),
+        ("anchor_path", "p\nq"),
+        ("anchor_hash", 7),
+        ("anchor_hash", "h" * 65),
+        ("anchor_hash", "h\nx"),
+    ],
+)
+def test_save_rejects_invalid_anchors(store, field, bad):
+    """Auditoría #5: un anchor_hash sin validar entraba en la DB y el rebuild
+    siguiente rechazaba el evento, dejando el store ilegible."""
+    with pytest.raises(ValueError):
+        store.save(kind="fact", title="x", body="y", **{field: bad})
+
+
+def test_rebuild_tolerates_a_torn_tail_cut_inside_a_multibyte_char(root):
+    """Auditoría #4: el crash corta la última línea a mitad de un carácter
+    UTF-8; el decode fallaba antes de llegar a la tolerancia de cola rasgada."""
+    store = Store(root)
+    mid = store.save(kind="fact", title="ok", body="a")
+    path = Path(root) / "events.jsonl"
+    path.write_bytes(path.read_bytes() + b'{"op":"save","body":"\xc3')
+
+    fresh = Store(root)
+
+    assert fresh.get(mid)["title"] == "ok"
+
+
+def test_rebuild_still_rejects_invalid_utf8_inside_the_file(root):
+    """La tolerancia es solo para la cola rasgada: un byte inválido en medio del
+    fichero (o con `\\n` final) sigue siendo corrupción."""
+    os.makedirs(root, exist_ok=True)
+    path = Path(root) / "events.jsonl"
+    path.write_bytes(b'{"op":"save","body":"\xff\xfe"}\n')
+    with pytest.raises(ValueError):
+        Store(root)

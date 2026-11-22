@@ -523,6 +523,17 @@ def test_personal_session_scope(capsys, in_tmp):
     assert "resumen personal" in run(capsys, "session", "get", sid, "--personal")[1]
 
 
+def test_personal_session_creates_its_gitignore(capsys, in_tmp):
+    """Auditoría 2026-11-21 #9: el scope personal no pasa por `init`, así que
+    `_ignore_sessions` salía sin escribir nada."""
+    run(capsys, "init")
+    run(capsys, "session", "save", "--summary", "recap", "--personal")
+
+    assert "sessions.jsonl" in (in_tmp / "home" / ".gitignore").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_search_by_topic_shows_it_in_text_and_json(capsys):
     run(capsys, "init")
     run(

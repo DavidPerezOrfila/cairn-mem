@@ -36,12 +36,14 @@ def render_l0(store, max_chars: int = 3000, project_root=None) -> str:
         used += len(line) + 1
     hashes = _prewarm([row for row, _ in candidates], root)
     lines = [TITLE, HEADER]
+    used = len(TITLE) + len(HEADER) + 2  # el L0 acaba en '\n': dos líneas, dos saltos
     for row, line in candidates:
         if is_stale(row["anchor_path"], row["anchor_hash"], root, cache=hashes):
             line += STALE_MARK
-        if len("\n".join([*lines, line])) + 1 > max_chars:
+        if used + len(line) + 1 > max_chars:
             break
         lines.append(line)
+        used += len(line) + 1
     return "\n".join(lines) + "\n"
 
 
