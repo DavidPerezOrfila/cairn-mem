@@ -101,7 +101,8 @@ def _merge_config(path: Path, keys, server, base) -> bool:
     """Conserva el resto del fichero: solo toca la clave del servidor."""
     if path.exists():
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            # utf-8-sig: un BOM (Windows) no es "JSON no estricto".
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
         except ValueError:
             block = json.dumps(
                 _nested(keys, server, base), indent=2, ensure_ascii=False

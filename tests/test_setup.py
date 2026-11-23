@@ -64,6 +64,15 @@ def test_existing_config_keeps_other_keys(capsys, in_tmp):
     assert config["mcp"]["servers"]["cairn"]["command"] == ["cairn", "mcp"]
 
 
+def test_config_with_a_utf8_bom_is_read(capsys, in_tmp):
+    """Windows puede escribir el config con BOM: no es "JSON no estricto"."""
+    (in_tmp / "opencode.json").write_bytes(b'\xef\xbb\xbf{"model": "x/y"}\n')
+    assert run(capsys, "setup", "opencode")[0] == 0
+    config = json.loads((in_tmp / "opencode.json").read_text(encoding="utf-8"))
+    assert config["model"] == "x/y"
+    assert config["mcp"]["servers"]["cairn"]["command"] == ["cairn", "mcp"]
+
+
 def test_second_run_changes_nothing(capsys, in_tmp):
     assert run(capsys, "setup", "claude-code")[0] == 0
     config = (in_tmp / ".mcp.json").read_bytes()
