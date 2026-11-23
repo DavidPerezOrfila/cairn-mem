@@ -447,9 +447,10 @@ final-answer contains for the read cases, forbidden-tool checks for the negative
   every case, detects changes, restores them from the snapshot and records a `damage` field
   on the row. `tests/test_eval_mcp_tools.py` covers detection, restore and the
   created-file case (462 passed + 4 xfail).
-- [ ] **Land `fix/config-bom` through a PR**: branch `fix/config-bom` (left by the eval
-  agent, `5803958`) carries a real bug fix with a passing test that `main` lacks
-  (`setup.py` reads the harness config with `utf-8-sig`).
+- [x] **Land `fix/config-bom` through a PR**: branch `fix/config-bom` (left by the eval
+  agent, `5803958`) carried a real bug fix with a passing test that `main` lacked
+  (`setup.py` reads the harness config with `utf-8-sig`). **Merged 2026-11-23 as #89**; the
+  same day, #88 (the eval's damage gate) landed too.
 - [ ] **The Claude Code `Stop` arm (S28 remainder)**: a `Stop` arm for `bench/ab_write.py`
   (its `Stop` is a settings-file hook that blocks the turn), criteria pre-registered in
   `bench/ab_write_protocol.md` before measuring, n ≥ 30 per arm, and only then
