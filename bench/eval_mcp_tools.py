@@ -308,6 +308,36 @@ def wilson(wins: int, total: int, z: float = 1.96) -> tuple[float, float]:
     )
 
 
+# El agente evaluado no está sandboxeado (medido 2026-11-23: `c13` archivó 29
+# memorias reales y `c14` borró `events.jsonl` del repo). El gate no lo contiene:
+# detecta el daño contra el store real tras cada caso y lo repara del snapshot.
+GUARDED = ("events.jsonl", "sessions.jsonl")
+
+
+def _snapshot_guard(store: Path) -> dict[str, bytes | None]:
+    """Contenido de los ficheros append-only del store real; `None` = no existe."""
+    return {name: (store / name).read_bytes() if (store / name).exists() else None
+            for name in GUARDED}
+
+
+def _check_guard(store: Path, snapshot: dict[str, bytes | None]) -> list[str]:
+    """Devuelve los ficheros dañados y los restaura. Se llama tras cada caso:
+    el daño queda atribuido al caso que corrió entre snapshot y check."""
+    damaged = []
+    for name, content in snapshot.items():
+        path = store / name
+        current = path.read_bytes() if path.exists() else None
+        if current == content:
+            continue
+        damaged.append(name)
+        if content is None:
+            path.unlink()
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+    return damaged
+
+
 def main(argv=None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -329,6 +359,7 @@ def main(argv=None) -> int:
     (out / "traces").mkdir(parents=True, exist_ok=True)
     results = out / "results.jsonl"
     tmp = Path(tempfile.mkdtemp(prefix="cairn-eval-"))
+    guard = _snapshot_guard(ROOT / ".cairn")
     rows = []
     spent = 0
     try:
@@ -367,6 +398,11 @@ def main(argv=None) -> int:
                     "usage": {"tokens": result["tokens"]},
                     "answer": result["answer"][:600],
                 }
+                damage = _check_guard(ROOT / ".cairn", guard)
+                if damage:
+                    row["damage"] = damage
+                    print(f"AVISO: {case['id']} tocó el store real ({', '.join(damage)}); "
+                          "restaurado del snapshot", flush=True)
                 rows.append(row)
                 with results.open("a", encoding="utf-8", newline="\n") as handle:
                     handle.write(json.dumps(row, ensure_ascii=False) + "\n")

@@ -9,13 +9,13 @@
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (463 collected: 459 pass plus 4 `xfail` corpus gaps) covers the CLI, the store, the
+  `tests/` (466 collected: 462 pass plus 4 `xfail` corpus gaps) covers the CLI, the store, the
   L0, anchors, MCP (annotations, read-only mode, `source` and search filters), sessions,
   import, the JSONL tail repair and the 8-process append, the purge under a concurrent append
   and its Git-excluded backup, incremental sync, retrieval, the paraphrase gate for `keywords`,
   the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the integrity audit
   fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B detection, the backlog
-  benches and the bench hygiene.
+  benches and the bench hygiene, the MCP tool-selection eval and its real-store damage gate.
 - **The 2026-11-21 audit is closed (2026-11-22):** every finding in `PLAN.md` §4.2 has a fix
   and a test (the config BOM fix brought it to 459).
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has

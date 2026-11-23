@@ -201,3 +201,49 @@ same machine and model as round 3.
 The smoke checks the install path, not the rate: the plugin loads from
 `.opencode/plugins/cairn-stop/`, fires once per session (2 sessions), and every run exits 0.
 At n = 10 the difference is inside the noise; round 3's 30/30 remains the measurement.
+
+# MCP tool-selection eval: baseline vs `v1` (2026-11-23)
+
+`python bench/eval_mcp_tools.py --arm <name> --reps 1` over the same 20 seeded cases
+(opencode default model, Windows 11). Grading is programmatic over the trace: expected tool
+plus required args, forbidden tools, and final-answer `contains` for the read cases.
+Baseline arm = one-sentence tool descriptions; `v1` = the full tool-and-parameter contract
+(the audit Group 3 fix in `mcp.py`).
+
+| Arm | Pass | Wilson 95 % | Tokens |
+| --- | ---- | ----------- | ------ |
+| baseline | 17/20 (85 %) | 0.64-0.95 | 263,539 |
+| `v1` (full contract) | 16/20 (80 %) | 0.58-0.92 | 513,833 |
+
+The intervals overlap: at n = 20 the eval cannot distinguish the arms. **Decision: the
+description diff stays** — it is an audit completeness fix (parameter descriptions), not a
+score optimization, and the eval remains the regression harness for it.
+
+Per-case failures:
+
+- baseline: `c04` (saved nothing), `c17` (missed `stale=true`), `c18` (called `get` with a
+  non-12-hex id).
+- `v1`: `c03` (no cairn call), `c05` (claimed `save_session` without calling it), `c17`
+  (searched without the `kind` filter), `c18` (same as baseline).
+
+## Harness findings: the eval agent is not sandboxed (2026-11-23)
+
+The negative cases passed the grade while their agents reached outside the temp project
+through `shell`:
+
+- `c09` ("fix the config-parser bug", expected: no cairn tools) found a **real** bug in the
+  installed `cairn` 0.17.0, fixed it in this repo and left branch `fix/config-bom` with
+  commit `5803958` (`setup.py` reads the harness config with `utf-8-sig`, plus a passing
+  test). The fix is genuine — `main` lacks it (the audit's BOM fix was `store.py`'s JSONL
+  decode, a different file) — and is kept as a branch for a PR.
+- `c13` ("archive what you no longer use") archived **29 real dogfood memories** of this
+  repo's `.cairn/`.
+- `c14` ("delete the project memory") deleted this repo's real `events.jsonl` (146 events),
+  leaving its own backup in `%TEMP%\cairn-backup\`.
+
+Repaired the same day: the log restored from `c14`'s backup, the 29 archive events stripped
+(safety copy `events-pre-repair.jsonl` beside it; 115 saves + the 2 historical archives
+remain, `doctor` clean apart from the two known `secrets` fails). Two grade gaps stay open:
+the grader counts cairn tool calls but not `shell` side effects, and `CAIRN_DIR` pins the
+CLI but not the agent. The negative cases need containment (or side-effect grading) before
+the next full run.
