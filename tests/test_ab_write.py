@@ -2,6 +2,8 @@
 
 import importlib.util
 import json
+import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -190,3 +192,91 @@ def test_json_rows_carry_the_arm_and_the_result(monkeypatch, tmp_path, capsys):
     rows = json.loads(capsys.readouterr().out)
     assert [row["arm"] for row in rows] == ["plain", "plain"]
     assert all(row["saved"] is False and row["exit"] == 0 for row in rows)
+
+
+# Round 4 (S28 remainder): el brazo `stop` bajo el arnés claude-code.
+
+
+def test_cc_stop_arm_writes_settings_hook_and_baseline(tmp_path):
+    module = _module("ab_write")
+    stop = tmp_path / "stop"
+    module._prepare(stop, "stop", harness="claude-code")
+    settings = json.loads(
+        (stop / ".claude" / "settings.json").read_text(encoding="utf-8")
+    )
+    command = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
+    script = stop / ".claude" / "hooks" / "cairn_stop.py"
+    assert script.read_text(encoding="utf-8") == module.CC_HOOK
+    assert script.resolve().as_posix() in command.replace("\\", "/").replace('"', "")
+    # La línea base se fija al instalar: el equivalente al `before` del plugin.
+    baseline = (stop / ".cairn-nudge" / "baseline").read_text(encoding="utf-8")
+    assert baseline.strip() == "0"
+    assert "stop_hook_active" in script.read_text(encoding="utf-8")
+
+
+def test_cc_other_arms_do_not_install_the_hook(tmp_path):
+    module = _module("ab_write")
+    empty = tmp_path / "empty"
+    module._prepare(empty, "empty", harness="claude-code")
+    assert not (empty / ".claude" / "settings.json").exists()
+    assert (empty / "AGENTS.md").read_text(encoding="utf-8") == module._snippet()
+
+
+def test_cc_hook_text_is_the_measured_nudge():
+    """El texto es el de la ronda 3 (S27): un solo mecanismo de empujón, un solo texto."""
+    from cairn_mem.setup import HOOK_ASSET
+
+    module = _module("ab_write")
+    match = re.search(
+        r"^const NUDGE = `(.*)`$", HOOK_ASSET.read_text(encoding="utf-8"), re.MULTILINE
+    )
+    assert module.CC_NUDGE == match.group(1).replace("\\`", "`")
+
+
+def test_cc_hook_nudges_once_and_only_without_a_save(tmp_path):
+    module = _module("ab_write")
+    project = tmp_path / "p"
+    module._prepare(project, "stop", harness="claude-code")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+
+    def hook(session_id, stop_hook_active=False):
+        return subprocess.run(
+            [sys.executable, str(script)],
+            input=json.dumps(
+                {
+                    "session_id": session_id,
+                    "cwd": str(project),
+                    "stop_hook_active": stop_hook_active,
+                }
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+            check=False,
+        )
+
+    # Primera parada sin save: un empujón, y queda en el log del banco.
+    first = hook("s1")
+    assert first.returncode == 0
+    decision = json.loads(first.stdout)
+    assert decision["decision"] == "block" and decision["reason"] == module.CC_NUDGE
+    assert module._nudges(project) == 1
+
+    # Segunda parada de la misma sesión: nada (ni marcador nuevo ni segundo aviso).
+    second = hook("s1")
+    assert second.returncode == 0 and second.stdout.strip() == ""
+    assert module._nudges(project) == 1
+
+    # La sesión que ya guardó no se avisa; tampoco una continuación del propio hook.
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="gotcha", title="Epoch", body="time en epoch segundos")
+    finally:
+        store.close()
+    saved = hook("s2")
+    assert saved.returncode == 0 and saved.stdout.strip() == ""
+    assert module._nudges(project) == 1
+    continued = hook("s3", stop_hook_active=True)
+    assert continued.returncode == 0 and continued.stdout.strip() == ""
+    assert module._nudges(project) == 1
