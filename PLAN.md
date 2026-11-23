@@ -428,13 +428,28 @@ fixed in `mcp.py` and validated by `bench/eval_mcp_tools.py`, a 20-case eval of 
 graded programmatically over the opencode trace (`tools.cairn.*` calls inside `execute`,
 final-answer contains for the read cases, forbidden-tool checks for the negatives).
 
-- [ ] **Run the `v1` arm to completion.** Baseline measured: 17/20 PASS (85 %), 263,539 tokens
+- [x] **Run the `v1` arm to completion.** Baseline measured: 17/20 PASS (85 %), 263,539 tokens
   (`failures: c04` saved nothing, `c17` missed `stale=true`, `c18` called `get` with a
-  non-12-hex id). `v1` was interrupted at 4/20 (3 PASS, 94,232 tokens); the budget cap is
-  `--max-tokens 1200000`. Re-run:
-  `python bench/eval_mcp_tools.py --arm v1 --reps 1 --max-tokens 1200000` (~260k tokens more).
-- [ ] **Compare baseline vs `v1` and build the report** with the lite builder on
-  `.claude/hillclimb/mcp-tools/`, then decide whether the description diff is kept as measured.
+  non-12-hex id). **Measured 2026-11-23** (`--reps 1`, the interrupted 4/20 run was not
+  resumed; all 20 cases re-ran): `v1` 16/20 (80 %, IC95 0.58-0.92), ~540k tokens total.
+  Failures: `c03`, `c05` (no cairn call), `c17` (kind=None, expected gotcha), `c18`
+  (forbidden `get` with a non-12-hex id). The intervals overlap the baseline's, so the
+  diff is within noise; the comparison report is the next item.
+- [x] **Compare baseline vs `v1` and build the report.** **2026-11-23**, in
+  [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md): 17/20 (0.64-0.95) vs 16/20 (0.58-0.92),
+  intervals overlap, the description diff stays (audit completeness fix, not a score
+  optimization). Two harness findings came out of the traces: the eval agent is not
+  sandboxed and damaged the real repo (restored the same day; details in the report), and
+  the grader counts cairn tool calls but not `shell` side effects.
+- [x] **Contain the eval agent before the next full run.** **2026-11-23:** containment is
+  not cheap on Windows, so `bench/eval_mcp_tools.py` gates instead: it snapshots the real
+  store's two append-only files (`events.jsonl`, `sessions.jsonl`) before the run and, after
+  every case, detects changes, restores them from the snapshot and records a `damage` field
+  on the row. `tests/test_eval_mcp_tools.py` covers detection, restore and the
+  created-file case (462 passed + 4 xfail).
+- [ ] **Land `fix/config-bom` through a PR**: branch `fix/config-bom` (left by the eval
+  agent, `5803958`) carries a real bug fix with a passing test that `main` lacks
+  (`setup.py` reads the harness config with `utf-8-sig`).
 - [ ] **The Claude Code `Stop` arm (S28 remainder)**: a `Stop` arm for `bench/ab_write.py`
   (its `Stop` is a settings-file hook that blocks the turn), criteria pre-registered in
   `bench/ab_write_protocol.md` before measuring, n ≥ 30 per arm, and only then
