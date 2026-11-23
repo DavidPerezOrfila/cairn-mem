@@ -181,3 +181,67 @@ python bench/ab_write.py --arms imperative,stop --reps 30 --json  # round 3
 ```
 
 Results go to [`docs/AB_RESULTS.md`](../docs/AB_RESULTS.md).
+
+## Round 4 (S28 remainder): the Claude Code Stop arm (written 2026-11-23, before the run)
+
+The OpenCode hook closed the risk on its harness (round 3: 30/30). Claude Code's `Stop`
+is a different mechanism — a settings-file hook that blocks the turn — and S28 left it
+open until it has its own arm; nothing in round 3 is a claim about it.
+
+### The harness and the arm
+
+`python bench/ab_write.py --harness claude-code --arms empty,stop --reps 30 --json`.
+One session per run is now `claude -p <task> --output-format json --allowedTools
+"Edit,Write,Bash(python -m pytest:*),Bash(pytest:*),Bash(cairn:*)"` — no
+`--dangerously-skip-permissions` (a house rule): the allowlist grants exactly what the
+task needs (edit the file, run the tests, save with cairn) and denies the rest. The
+scenario, the task text, the predicate and the snippet stay frozen. The arms:
+
+- `empty`: the shipped snippet in `AGENTS.md` (Claude Code reads it natively when no
+  `CLAUDE.md` exists in the tree, v2.1.277+). Control: the wording alone.
+- `stop`: the same, plus the project Stop hook: `.claude/settings.json` runs
+  `.claude/hooks/cairn_stop.py` (written by the bench, one file with the nudge
+  embedded). On Stop it reads the event JSON (`session_id`, `cwd`, `stop_hook_active`)
+  and blocks once (`{"decision": "block", "reason": <the round-3 nudge>}`) when the
+  session has not saved: the count of `op == "save"` lines in `.cairn/events.jsonl`
+  still equals the baseline recorded at install time. It gates on the
+  `stop_hook_active` flag and a per-session marker, so it cannot block twice; the
+  blocked turn is the nudge, and the hook writes one line to `.cairn-nudge.log`. The
+  nudge text is the round-3 text, pinned equal to `assets/stop/index.ts` by a test.
+- The hook is not in the control, and `setup claude-code` does not install it until
+  the numbers exist (the same rule S27→S28 followed for OpenCode).
+
+Known noise, symmetric in both arms: the user-level `~/.claude/CLAUDE.md` loads too,
+and the claude MCP servers of the user config are available; the predicate counts
+`cairn save` events whatever channel wrote them. Timeout 900 s per session.
+
+### Criteria
+
+n = 30 per arm, Wilson 95 %, `exit != 0` excluded and reported. Both arms in one
+invocation, interleaved. Tokens are the result `usage` (input + output + cache
+creation + cache read; the same meter in both arms; `tools` here is `num_turns`).
+
+1. **Primary:** `stop`'s Wilson lower bound ≥ 0.5 (at least 21/30) on the unchanged
+   predicate. Same bar as rounds 1-3.
+2. **Improvement over the wording alone:** `stop`'s lower bound exceeds `empty`'s
+   upper bound **in the same run**. (`empty` here is round 3's `imperative` control:
+   the shipped snippet.)
+3. **No junk:** at least 20 of `stop`'s winners are about the timezone change, read by
+   hand in the `--json` rows. The verdict is published only after reading them.
+4. **Cost:** the token mean of `stop` must not exceed 1.75x `empty`'s mean in the same
+   run. One blocked turn per session is expected; more means the agent is talking to
+   itself.
+5. **The hook fires:** every `stop` session that ends without a save has exactly one
+   nudge line in `.cairn-nudge.log`, and no session has more than one. If the hook
+   does not fire, the arm is void, not a zero result.
+6. **Harness health:** more than 10 % non-zero exits in either arm breaks the run.
+
+### Decision rule
+
+- 1 and 2 pass: `setup claude-code` ships the hook with the snippet (one install path,
+  the bench calling it, tests pinning the bytes), the numbers go to
+  [`docs/AB_RESULTS.md`](../docs/AB_RESULTS.md) and the risk row closes.
+- 1 passes, 2 fails: the hook helps but not measurably over the text; shipping it
+  needs a row in [`docs/DECISIONS.md`](../docs/DECISIONS.md) saying so, and the risk
+  row stays open.
+- 1 fails: the lever is closed with its numbers for this harness too; no install path.

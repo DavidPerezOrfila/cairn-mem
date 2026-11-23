@@ -12,6 +12,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -53,6 +54,75 @@ POISON = (
 )
 FILLER = 100
 
+# Round 4 (S28 remainder): el brazo `stop` bajo claude-code. El texto es el de la ronda 3
+# (assets/stop/index.ts), congelado en el protocolo; lo fija tests/test_ab_write.py.
+CC_NUDGE = (
+    "Al cerrar: si esta conversación te dio una razón que no está en el código (por qué el "
+    "usuario quiere el cambio, una restricción, quién consume el dato), guárdala ahora en la "
+    "memoria del proyecto con `cairn save`, con ese porqué en `--why` y un `--topic` "
+    "estable. Una sola memoria. Si no hay ninguna razón así, no hagas nada."
+)
+
+CC_HOOK = '''"""Stop hook de Claude Code (round 4, S28): un solo empujón por sesión.
+
+Bloquea la primera parada de una sesión que no ha guardado: Claude continúa con la razón
+como instrucción. La línea base de saves se fija al instalar el hook (el equivalente al
+`before` del plugin de OpenCode); en Windows el comando lo lanza Git Bash.
+"""
+import json
+import sys
+from pathlib import Path
+
+NUDGE = "@NUDGE@"
+
+
+def _saves(directory: Path) -> int:
+    try:
+        text = (directory / ".cairn" / "events.jsonl").read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        return 0
+    count = 0
+    for line in text.split("\\n"):
+        if not line.strip():
+            continue
+        try:
+            if json.loads(line).get("op") == "save":
+                count += 1
+        except ValueError:
+            pass
+    return count
+
+
+def main() -> None:
+    state = json.load(sys.stdin)
+    if state.get("stop_hook_active"):
+        return
+    root = Path(state.get("cwd") or Path.cwd())
+    state_dir = root / ".cairn-nudge"
+    session = str(state.get("session_id") or "unknown")
+    marker = state_dir / f"{session}.seen"
+    if marker.exists():
+        return
+    baseline = 0
+    try:
+        baseline = int((state_dir / "baseline").read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        pass
+    if _saves(root) > baseline:
+        return
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker.write_text("", encoding="utf-8", newline="\\n")
+    with (root / ".cairn-nudge.log").open("a", encoding="utf-8", newline="\\n") as handle:
+        handle.write(session + "\\n")
+    print(json.dumps({"decision": "block", "reason": NUDGE}))
+
+
+if __name__ == "__main__":
+    main()
+'''.replace("@NUDGE@", CC_NUDGE)
+
 
 def _seed(store: Store, arm: str) -> None:
     if arm == "poison":
@@ -76,7 +146,43 @@ def _seed(store: Store, arm: str) -> None:
             )
 
 
-def _prepare(directory: Path, arm: str) -> None:
+def _install_cc_hook(directory: Path) -> None:
+    """El hook Stop de Claude Code: settings.json del repo + el script, y la línea base
+    de saves en el momento de instalar. `setup claude-code` solo lo instala si la ronda
+    pasa, igual que S28 hizo con OpenCode."""
+    hooks_dir = directory / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    script = hooks_dir / "cairn_stop.py"
+    script.write_text(CC_HOOK, encoding="utf-8", newline="\n")
+    settings = {
+        "hooks": {
+            "Stop": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            # Git Bash (el shell de los hooks en Windows) no lleva la
+                            # barra invertida bien dentro de comillas en todas las rutas.
+                            "command": f'"{sys.executable}" "{script.as_posix()}"',
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    (directory / ".claude" / "settings.json").write_text(
+        json.dumps(settings, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+    state_dir = directory / ".cairn-nudge"
+    state_dir.mkdir(parents=True)
+    (state_dir / "baseline").write_text(
+        str(len(_save_ids(directory / ".cairn" / "events.jsonl"))),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def _prepare(directory: Path, arm: str, harness: str = "opencode") -> None:
     directory.mkdir(parents=True)
     for name, content in FILES.items():
         (directory / name).write_text(content, encoding="utf-8", newline="\n")
@@ -99,9 +205,12 @@ def _prepare(directory: Path, arm: str) -> None:
             newline="\n",
         )
     if arm == "stop":
-        # La ruta real del usuario (S28): el banco mide el hook que instala `setup`,
-        # no una copia del árbol de assets.
-        install_hook("opencode", directory)
+        if harness == "claude-code":
+            _install_cc_hook(directory)
+        else:
+            # La ruta real del usuario (S28): el banco mide el hook que instala `setup`,
+            # no una copia del árbol de assets.
+            install_hook("opencode", directory)
 
 
 def _save_ids(path: Path) -> set[str]:
@@ -168,6 +277,51 @@ def wilson(wins: int, total: int, z: float = 1.96) -> tuple[float, float]:
     )
 
 
+def _run_cc(directory: Path, prompt: str, timeout: int = 900) -> dict:
+    """Una sesión headless de Claude Code. El contador de tokens es el `usage`
+    acumulado del resultado (input + output + cache), el mismo metro en los dos brazos;
+    `tools` aquí son turnos agénticos (`num_turns`), no llamadas a herramientas. Sin
+    `--dangerously-skip-permissions`: la allowlist da al agente justo lo que pide la
+    tarea (editar, correr los tests y guardar con cairn), y lo demás se deniega."""
+    proc = subprocess.run(
+        [
+            "claude",
+            "-p",
+            prompt,
+            "--output-format",
+            "json",
+            "--allowedTools",
+            "Edit,Write,Bash(python -m pytest:*),Bash(pytest:*),Bash(cairn:*)",
+        ],
+        cwd=directory,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+    )
+    try:
+        result = json.loads(proc.stdout)
+    except ValueError:
+        result = {}
+    usage = result.get("usage") or {}
+    return {
+        "answer": str(result.get("result") or "").strip(),
+        "tokens": sum(
+            usage.get(key) or 0
+            for key in (
+                "input_tokens",
+                "output_tokens",
+                "cache_creation_input_tokens",
+                "cache_read_input_tokens",
+            )
+        ),
+        "tools": int(result.get("num_turns") or 0),
+        "exit": proc.returncode,
+    }
+
+
 def main(argv=None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -179,9 +333,17 @@ def main(argv=None) -> int:
         default="plain,empty,stale,poison,distractors",
         help="brazos separados por comas",
     )
+    parser.add_argument(
+        "--harness",
+        choices=("opencode", "claude-code"),
+        default="opencode",
+        help="el CLI del agente que corre la sesión",
+    )
     parser.add_argument("--json", action="store_true")
     ns = parser.parse_args(argv)
     arms = [arm.strip() for arm in ns.arms.split(",") if arm.strip()]
+    runner = _run_cc if ns.harness == "claude-code" else _run
+    timeout = 900 if ns.harness == "claude-code" else 420
 
     tmp = Path(tempfile.mkdtemp(prefix="cairn-abw-"))
     rows = []
@@ -189,10 +351,10 @@ def main(argv=None) -> int:
         for rep in range(ns.reps):
             for arm in arms:
                 project = tmp / f"{arm}-{rep}"
-                _prepare(project, arm)
+                _prepare(project, arm, harness=ns.harness)
                 events = project / ".cairn" / "events.jsonl"
                 before = _save_ids(events)
-                result = _run(project, TASK, timeout=420)
+                result = runner(project, TASK, timeout=timeout)
                 gotchas = _gotcha_saves(events, before)
                 rows.append(
                     {
