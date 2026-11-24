@@ -3,19 +3,20 @@
 ## State and scope
 
 - **State:** `0.17.0` is published (2026-11-20, tag `v0.17.0`, Trusted Publishing). Every round
-  through S28 is implemented except the Claude Code `Stop` arm. The changelog, the open items
-  and the conditions that reopen them live in `PLAN.md` §4, §4.1 and §5; this file carries the
-  current contract only, never a restatement of them.
+  through S28 is implemented except the install path for the measured Claude Code `Stop`
+  hook. The changelog, the open items and the conditions that reopen them live in `PLAN.md`
+  §4, §4.1 and §5; this file carries the current contract only, never a restatement of them.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (466 collected: 462 pass plus 4 `xfail` corpus gaps) covers the CLI, the store, the
+  `tests/` (472 collected: 468 pass plus 4 `xfail` corpus gaps) covers the CLI, the store, the
   L0, anchors, MCP (annotations, read-only mode, `source` and search filters), sessions,
   import, the JSONL tail repair and the 8-process append, the purge under a concurrent append
   and its Git-excluded backup, incremental sync, retrieval, the paraphrase gate for `keywords`,
   the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the integrity audit
-  fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B detection, the backlog
-  benches and the bench hygiene, the MCP tool-selection eval and its real-store damage gate.
+  fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B detection and resumable
+  rows, the Claude Code `Stop` arm, the backlog benches and the bench hygiene, the MCP
+  tool-selection eval and its real-store damage gate.
 - **The 2026-11-21 audit is closed (2026-11-22):** every finding in `PLAN.md` §4.2 has a fix
   and a test (the config BOM fix brought it to 459).
 - **The backlog is closed with measurements (2026-11-16).** Each item in `PLAN.md` §5 has
@@ -43,6 +44,7 @@ python bench/bench_retrieval.py --distractors 10000 # ranking al crecer el índi
 python bench/bench_retrieval.py --file bench/paraphrase.jsonl  # P@3 de léxico/flexión/paráfrasis
 python bench/bench_anchors.py --reps 30             # coste de los anclas en save
 python bench/ab_write.py --reps 30                  # A/B de escritura (requiere opencode)
+python bench/ab_write.py --harness claude-code --arms empty,stop --reps 30 --json --rows-file bench/cc-round4-rows.jsonl
 ```
 
 - Benches: each one measures in a `TemporaryDirectory` and closes its `Store` in every
@@ -232,8 +234,9 @@ python bench/ab_write.py --reps 30                  # A/B de escritura (requiere
   and removes one that an older setup left. Since S28, `setup opencode` installs the measured
   `Stop` hook (`assets/stop/index.ts` in the package, package data in wheel and sdist) into
   `.opencode/plugins/cairn-stop/index.ts`, idempotently, and `install_hook` is the same
-  function `bench/ab_write.py` calls, so measured and installed cannot drift. Claude Code has
-  no hook: its `Stop` is another mechanism and has no measurement.
+  function `bench/ab_write.py` calls, so measured and installed cannot drift. Claude Code's
+  `Stop` arm is measured (30/30 against 16/30 for the snippet alone, 2026-11-24); its
+  `setup claude-code` install path is still pending.
 - **Export:** `cairn export` is a snapshot of active memories grouped by kind, plus the
   last N recaps only when `--sessions N` is given. No stale marks: that would hash every
   anchor and turn a copy into `check`. It must stay byte-identical across runs.
