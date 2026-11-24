@@ -202,6 +202,45 @@ The smoke checks the install path, not the rate: the plugin loads from
 `.opencode/plugins/cairn-stop/`, fires once per session (2 sessions), and every run exits 0.
 At n = 10 the difference is inside the noise; round 3's 30/30 remains the measurement.
 
+# Write-side A/B, round 4: the Claude Code Stop hook (2026-11-24)
+
+Measured on Windows 11 with Claude Code headless:
+
+```console
+python bench/ab_write.py --harness claude-code --arms empty,stop --reps 30 --json --rows-file bench/cc-round4-rows.jsonl
+```
+
+Both arms ran in one invocation, interleaved. The scenario, predicate and shipped snippet
+stayed frozen; only the project `Stop` hook changed. Criteria were written before the run in
+[`bench/ab_write_protocol.md`](../bench/ab_write_protocol.md) §"Round 4".
+
+| Arm | Saved | Wilson 95 % | Tokens (mean) | Turns (mean) | Sessions nudged |
+|---|---|---|---|---|---|
+| `empty` (snippet only) | 16/30 | 0.361-0.698 | 295,983 | 10.2 | 0 |
+| `stop` (snippet + hook) | 30/30 | 0.886-1.000 | 338,604 | 11.5 | 17 |
+
+The run completed all 60 sessions before the 70-minute session limit, with 60/60
+`exit == 0`. Raw evidence: [`bench/cc-round4-rows.jsonl`](../bench/cc-round4-rows.jsonl).
+
+## Verdict against the criteria
+
+1. **Primary: PASSES.** 30/30, Wilson lower bound 0.886 against the required 0.5.
+2. **Improvement over the wording alone: PASSES.** 0.886 exceeds `empty`'s upper bound
+   0.698 in the same interleaved run.
+3. **No junk: PASSES.** The 30 winning rows were read by hand; every one records the
+   timezone/epoch change and why the data team cannot parse local ISO.
+4. **Cost: PASSES.** 338,604 against 295,983 mean tokens: 1.144x, below the 1.75x bound.
+5. **The hook fires: PASSES.** 17 sessions were nudged exactly once and all 17 saved;
+   no session was nudged more than once.
+6. **Harness health: PASSES.** 60/60 runs `exit == 0`.
+
+## What this means
+
+Claude Code's `Stop` hook closes the same gap as OpenCode's: the snippet alone saved 16/30,
+while one nudge at session end raised it to 30/30 for 14.4 % more tokens. The decision rule
+therefore calls for shipping the hook through `setup claude-code`. The install path and its
+tests are the next slice; this measurement does not claim that path is finished.
+
 # MCP tool-selection eval: baseline vs `v1` (2026-11-23)
 
 `python bench/eval_mcp_tools.py --arm <name> --reps 1` over the same 20 seeded cases

@@ -8,6 +8,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from cairn_mem.store import Store
 
 BENCH = Path(__file__).resolve().parents[1] / "bench"
@@ -173,6 +175,41 @@ def test_json_rows_carry_the_saved_text(monkeypatch, tmp_path, capsys):
     assert row["saves"] == [
         {"kind": "gotcha", "title": "UTC", "body": "epoch en segundos", "why": None}
     ]
+
+
+def test_rows_file_keeps_finished_sessions_when_a_later_run_fails(
+    monkeypatch, tmp_path
+):
+    """Un corte de sesión conserva las filas ya terminadas y sigue limpiando el repo."""
+    module = _module("ab_write")
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda **kwargs: str(tmp_path / "run"))
+    rows_file = tmp_path / "rows.jsonl"
+    calls = 0
+    finished_rows = []
+
+    def fake_run(directory, prompt, timeout=240):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            finished_rows.append(len(rows_file.read_text(encoding="utf-8").splitlines()))
+            raise RuntimeError("session cutoff")
+        store = Store(str(directory / ".cairn"))
+        store.save(kind="gotcha", title="UTC", body="epoch en segundos")
+        store.close()
+        return {"answer": "ok", "tokens": 5, "tools": 1, "exit": 0}
+
+    monkeypatch.setattr(module, "_run", fake_run)
+    with pytest.raises(RuntimeError, match="session cutoff"):
+        module.main(["--arms", "empty", "--reps", "2", "--rows-file", str(rows_file)])
+
+    assert finished_rows == [1]
+    rows = [
+        json.loads(line) for line in rows_file.read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(rows) == 1
+    assert rows[0]["saved"] is True
+    assert rows[0]["saves"][0]["title"] == "UTC"
+    assert not (tmp_path / "run").exists()
 
 
 def test_json_rows_carry_the_arm_and_the_result(monkeypatch, tmp_path, capsys):

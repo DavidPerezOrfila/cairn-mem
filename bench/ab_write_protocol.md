@@ -245,3 +245,37 @@ creation + cache read; the same meter in both arms; `tools` here is `num_turns`)
   needs a row in [`docs/DECISIONS.md`](../docs/DECISIONS.md) saying so, and the risk
   row stays open.
 - 1 fails: the lever is closed with its numbers for this harness too; no install path.
+
+### Outcome (2026-11-24)
+
+Measured on Windows 11 with Claude Code headless:
+
+```console
+python bench/ab_write.py --harness claude-code --arms empty,stop --reps 30 --json --rows-file bench/cc-round4-rows.jsonl
+```
+
+Both arms ran in one invocation, interleaved. The run finished on its own before the
+70-minute session limit: 60 sessions, all `exit == 0`.
+
+| Arm | Saved | Wilson 95 % | Tokens (mean) | Turns (mean) | Sessions nudged |
+|---|---|---|---|---|---|
+| `empty` (snippet only) | 16/30 | 0.361-0.698 | 295,983 | 10.2 | 0 |
+| `stop` (snippet + hook) | 30/30 | 0.886-1.000 | 338,604 | 11.5 | 17 |
+
+The `stop` arm used 1.144x the tokens of `empty`, inside the 1.75x bound. Each of the 17
+nudged sessions has exactly one nudge and a counted save; no row has more than one nudge.
+The 30 winning rows were read by hand: every one records the timezone/epoch change and
+the reason the data team cannot parse local ISO. The raw rows are in
+[`cc-round4-rows.jsonl`](cc-round4-rows.jsonl); the duplicate full JSON dump is not versioned.
+
+1. **Primary: PASSES.** 30/30, Wilson lower bound 0.886 against the required 0.5.
+2. **Improvement over the wording alone: PASSES.** 0.886 exceeds `empty`'s upper bound
+   0.698 in the same run.
+3. **No junk: PASSES.** All 30 winners are about the timezone/epoch change.
+4. **Cost: PASSES.** 1.144x, below the 1.75x limit.
+5. **The hook fires: PASSES.** 17 sessions were nudged exactly once and all 17 saved;
+   zero sessions were nudged more than once.
+6. **Harness health: PASSES.** 60/60 runs `exit == 0`.
+
+The decision rule's first branch applies: `setup claude-code` ships the hook. The
+install path, its tests and the documentation updates remain separate work.

@@ -11,3 +11,7 @@ __pycache__/
 .cairn/cairn.db-*
 .cairn/MEMORY.md
 .claude/hillclimb/
+
+# Volcados completos de la ronda 4; la evidencia versionada es el NDJSON.
+bench/cc-round4-full.err
+bench/cc-round4-full.json

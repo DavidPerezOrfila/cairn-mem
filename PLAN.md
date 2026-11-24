@@ -454,7 +454,19 @@ final-answer contains for the read cases, forbidden-tool checks for the negative
 - [ ] **The Claude Code `Stop` arm (S28 remainder)**: a `Stop` arm for `bench/ab_write.py`
   (its `Stop` is a settings-file hook that blocks the turn), criteria pre-registered in
   `bench/ab_write_protocol.md` before measuring, n ≥ 30 per arm, and only then
-  `setup claude-code` installs it.
+  `setup claude-code` installs it. **Measurement done 2026-11-24** (60/60 sessions, all
+  exits 0; the run finished on its own just before the 70-min session cutoff): `stop`
+  30/30 (IC95 0.886-1.000) vs `empty` 16/30 (0.361-0.698) in the same interleaved run,
+  1.14x tokens, 17 sessions nudged exactly once (all 17 saved after the nudge). Criteria
+  1-6 all pass (the 30 winners read by hand: every one about the timezone/epoch change),
+  so the decision rule's first branch applies: ship the hook in `setup claude-code`.
+  Data: `bench/cc-round4-rows.jsonl` (NDJSON, one row per session), written by
+  `ab_write.py --rows-file` and versioned as the evidence; the duplicate full JSON dump and
+  empty stderr file are ignored. The outcome is recorded in `bench/ab_write_protocol.md`
+  and `docs/AB_RESULTS.md`. **Remaining:** the install path (move `bench/ab_write.py:
+  _install_cc_hook` behind `setup.install_hook` with the settings bytes pinned by a
+  test, hook row in `HARNESSES["claude-code"]`), the risk row in §6, and `AGENTS.md`
+  in the same change.
 - [ ] **Release 0.18.0 decision**: S24-S28 plus the description fix are shipped without a
   release; tag when the user decides.
 

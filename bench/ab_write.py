@@ -5,7 +5,7 @@ Una sesión por corrida sobre un repo de juguete: el usuario explica el porqué 
 `save` nuevo con las palabras del gotcha. El protocolo y los criterios están escritos ANTES
 de medir en `bench/ab_write_protocol.md`.
 
-Requiere el CLI `opencode` en PATH, como `bench/ab.py`.
+Requiere el CLI elegido con `--harness` (`opencode` o `claude`) en PATH.
 """
 
 import argparse
@@ -340,6 +340,14 @@ def main(argv=None) -> int:
         help="el CLI del agente que corre la sesión",
     )
     parser.add_argument("--json", action="store_true")
+    # Cada fila se escribe al terminar su sesión: un corte a mitad de corrida
+    # conserva lo ya medido (ronda 4 se midió contra un límite de sesión).
+    parser.add_argument(
+        "--rows-file",
+        type=Path,
+        default=None,
+        help="fichero NDJSON donde aterriza cada fila al terminar su sesión",
+    )
     ns = parser.parse_args(argv)
     arms = [arm.strip() for arm in ns.arms.split(",") if arm.strip()]
     runner = _run_cc if ns.harness == "claude-code" else _run
@@ -348,16 +356,21 @@ def main(argv=None) -> int:
     tmp = Path(tempfile.mkdtemp(prefix="cairn-abw-"))
     rows = []
     try:
-        for rep in range(ns.reps):
-            for arm in arms:
-                project = tmp / f"{arm}-{rep}"
-                _prepare(project, arm, harness=ns.harness)
-                events = project / ".cairn" / "events.jsonl"
-                before = _save_ids(events)
-                result = runner(project, TASK, timeout=timeout)
-                gotchas = _gotcha_saves(events, before)
-                rows.append(
-                    {
+        out = (
+            ns.rows_file.open("a", encoding="utf-8", newline="\n")
+            if ns.rows_file
+            else None
+        )
+        try:
+            for rep in range(ns.reps):
+                for arm in arms:
+                    project = tmp / f"{arm}-{rep}"
+                    _prepare(project, arm, harness=ns.harness)
+                    events = project / ".cairn" / "events.jsonl"
+                    before = _save_ids(events)
+                    result = runner(project, TASK, timeout=timeout)
+                    gotchas = _gotcha_saves(events, before)
+                    row = {
                         "arm": arm,
                         "rep": rep,
                         "exit": result["exit"],
@@ -375,7 +388,13 @@ def main(argv=None) -> int:
                         "tools": result["tools"],
                         "answer": result["answer"][:200],
                     }
-                )
+                    rows.append(row)
+                    if out:
+                        out.write(json.dumps(row, ensure_ascii=False) + "\n")
+                        out.flush()
+        finally:
+            if out:
+                out.close()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
