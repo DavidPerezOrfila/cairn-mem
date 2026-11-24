@@ -421,6 +421,38 @@ the one-round-per-release rule and add its row to the §4 table when it ships.
   The plugin loads from the installed path and fires once per session; n = 10 is noise for
   the rate, so round 3's 30/30 stays the number. In [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md).
 
+### S29: anotaciones MCP completas y fieles
+
+**Slide 1 — Problema.** M8ven exige las cuatro anotaciones MCP como booleanos
+explícitos. `openWorldHint` está ausente; `save.destructiveHint` y
+`archive.idempotentHint` tampoco describen su comportamiento real.
+
+**Slide 2 — Contrato.** Lectura (`search`, `get`, `context`, `session_list`,
+`session_get`): `true/false/true/false`. `save` y `archive`:
+`false/true/false/false`. `save_session`: `false/false/false/false`
+(`readOnly/destructive/idempotent/openWorld`). Read-only se define sobre memoria
+curada, no sobre el refresco de ficheros derivados.
+
+**Slide 3 — Cambio mínimo.**
+
+- [x] Añadir `openWorldHint=false` a los tres mapas compartidos de `mcp.py`.
+- [x] Reutilizar `DESTRUCTIVE_ANNOTATIONS` para `save` y poner
+      `archive.idempotentHint=false`.
+- [x] No cambiar handlers, schemas, permisos, versión de protocolo ni retrieval.
+
+**Slide 4 — Aceptación y evidencia.**
+
+- [x] La prueba de matriz cubre 8/8 tools, cuatro claves exactas y
+      `type(value) is bool`; las dos pruebas de `--read-only` siguen verdes.
+- [x] Actualizar S15, `AGENTS.md`, `docs/DESIGN.md` y `docs/DECISIONS.md` en la
+      misma rodaja. RED: `pytest tests/test_mcp.py::test_tools_carry_annotations -q`
+      → 0 passed, 1 failed (`AssertionError: save`). GREEN:
+      `pytest tests/test_mcp.py -q` → 41 passed. Gate parental aprobado:
+      focal → 3 passed in 1.03s; `pytest -q` → 468 passed, 4 xfailed in 34.36s;
+      `ruff check src tests bench` → `[]`; `mypy src` → `No issues found`;
+      `git diff --check` sin salida.
+- [x] No añadir fila en §4 ni publicar versión hasta que S29 esté integrado.
+
 ### Pending (2026-11-23, MCP tool-selection eval and the Claude Code arm)
 
 The audit's Group 3 finding (one-sentence MCP tool descriptions, no parameter descriptions) is
