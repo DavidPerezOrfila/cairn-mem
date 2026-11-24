@@ -195,6 +195,20 @@ milliseconds; see `docs/features/s7-incremental-sync.md`.
   process exits cleanly when the pipe closes (no signals, portable to Windows, macOS and
   Linux).
 - Tool errors return `isError: true` with text. Protocol errors return JSON-RPC errors.
+- All eight tools declare exactly four boolean annotations:
+
+| Tool(s) | readOnlyHint | destructiveHint | idempotentHint | openWorldHint |
+|---|---:|---:|---:|---:|
+| `search`, `get`, `context`, `session_list`, `session_get` | true | false | true | false |
+| `save` | false | true | false | false |
+| `save_session` | false | false | false | false |
+| `archive` | false | true | false | false |
+
+  Read-only means no writes to `events.jsonl` or `sessions.jsonl`; creating a scope
+  directory or refreshing derived `cairn.db`/`MEMORY.md` does not change that
+  contract. Every tool is local, so `openWorldHint=false`. `save` can supersede or
+  update active memory and `archive` appends an event on every call, so both are
+  destructive and non-idempotent. `save_session` is additive and non-idempotent.
 
 ## Doctor (S10)
 

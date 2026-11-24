@@ -3,14 +3,16 @@
 ## State and scope
 
 - **State:** `0.17.0` is published (2026-11-20, tag `v0.17.0`, Trusted Publishing). Every round
-  through S28 is implemented except the install path for the measured Claude Code `Stop`
+  through S29 is implemented except the install path for the measured Claude Code `Stop`
   hook. The changelog, the open items and the conditions that reopen them live in `PLAN.md`
   §4, §4.1 and §5; this file carries the current contract only, never a restatement of them.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (472 collected: 468 pass plus 4 `xfail` corpus gaps) covers the CLI, the store, the
-  L0, anchors, MCP (annotations, read-only mode, `source` and search filters), sessions,
+  `tests/` (472 collected: 468 pass plus 4 `xfail` corpus gaps; S29 strengthens an
+  existing test without changing the count) covers the CLI, the store, the
+  L0, anchors, MCP (four exact boolean annotations, read-only mode, `source` and
+  search filters), sessions,
   import, the JSONL tail repair and the 8-process append, the purge under a concurrent append
   and its Git-excluded backup, incremental sync, retrieval, the paraphrase gate for `keywords`,
   the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the integrity audit
@@ -205,9 +207,13 @@ python bench/ab_write.py --harness claude-code --arms empty,stop --reps 30 --jso
   500 ms, startup included. In-process MCP tool call: < 50 ms.
 - **MCP:** stdout carries protocol only (NDJSON in binary, `\n`). Logs go to stderr. No
   asyncio and no signals. The process caches one `Store` per scope and is the only writer
-  while it lives. Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
-  `idempotentHint`): the 5 read tools are read-only, `archive` is destructive and
-  idempotent, `save`/`save_session` are writes. `cairn mcp --read-only` serves only the
+  while it lives. Every tool carries four explicit boolean MCP annotations
+  (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`): the 5 read
+  tools are `true/false/true/false`; `save` and `archive` are
+  `false/true/false/false`; `save_session` is `false/false/false/false`
+  (`readOnly/destructive/idempotent/openWorld`). Read-only means no writes to
+  `events.jsonl` or `sessions.jsonl`; refreshing derived files or creating a scope
+  directory does not change it. `cairn mcp --read-only` serves only the
   5 read tools and rejects the write tools at the protocol edge. `archive` falls back to the
   personal scope like `get` and the CLI, and `save_session` writes the `sessions.jsonl` line
   into the `.gitignore` of its scope (`paths.ignore_sessions`, the personal scope has no

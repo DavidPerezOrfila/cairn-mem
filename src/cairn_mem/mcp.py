@@ -30,16 +30,19 @@ READ_ANNOTATIONS = {
     "readOnlyHint": True,
     "destructiveHint": False,
     "idempotentHint": True,
+    "openWorldHint": False,
 }
 WRITE_ANNOTATIONS = {
     "readOnlyHint": False,
     "destructiveHint": False,
     "idempotentHint": False,
+    "openWorldHint": False,
 }
 DESTRUCTIVE_ANNOTATIONS = {
     "readOnlyHint": False,
     "destructiveHint": True,
-    "idempotentHint": True,
+    "idempotentHint": False,
+    "openWorldHint": False,
 }
 
 TOOLS = [
@@ -53,7 +56,7 @@ TOOLS = [
             "id, weaker matches return as `similar:` lines. Secrets are rejected, never "
             "redacted. Use scope=personal for knowledge that applies to any repo."
         ),
-        "annotations": WRITE_ANNOTATIONS,
+        "annotations": DESTRUCTIVE_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {

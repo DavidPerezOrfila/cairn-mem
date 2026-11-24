@@ -376,22 +376,34 @@ def test_unknown_method_and_bad_request():
 def test_tools_carry_annotations():
     response = Server().handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     tools = {t["name"]: t["annotations"] for t in response["result"]["tools"]}
+    expected_keys = {
+        "readOnlyHint",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+    }
+    for name, annotations in tools.items():
+        assert set(annotations) == expected_keys, name
+        assert all(type(value) is bool for value in annotations.values()), name
     for name in ("search", "get", "context", "session_list", "session_get"):
         assert tools[name] == {
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
+            "openWorldHint": False,
         }, name
-    for name in ("save", "save_session"):
+    for name in ("save", "archive"):
         assert tools[name] == {
             "readOnlyHint": False,
-            "destructiveHint": False,
+            "destructiveHint": True,
             "idempotentHint": False,
+            "openWorldHint": False,
         }, name
-    assert tools["archive"] == {
+    assert tools["save_session"] == {
         "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": True,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": False,
     }
 
 
