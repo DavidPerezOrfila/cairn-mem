@@ -9,6 +9,7 @@
 [![CI](https://github.com/DavidPerezOrfila/cairn-mem/actions/workflows/ci.yml/badge.svg)](https://github.com/DavidPerezOrfila/cairn-mem/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Dependencies: 0](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen.svg)](pyproject.toml)
+[![M8ven Score](https://m8ven.ai/badge/mcp/davidperezorfila-cairn-mem-1iv404)](https://m8ven.ai/mcp/davidperezorfila-cairn-mem-1iv404?s=readme)
 
 [Install](#install) · [Quickstart](#quickstart) · [Agents](#use-it-from-your-agent) · [How it works](#how-it-works) · [Benchmarks](#benchmarks) · [Commands](#commands)
 
