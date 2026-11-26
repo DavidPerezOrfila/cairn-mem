@@ -5,11 +5,12 @@ instrucciones. Las rutas y formatos viven solo aquí.
 """
 
 import json
+import sys
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from cairn_mem.i18n import t
-from cairn_mem.paths import data_dir
+from cairn_mem.paths import data_dir, ignore_update, safe_path, write_if_changed
 
 BEGIN = "<!-- cairn:begin -->"
 END = "<!-- cairn:end -->"
@@ -43,7 +44,8 @@ class Harness(TypedDict):
     server: dict[str, object]
     base: dict[str, object]
     instructions: str
-    hook: str | None
+    hook: str
+    hook_asset: str
     label: str
 
 
@@ -54,7 +56,8 @@ HARNESSES: dict[str, Harness] = {
         "server": {"command": "cairn", "args": ["mcp"]},
         "base": {},
         "instructions": "CLAUDE.md",
-        "hook": None,
+        "hook": ".claude/hooks/cairn_stop.py",
+        "hook_asset": "claude_code.py",
         "label": "Claude Code",
     },
     "opencode": {
@@ -64,27 +67,155 @@ HARNESSES: dict[str, Harness] = {
         "base": {"$schema": SCHEMA},
         "instructions": "AGENTS.md",
         "hook": ".opencode/plugins/cairn-stop/index.ts",
+        "hook_asset": "index.ts",
         "label": "OpenCode",
     },
 }
 
-# El hook medido en S27 (30/30 contra 20/30 del texto solo). Es el mismo fichero
-# que copia `bench/ab_write.py`: medido e instalado no pueden divergir.
+# Los hooks medidos: el asset del paquete es la fuente de verdad al instalar.
 HOOK_ASSET = Path(__file__).parent / "assets" / "stop" / "index.ts"
+CC_HOOK_ASSET = Path(__file__).parent / "assets" / "stop" / "claude_code.py"
+CLAUDE_HOOK_EVENTS = ("SessionStart", "Stop")
+
+
+def _load_claude_settings(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        data: dict[str, Any] = {}
+    else:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except ValueError:
+            raise ValueError(
+                t(
+                    f"{path} is not strict JSON (comments?)",
+                    f"{path} no es JSON estricto (¿comentarios?)",
+                )
+            )
+        if not isinstance(data, dict):
+            raise ValueError(
+                t(
+                    f"{path}: expected a JSON object",
+                    f"{path}: se esperaba un objeto JSON",
+                )
+            )
+    hooks = data.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        raise ValueError(  # noqa: TRY004
+            t(
+                f"{path}: 'hooks' is not a JSON object",
+                f"{path}: 'hooks' no es un objeto JSON",
+            )
+        )
+    for event in CLAUDE_HOOK_EVENTS:
+        groups = hooks.setdefault(event, [])
+        if not isinstance(groups, list):
+            raise ValueError(  # noqa: TRY004
+                t(
+                    f"{path}: 'hooks.{event}' is not a JSON array",
+                    f"{path}: 'hooks.{event}' no es un array JSON",
+                )
+            )
+        for index, group in enumerate(groups):
+            if not isinstance(group, dict):
+                raise ValueError(  # noqa: TRY004
+                    t(
+                        f"{path}: 'hooks.{event}[{index}]' is not a JSON object",
+                        f"{path}: 'hooks.{event}[{index}]' no es un objeto JSON",
+                    )
+                )
+            commands = group.get("hooks", [])
+            if not isinstance(commands, list):
+                raise ValueError(  # noqa: TRY004
+                    t(
+                        f"{path}: 'hooks.{event}[{index}].hooks' is not a JSON array",
+                        f"{path}: 'hooks.{event}[{index}].hooks' no es un array JSON",
+                    )
+                )
+            if any(not isinstance(command, dict) for command in commands):
+                raise ValueError(
+                    t(
+                        f"{path}: 'hooks.{event}[{index}].hooks' must contain JSON objects",
+                        f"{path}: 'hooks.{event}[{index}].hooks' debe contener objetos JSON",
+                    )
+                )
+    return data
+
+
+def _save_count(path: Path) -> int:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return 0
+    count = 0
+    for line in text.split("\n"):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("op") == "save":
+            count += 1
+    return count
+
+
+def _hook_updates(harness: str, directory: Path) -> list[tuple[Path, bytes]]:
+    spec = HARNESSES[harness]
+    script = safe_path(directory, spec["hook"])
+    asset = Path(__file__).parent / "assets" / "stop" / spec["hook_asset"]
+    content = asset.read_bytes()
+    if script.exists() and script.read_bytes() != content:
+        raise ValueError(
+            t(
+                f"{script} already exists and is not the cairn hook; remove or rename it",
+                f"{script} ya existe y no es el hook de cairn; elimínalo o renómbralo",
+            )
+        )
+    updates = [(script, content)]
+    if harness != "claude-code":
+        return updates
+    settings_path = safe_path(directory, ".claude/settings.json")
+    safe_path(directory, ".cairn-nudge.log")
+    settings = _load_claude_settings(settings_path)
+    hook = {
+        "type": "command",
+        "command": sys.executable,
+        "args": ["-I", script.as_posix()],
+    }
+    settings_changed = False
+    for event in CLAUDE_HOOK_EVENTS:
+        groups = settings["hooks"][event]
+        if not any(
+            existing == hook
+            for group in groups
+            for existing in group.get("hooks", [])
+        ):
+            groups.append({"hooks": [hook]})
+            settings_changed = True
+    if settings_changed:
+        content = (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode()
+        updates.append((settings_path, content))
+    baseline = safe_path(directory, ".cairn-nudge/baseline")
+    if not baseline.exists():
+        count = _save_count(directory / ".cairn" / "events.jsonl")
+        updates.append((baseline, f"{count}\n".encode()))
+    ignore = ignore_update(directory, (".cairn-nudge/", ".cairn-nudge.log"))
+    if ignore is not None:
+        updates.append(ignore)
+    return updates
+
+
+def _apply_updates(updates: list[tuple[Path, bytes]]) -> bool:
+    changed = False
+    for path, content in updates:
+        if write_if_changed(path, content):
+            changed = True
+    return changed
 
 
 def install_hook(harness: str, directory: Path) -> bool:
-    """Copia el hook del harness si cambió. `False` si no tiene hook medido."""
-    relative = HARNESSES[harness]["hook"]
-    if relative is None:
-        return False
-    path = directory / relative
-    text = HOOK_ASSET.read_text(encoding="utf-8")
-    if path.exists() and path.read_text(encoding="utf-8") == text:
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8", newline="\n")
-    return True
+    """Instala el hook medido y devuelve si cambió alguno de sus artefactos."""
+    return _apply_updates(_hook_updates(harness, directory))
 
 
 def _nested(keys, value, base):
@@ -97,7 +228,7 @@ def _nested(keys, value, base):
     return node
 
 
-def _merge_config(path: Path, keys, server, base) -> bool:
+def _config_update(path: Path, keys, server, base) -> bytes | None:
     """Conserva el resto del fichero: solo toca la clave del servidor."""
     if path.exists():
         try:
@@ -137,21 +268,15 @@ def _merge_config(path: Path, keys, server, base) -> bool:
                 )
             )
     if node.get(keys[-1]) == server:
-        return False
+        return None
     node[keys[-1]] = server
-    path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    return True
+    return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode()
 
 
-def _write_snippet(path: Path) -> bool:
+def _snippet_update(path: Path) -> bytes | None:
     block = f"{BEGIN}\n{SNIPPET}\n{END}\n"
     if not path.exists():
-        path.write_text(block, encoding="utf-8", newline="\n")
-        return True
+        return block.encode()
     # LF siempre: el fichero de instrucciones se commitea y el bloque es LF.
     text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
     stop = text.find(END)
@@ -160,10 +285,7 @@ def _write_snippet(path: Path) -> bool:
         updated = text[:start] + block + text[stop + len(END) + 1 :]
     else:
         updated = text.rstrip("\n") + "\n\n" + block
-    if updated == text:
-        return False
-    path.write_text(updated, encoding="utf-8", newline="\n")
-    return True
+    return updated.encode() if updated != text else None
 
 
 def _imports_agents(path: Path) -> bool:
@@ -180,31 +302,39 @@ def _imports_agents(path: Path) -> bool:
     return False
 
 
-def _remove_snippet(path: Path) -> bool:
+def _remove_snippet_update(path: Path) -> bytes | None:
     """Quita el bloque de cairn y restaura el fichero a como estaba."""
     text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
     stop = text.find(END)
     start = text.rfind(BEGIN, 0, stop) if stop != -1 else -1
     if start == -1:
-        return False
+        return None
     updated = text[:start].rstrip("\n") + "\n" + text[stop + len(END) + 1 :]
-    path.write_text(updated, encoding="utf-8", newline="\n")
-    return True
+    return updated.encode()
 
 
 def setup(harness: str, directory: Path) -> list[str]:
     spec = HARNESSES[harness]
-    directory.mkdir(parents=True, exist_ok=True)
-    config = directory / spec["config"]
-    instructions = directory / spec["instructions"]
-    config_changed = _merge_config(
+    config = safe_path(directory, spec["config"])
+    instructions = safe_path(directory, spec["instructions"])
+    hook_updates = _hook_updates(harness, directory)
+    config_content = _config_update(
         config, spec["config_path"], spec["server"], spec["base"]
     )
-    if spec["instructions"] != "AGENTS.md" and _imports_agents(instructions):
-        removed = _remove_snippet(instructions)
+    imports_agents = spec["instructions"] != "AGENTS.md" and _imports_agents(instructions)
+    snippet_content = (
+        _remove_snippet_update(instructions)
+        if imports_agents
+        else _snippet_update(instructions)
+    )
+    config_changed = config_content is not None and write_if_changed(config, config_content)
+    snippet_changed = snippet_content is not None and write_if_changed(
+        instructions, snippet_content
+    )
+    if imports_agents:
         state = (
             t("duplicate block removed", "bloque duplicado eliminado")
-            if removed
+            if snippet_changed
             else t("already there", "ya estaba")
         )
         snippet_line = t(
@@ -212,7 +342,6 @@ def setup(harness: str, directory: Path) -> list[str]:
             f"instrucciones: {instructions} (importa @AGENTS.md; {state})",
         )
     else:
-        snippet_changed = _write_snippet(instructions)
         state = (
             t("updated", "actualizado")
             if snippet_changed
@@ -231,20 +360,12 @@ def setup(harness: str, directory: Path) -> list[str]:
         f"config: {config} ({config_state})",
         snippet_line,
     ]
-    if spec["hook"] is None:
-        lines.append(
-            t(
-                "hook: not installed (the nudge is measured for OpenCode only)",
-                "hook: no instalado (el aviso está medido solo para OpenCode)",
-            )
-        )
-    else:
-        hook_state = (
-            t("updated", "actualizado")
-            if install_hook(harness, directory)
-            else t("already there", "ya estaba")
-        )
-        lines.append(f"hook: {directory / spec['hook']} ({hook_state})")
+    hook_state = (
+        t("updated", "actualizado")
+        if _apply_updates(hook_updates)
+        else t("already there", "ya estaba")
+    )
+    lines.append(f"hook: {safe_path(directory, spec['hook'])} ({hook_state})")
     try:
         data_dir()
     except FileNotFoundError:

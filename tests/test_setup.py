@@ -1,7 +1,10 @@
 """Tests de `cairn setup` (S16): config MCP y snippet por harness."""
 
 import json
+import os
 import re
+import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -75,13 +78,33 @@ def test_config_with_a_utf8_bom_is_read(capsys, in_tmp):
 
 def test_second_run_changes_nothing(capsys, in_tmp):
     assert run(capsys, "setup", "claude-code")[0] == 0
-    config = (in_tmp / ".mcp.json").read_bytes()
-    rules = (in_tmp / "CLAUDE.md").read_bytes()
+    paths = [
+        in_tmp / ".mcp.json",
+        in_tmp / "CLAUDE.md",
+        in_tmp / HARNESSES["claude-code"]["hook"],
+        in_tmp / ".claude" / "settings.json",
+        in_tmp / ".cairn-nudge" / "baseline",
+        in_tmp / ".gitignore",
+    ]
+    before = {path: path.read_bytes() for path in paths}
     code, out, _ = run(capsys, "setup", "claude-code")
     assert code == 0
-    assert (in_tmp / ".mcp.json").read_bytes() == config
-    assert (in_tmp / "CLAUDE.md").read_bytes() == rules
-    assert rules.count(BEGIN.encode()) == 1
+    assert {path: path.read_bytes() for path in paths} == before
+    assert before[in_tmp / "CLAUDE.md"].count(BEGIN.encode()) == 1
+    settings = json.loads(before[in_tmp / ".claude" / "settings.json"])
+    script = in_tmp / HARNESSES["claude-code"]["hook"]
+    hook = {
+        "type": "command",
+        "command": sys.executable,
+        "args": ["-I", script.resolve().as_posix()],
+    }
+    for event in ("SessionStart", "Stop"):
+        commands = [
+            hook
+            for group in settings["hooks"][event]
+            for hook in group["hooks"]
+        ]
+        assert commands.count(hook) == 1
     assert "already there" in out
 
 
@@ -181,9 +204,264 @@ def test_hook_install_is_idempotent(capsys, in_tmp):
     assert f"hook: {hook}" in out and "already there" in out
 
 
-def test_claude_code_gets_no_hook(capsys, in_tmp):
-    """El `Stop` de Claude Code es otro mecanismo y no tiene medición: no se
-    instala un aviso sin su brazo (protocolo, ronda 3)."""
+def test_claude_code_installs_the_measured_hook(capsys, in_tmp):
+    from cairn_mem.setup import CC_HOOK_ASSET
+
     code, out, _ = run(capsys, "setup", "claude-code")
-    assert code == 0 and "not installed" in out
-    assert not (in_tmp / ".opencode").exists()
+    assert code == 0
+    script = in_tmp / HARNESSES["claude-code"]["hook"]
+    assert script.read_bytes() == CC_HOOK_ASSET.read_bytes()
+    settings = json.loads(
+        (in_tmp / ".claude" / "settings.json").read_text(encoding="utf-8")
+    )
+    hook = {
+        "type": "command",
+        "command": sys.executable,
+        "args": ["-I", script.resolve().as_posix()],
+    }
+    for event in ("SessionStart", "Stop"):
+        assert settings["hooks"][event] == [{"hooks": [hook]}]
+    baseline = in_tmp / ".cairn-nudge" / "baseline"
+    assert baseline.read_text(encoding="utf-8") == "0\n"
+    ignores = (in_tmp / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert ".cairn-nudge/" in ignores and ".cairn-nudge.log" in ignores
+    assert f"hook: {script}" in out
+
+
+def test_claude_code_preserves_settings_and_existing_session_hooks(capsys, in_tmp):
+    existing = {
+        "type": "command",
+        "command": "echo existing",
+        "timeout": 10,
+    }
+    original = {
+        "permissions": {"allow": ["Bash"]},
+        "hooks": {
+            "PreToolUse": [{"matcher": "Bash", "hooks": [existing]}],
+            "SessionStart": [{"matcher": "startup", "hooks": [existing]}],
+            "Stop": [
+                {"matcher": "", "hooks": [existing]},
+                {"matcher": "Bash"},
+            ],
+        },
+    }
+    settings_path = in_tmp / ".claude" / "settings.json"
+    settings_path.parent.mkdir()
+    settings_path.write_text(json.dumps(original), encoding="utf-8")
+    assert run(capsys, "setup", "claude-code")[0] == 0
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert settings["permissions"] == original["permissions"]
+    assert settings["hooks"]["PreToolUse"] == original["hooks"]["PreToolUse"]
+    assert settings["hooks"]["SessionStart"][0] == original["hooks"]["SessionStart"][0]
+    assert settings["hooks"]["Stop"][0] == original["hooks"]["Stop"][0]
+    assert settings["hooks"]["Stop"][1] == original["hooks"]["Stop"][1]
+    assert len(settings["hooks"]["SessionStart"]) == 2
+    assert len(settings["hooks"]["Stop"]) == 3
+    script = in_tmp / HARNESSES["claude-code"]["hook"]
+    hook = {
+        "type": "command",
+        "command": sys.executable,
+        "args": ["-I", script.resolve().as_posix()],
+    }
+    assert settings["hooks"]["SessionStart"][1] == {"hooks": [hook]}
+    assert settings["hooks"]["Stop"][2] == {"hooks": [hook]}
+
+
+def test_claude_code_never_resets_an_existing_baseline(capsys, in_tmp):
+    from cairn_mem.store import Store
+
+    store = Store(str(in_tmp / ".cairn"))
+    try:
+        store.save(kind="fact", title="First", body="first save")
+        store.save(kind="fact", title="Second", body="second save")
+    finally:
+        store.close()
+    assert run(capsys, "setup", "claude-code")[0] == 0
+    baseline = in_tmp / ".cairn-nudge" / "baseline"
+    assert baseline.read_bytes() == b"2\n"
+
+    store = Store(str(in_tmp / ".cairn"))
+    try:
+        store.save(kind="fact", title="Third", body="third save")
+    finally:
+        store.close()
+    assert run(capsys, "setup", "claude-code")[0] == 0
+    assert baseline.read_bytes() == b"2\n"
+
+
+@pytest.mark.parametrize(
+    "original",
+    [
+        b"{not json}\n",
+        b"[]\n",
+        b'{"hooks": []}\n',
+        b'{"hooks": {"Stop": {}}}\n',
+        b'{"hooks": {"SessionStart": {}}}\n',
+        b'{"hooks": {"SessionStart": [1]}}\n',
+        b'{"hooks": {"SessionStart": [{"hooks": {}}]}}\n',
+        b'{"hooks": {"SessionStart": [{"hooks": [1]}]}}\n',
+    ],
+)
+def test_invalid_claude_settings_are_refused_without_writes(capsys, in_tmp, original):
+    settings_path = in_tmp / ".claude" / "settings.json"
+    settings_path.parent.mkdir()
+    settings_path.write_bytes(original)
+    code, _, err = run(capsys, "setup", "claude-code")
+    assert code == 1
+    assert settings_path.read_bytes() == original
+    assert "cairn:" in err
+    assert not (in_tmp / ".claude" / "hooks").exists()
+    assert not (in_tmp / ".cairn-nudge").exists()
+    assert not (in_tmp / ".gitignore").exists()
+    assert not (in_tmp / ".mcp.json").exists()
+    assert not (in_tmp / "CLAUDE.md").exists()
+
+
+def test_claude_code_preserves_foreign_gitignore_entries(capsys, in_tmp):
+    original = "# user rules\nnode_modules/\n"
+    (in_tmp / ".gitignore").write_text(original, encoding="utf-8")
+    assert run(capsys, "setup", "claude-code")[0] == 0
+    assert run(capsys, "setup", "claude-code")[0] == 0
+    text = (in_tmp / ".gitignore").read_text(encoding="utf-8")
+    assert text.startswith(original)
+    assert text.count(".cairn-nudge/") == 1
+    assert text.count(".cairn-nudge.log") == 1
+    assert "\r" not in text
+
+
+def test_claude_code_hook_uses_exec_form_for_shell_metacharacters(capsys, in_tmp):
+    target = in_tmp / "repo $(touch injected)"
+    assert run(capsys, "setup", "claude-code", "--dir", str(target))[0] == 0
+    settings = json.loads(
+        (target / ".claude" / "settings.json").read_text(encoding="utf-8")
+    )
+    script = target / HARNESSES["claude-code"]["hook"]
+    hook = {
+        "type": "command",
+        "command": sys.executable,
+        "args": ["-I", script.resolve().as_posix()],
+    }
+    for event in ("SessionStart", "Stop"):
+        assert settings["hooks"][event] == [{"hooks": [hook]}]
+    assert not (target / "injected").exists()
+
+
+@pytest.mark.parametrize("harness", ["claude-code", "opencode"])
+def test_existing_unrelated_hook_is_not_overwritten(capsys, in_tmp, harness):
+    script = in_tmp / HARNESSES[harness]["hook"]
+    script.parent.mkdir(parents=True)
+    original = b"print('user hook')\n"
+    script.write_bytes(original)
+    code, _, err = run(capsys, "setup", harness)
+    assert code == 1
+    assert script.read_bytes() == original
+    assert "cairn:" in err
+    assert not (in_tmp / ".mcp.json").exists()
+    assert not (in_tmp / "opencode.json").exists()
+    assert not (in_tmp / "CLAUDE.md").exists()
+    assert not (in_tmp / "AGENTS.md").exists()
+
+
+def test_unreadable_events_abort_before_any_setup_write(capsys, in_tmp, monkeypatch):
+    def unreadable(_path):
+        raise PermissionError("events unavailable")
+
+    monkeypatch.setattr("cairn_mem.setup._save_count", unreadable)
+    code, _, err = run(capsys, "setup", "claude-code")
+    assert code == 1
+    assert "events unavailable" in err
+    assert not (in_tmp / ".mcp.json").exists()
+    assert not (in_tmp / "CLAUDE.md").exists()
+    assert not (in_tmp / ".claude").exists()
+    assert not (in_tmp / ".cairn-nudge").exists()
+    assert not (in_tmp / ".gitignore").exists()
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        ".mcp.json",
+        "CLAUDE.md",
+        ".claude",
+        ".claude/settings.json",
+        ".claude/hooks/cairn_stop.py",
+        ".cairn-nudge",
+        ".cairn-nudge/baseline",
+        ".cairn-nudge.log",
+        ".gitignore",
+    ],
+)
+def test_setup_refuses_symlink_destinations(
+    capsys, in_tmp, tmp_path_factory, relative
+):
+    destination = in_tmp / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    outside = tmp_path_factory.mktemp("outside")
+    is_directory = relative in {".claude", ".cairn-nudge"}
+    target = outside if is_directory else outside / "target"
+    if not is_directory:
+        target.write_text("outside\n", encoding="utf-8")
+    try:
+        destination.symlink_to(target, target_is_directory=is_directory)
+    except OSError:
+        pytest.skip("symlinks unavailable on this host")
+    code, _, _ = run(capsys, "setup", "claude-code")
+    assert code == 1
+    assert not (in_tmp / ".mcp.json").exists() or relative == ".mcp.json"
+    assert not (in_tmp / "CLAUDE.md").exists() or relative == "CLAUDE.md"
+    if is_directory:
+        assert not any(outside.iterdir())
+    else:
+        assert target.read_text(encoding="utf-8") == "outside\n"
+
+
+def test_settings_replacement_is_atomic(in_tmp, monkeypatch):
+    from cairn_mem.setup import CC_HOOK_ASSET, install_hook
+
+    script = in_tmp / HARNESSES["claude-code"]["hook"]
+    script.parent.mkdir(parents=True)
+    script.write_bytes(CC_HOOK_ASSET.read_bytes())
+    settings_path = in_tmp / ".claude" / "settings.json"
+    original = b'{"permissions": {"allow": ["Bash"]}}\n'
+    settings_path.write_bytes(original)
+
+    def fail_replace(_source, _destination):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr("cairn_mem.paths.os.replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        install_hook("claude-code", in_tmp)
+    assert settings_path.read_bytes() == original
+    assert {path for path in (in_tmp / ".claude").rglob("*") if path.is_file()} == {
+        script,
+        settings_path,
+    }
+
+
+def test_gitignore_replacement_is_atomic(in_tmp, monkeypatch):
+    from cairn_mem.paths import ignore_nudge
+
+    path = in_tmp / ".gitignore"
+    original = b"node_modules/\n"
+    path.write_bytes(original)
+
+    def fail_replace(_source, _destination):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr("cairn_mem.paths.os.replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        ignore_nudge(in_tmp)
+    assert path.read_bytes() == original
+    assert list(in_tmp.iterdir()) == [path]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+def test_atomic_replacement_preserves_existing_mode_bits(in_tmp):
+    from cairn_mem.paths import write_if_changed
+
+    path = in_tmp / "settings.json"
+    path.write_bytes(b"old\n")
+    path.chmod(0o640)
+
+    assert write_if_changed(path, b"new\n") is True
+    assert stat.S_IMODE(path.stat().st_mode) == 0o640
