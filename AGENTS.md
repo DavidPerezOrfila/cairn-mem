@@ -3,21 +3,22 @@
 ## State and scope
 
 - **State:** `0.17.0` is published (2026-11-20, tag `v0.17.0`, Trusted Publishing). Every round
-  through S29 is implemented except the install path for the measured Claude Code `Stop`
-  hook. The changelog, the open items and the conditions that reopen them live in `PLAN.md`
+  through S29 is implemented; the 0.18.0 release decision is the open item. The changelog, the
+  open items and the conditions that reopen them live in `PLAN.md`
   §4, §4.1 and §5; this file carries the current contract only, never a restatement of them.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
   implemented.
-  `tests/` (472 collected: 468 pass plus 4 `xfail` corpus gaps; S29 strengthens an
-  existing test without changing the count) covers the CLI, the store, the
+  `tests/` (548 collected: 533 pass plus 4 `xfail` corpus gaps; 11 more skip on hosts
+  without symlinks or POSIX permission bits) covers the CLI, the store, the
   L0, anchors, MCP (four exact boolean annotations, read-only mode, `source` and
   search filters), sessions,
   import, the JSONL tail repair and the 8-process append, the purge under a concurrent append
   and its Git-excluded backup, incremental sync, retrieval, the paraphrase gate for `keywords`,
   the secrets corpus, dedupe/pin/purge/topics/history, the golden set, the integrity audit
   fixes, `doctor`, `setup`/`export`, `CAIRN_LANG`, the write-side A/B detection and resumable
-  rows, the Claude Code `Stop` arm, the backlog benches and the bench hygiene, the MCP
+  rows, the Claude Code `Stop` arm, the `setup` hook install path for both harnesses,
+  the backlog benches and the bench hygiene, the MCP
   tool-selection eval and its real-store damage gate.
 - **The 2026-11-21 audit is closed (2026-11-22):** every finding in `PLAN.md` §4.2 has a fix
   and a test (the config BOM fix brought it to 459).
@@ -237,12 +238,18 @@ python bench/ab_write.py --harness claude-code --arms empty,stop --reps 30 --jso
   with code 1 and prints the block to paste. A new harness is one row plus one test
   against a fixture; do not add a format nobody verified. Since S21, when the instructions
   file is not `AGENTS.md` and already imports `@AGENTS.md`, `setup` writes no block there
-  and removes one that an older setup left. Since S28, `setup opencode` installs the measured
-  `Stop` hook (`assets/stop/index.ts` in the package, package data in wheel and sdist) into
-  `.opencode/plugins/cairn-stop/index.ts`, idempotently, and `install_hook` is the same
-  function `bench/ab_write.py` calls, so measured and installed cannot drift. Claude Code's
-  `Stop` arm is measured (30/30 against 16/30 for the snippet alone, 2026-11-24); its
-  `setup claude-code` install path is still pending.
+  and removes one that an older setup left. Since S28, `setup` installs the measured
+  `Stop` hook per harness from a package asset (package data in wheel and sdist),
+  idempotently, and `install_hook` is the same function `bench/ab_write.py` calls, so
+  measured and installed cannot drift; tests pin the installed bytes.
+  `opencode` writes `.opencode/plugins/cairn-stop/index.ts` from `assets/stop/index.ts`.
+  `claude-code` writes `.claude/hooks/cairn_stop.py` from `assets/stop/claude_code.py` —
+  a `SessionStart` + `Stop` pair with per-session attribution and an install-time save
+  baseline — after validating `.claude/settings.json` (`utf-8-sig`): invalid settings
+  fail with exit 1 and no writes, and the cairn command is appended only when absent.
+  The install also adds `.cairn-nudge/` and `.cairn-nudge.log` to the root `.gitignore`.
+  Both hooks are measured (OpenCode 30/30 against 20/30, S27; Claude Code 30/30 against
+  16/30 for the snippet alone, 2026-11-24).
 - **Export:** `cairn export` is a snapshot of active memories grouped by kind, plus the
   last N recaps only when `--sessions N` is given. No stale marks: that would hash every
   anchor and turn a copy into `check`. It must stay byte-identical across runs.
