@@ -3,8 +3,8 @@
 ## State and scope
 
 - **State:** `0.17.0` is published (2026-11-20, tag `v0.17.0`, Trusted Publishing). Every round
-  through S29 is implemented; the 0.18.0 release decision is the open item. The changelog, the
-  open items and the conditions that reopen them live in `PLAN.md`
+  through S29 is implemented; `0.18.0` is release-ready and awaiting tag `v0.18.0`. The
+  changelog, the open items and the conditions that reopen them live in `PLAN.md`
   §4, §4.1 and §5; this file carries the current contract only, never a restatement of them.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
