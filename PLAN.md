@@ -244,12 +244,13 @@ Each round is a slice: tests first, gate, review and its own release.
 | S20   | Auditoría externa: secretos v3 por forma del valor y formatos (Oracle/SAS/Fernet/Azure/sk-/Slack), rechazo de inyección con cabecera en el L0, dedupe no bloqueante (aviso a 0,3-0,9, bloqueo a 0,9), `pin`/`unpin` solo CLI, `purge`, `topics`, `doctor` reescanea secretos y L0/MCP en inglés | 0.16.0                | [`docs/features/s20-security-dedupe-pin.md`](docs/features/s20-security-dedupe-pin.md)         |
 | S21   | A/B de escritura (`bench/ab_write.py`: ¿el agente guarda el gotcha que acaba de descubrir? con controles stale, envenenado y 100 distractores; criterios escritos antes de medir), `setup` sin bloque duplicado cuando el fichero importa `@AGENTS.md`, `CAIRN_LANG` (inglés por defecto en CLI/`doctor`/`setup`, `es` opt-in; el núcleo y el MCP siempre en inglés) | 0.17.0 | [`docs/features/s21-write-ab-lang-setup.md`](docs/features/s21-write-ab-lang-setup.md) |
 | S22   | `keywords` indexado en FTS (`SCHEMA_VERSION = 6`), `cairn history <topic>` y lock de fichero entre procesos (el test de 8 procesos midió la pérdida de eventos) | 0.17.0 | [`docs/features/s22-retrieval-fields.md`](docs/features/s22-retrieval-fields.md) |
-| S23   | Snippet imperativo (antídoto a "write-side 2/30"): obligación con momento, el porqué del usuario va en `--why`; medido 17/30 frente a 2/30 al -17 % de tokens, criterio primario incumplido (LB 0,392 < 0,5); dos defectos del banco de escritura corregidos | sin release | [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md) |
-| S24   | El lock entre procesos pasa a `<fichero>.lock`: bloquear byte 0 de `events.jsonl` impedía leerlo desde otro proceso en Windows y el `rebuild` moría con `PermissionError` (2 de 5 corridas del test concurrente) | sin release | `tests/test_jsonl.py`, `docs/DECISIONS.md` |
-| S25   | `purge` toma el lock del append (`_LOCK` + `<fichero>.lock`) alrededor de la lectura y del replace: un `save` concurrente entre ambos caía en el fichero viejo y se perdía | sin release | `tests/test_s20.py`, `docs/DECISIONS.md` |
-| S26   | `events.jsonl.bak` entra en las entradas gestionadas del `.gitignore` (y en `doctor`) | `purge` escribe la copia con el secreto dentro; en `--share` un `git add .` la commiteaba (medido: `git status` mostraba `?? .cairn/events.jsonl.bak`) | sin release | `tests/test_s20.py`, `tests/test_cli.py` |
-| S27   | Ronda 3 del A/B de escritura: el snippet más un `Stop` hook que empuja una vez por sesión. Medido 30/30 (IC95 0,886-1,000) contra `imperative` 20/30 en la misma corrida, 1,11x tokens; el riesgo "el agente no guarda" queda cerrado por medición | sin release | [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md) §"Round 3 (S27)", [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md) |
-| S28   | `setup` instala el hook `Stop` medido por harness desde assets del paquete: el plugin de OpenCode (S27, 30/30) y el par `SessionStart`+`Stop` de Claude Code (ronda 4, 30/30 contra 16/30 del snippet solo, 2026-11-24) en `.claude/hooks/cairn_stop.py`; el instalador y el banco comparten un solo camino (`setup.install_hook`), así que lo medido y lo instalado no pueden divergir | sin release | `tests/test_setup.py`, `tests/test_ab_write.py`, `docs/DECISIONS.md` |
+| S23   | Snippet imperativo (antídoto a "write-side 2/30"): obligación con momento, el porqué del usuario va en `--why`; medido 17/30 frente a 2/30 al -17 % de tokens, criterio primario incumplido (LB 0,392 < 0,5); dos defectos del banco de escritura corregidos | 0.18.0 | [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md) |
+| S24   | El lock entre procesos pasa a `<fichero>.lock`: bloquear byte 0 de `events.jsonl` impedía leerlo desde otro proceso en Windows y el `rebuild` moría con `PermissionError` (2 de 5 corridas del test concurrente) | 0.18.0 | `tests/test_jsonl.py`, `docs/DECISIONS.md` |
+| S25   | `purge` toma el lock del append (`_LOCK` + `<fichero>.lock`) alrededor de la lectura y del replace: un `save` concurrente entre ambos caía en el fichero viejo y se perdía | 0.18.0 | `tests/test_s20.py`, `docs/DECISIONS.md` |
+| S26   | `events.jsonl.bak` entra en las entradas gestionadas del `.gitignore` (y en `doctor`): `purge` escribe la copia con el secreto dentro y un `git add .` la commiteaba | 0.18.0 | `tests/test_s20.py`, `tests/test_cli.py` |
+| S27   | Ronda 3 del A/B de escritura: el snippet más un `Stop` hook que empuja una vez por sesión. Medido 30/30 (IC95 0,886-1,000) contra `imperative` 20/30 en la misma corrida, 1,11x tokens; el riesgo "el agente no guarda" queda cerrado por medición | 0.18.0 | [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md) §"Round 3 (S27)", [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md) |
+| S28   | `setup` instala el hook `Stop` medido por harness desde assets del paquete: el plugin de OpenCode (S27, 30/30) y el par `SessionStart`+`Stop` de Claude Code (ronda 4, 30/30 contra 16/30 del snippet solo, 2026-11-24) en `.claude/hooks/cairn_stop.py`; el instalador y el banco comparten un solo camino (`setup.install_hook`), así que lo medido y lo instalado no pueden divergir | 0.18.0 | `tests/test_setup.py`, `tests/test_ab_write.py`, `docs/DECISIONS.md` |
+| S29   | Los 8 tools MCP declaran cuatro booleanos exactos (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`); `save`/`archive` son destructivos y no idempotentes, `save_session` es aditivo y no idempotente, y todos son locales | 0.18.0 | `tests/test_mcp.py`, `docs/DECISIONS.md` |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -483,7 +484,7 @@ final-answer contains for the read cases, forbidden-tool checks for the negative
   agent, `5803958`) carried a real bug fix with a passing test that `main` lacked
   (`setup.py` reads the harness config with `utf-8-sig`). **Merged 2026-11-23 as #89**; the
   same day, #88 (the eval's damage gate) landed too.
-- [ ] **The Claude Code `Stop` arm (S28 remainder)**: a `Stop` arm for `bench/ab_write.py`
+- [x] **The Claude Code `Stop` arm**: a `Stop` arm for `bench/ab_write.py`
   (its `Stop` is a settings-file hook that blocks the turn), criteria pre-registered in
   `bench/ab_write_protocol.md` before measuring, n ≥ 30 per arm, and only then
   `setup claude-code` installs it. **Measurement done 2026-11-24** (60/60 sessions, all
@@ -505,8 +506,8 @@ final-answer contains for the read cases, forbidden-tool checks for the negative
   a test. S28.2 (`e0462fa`) moves `bench/ab_write.py` behind `setup.install_hook` for
   both harnesses, so the bench measures the user path. The risk row in §6 and
   `AGENTS.md` are updated in the same change (S28.3).
-- [ ] **Release 0.18.0 decision**: S24-S28 plus the description fix are shipped without a
-  release; tag when the user decides.
+- [ ] **Release 0.18.0**: S23-S29 plus the MCP description fix are release-ready; tag
+  `v0.18.0` after the version PR merges.
 
 ### Remaining-work harness routing (2026-11-26)
 
@@ -529,8 +530,8 @@ and 4 unless a sandbox and explicit GitHub/credential controls are configured.
 Recommended order: 1 and 4 in Claude Code; 2 and 5 may run in OpenCode or PI.dev; keep 3
 in Claude Code for the outward-facing release and its existing approvals.
 
-Status 2026-11-26: 1 (S28.2, `e0462fa`) and 2 (S28.3, this change) are done; 3, 4 and 5
-stay open.
+Status 2026-11-27: 1 (S28.2, `e0462fa`) and 2 (S28.3, #95) are done; 3 (release 0.18.0) is
+release-ready; 4 and 5 stay open.
 
 ### Minors
 
