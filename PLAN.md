@@ -249,7 +249,7 @@ Each round is a slice: tests first, gate, review and its own release.
 | S25   | `purge` toma el lock del append (`_LOCK` + `<fichero>.lock`) alrededor de la lectura y del replace: un `save` concurrente entre ambos caía en el fichero viejo y se perdía | sin release | `tests/test_s20.py`, `docs/DECISIONS.md` |
 | S26   | `events.jsonl.bak` entra en las entradas gestionadas del `.gitignore` (y en `doctor`) | `purge` escribe la copia con el secreto dentro; en `--share` un `git add .` la commiteaba (medido: `git status` mostraba `?? .cairn/events.jsonl.bak`) | sin release | `tests/test_s20.py`, `tests/test_cli.py` |
 | S27   | Ronda 3 del A/B de escritura: el snippet más un `Stop` hook que empuja una vez por sesión. Medido 30/30 (IC95 0,886-1,000) contra `imperative` 20/30 en la misma corrida, 1,11x tokens; el riesgo "el agente no guarda" queda cerrado por medición | sin release | [`bench/ab_write_protocol.md`](bench/ab_write_protocol.md) §"Round 3 (S27)", [`docs/AB_RESULTS.md`](docs/AB_RESULTS.md) |
-| S28   | `setup opencode` instala el hook `Stop` medido desde un asset del paquete; el instalador y el banco comparten un solo fichero (`setup.install_hook`), así que lo medido y lo instalado no pueden divergir. Claude Code se queda abierto: su `Stop` es otro mecanismo sin brazo | sin release | `tests/test_setup.py`, `docs/DECISIONS.md` |
+| S28   | `setup` instala el hook `Stop` medido por harness desde assets del paquete: el plugin de OpenCode (S27, 30/30) y el par `SessionStart`+`Stop` de Claude Code (ronda 4, 30/30 contra 16/30 del snippet solo, 2026-11-24) en `.claude/hooks/cairn_stop.py`; el instalador y el banco comparten un solo camino (`setup.install_hook`), así que lo medido y lo instalado no pueden divergir | sin release | `tests/test_setup.py`, `tests/test_ab_write.py`, `docs/DECISIONS.md` |
 
 **0.8.0 release:** 2026-11-09 on PyPI (wheel and sdist) and tag `v0.8.0`. Verified with a
 clean install (`init`, `save`, `search`, `session`).
@@ -495,10 +495,16 @@ final-answer contains for the read cases, forbidden-tool checks for the negative
   Data: `bench/cc-round4-rows.jsonl` (NDJSON, one row per session), written by
   `ab_write.py --rows-file` and versioned as the evidence; the duplicate full JSON dump and
   empty stderr file are ignored. The outcome is recorded in `bench/ab_write_protocol.md`
-  and `docs/AB_RESULTS.md`. **Remaining:** the install path (move `bench/ab_write.py:
-  _install_cc_hook` behind `setup.install_hook` with the settings bytes pinned by a
-  test, hook row in `HARNESSES["claude-code"]`), the risk row in §6, and `AGENTS.md`
-  in the same change.
+  and `docs/AB_RESULTS.md`. **Shipped 2026-11-26:** S28.1 (#94) adds the
+  `claude-code` row to `HARNESSES` and `setup.install_hook` installs the measured hook
+  as `.claude/hooks/cairn_stop.py` (package asset `assets/stop/claude_code.py`): a
+  `SessionStart` + `Stop` pair with per-session attribution and an install-time save
+  baseline for sessions already in flight. It validates `.claude/settings.json`
+  (`utf-8-sig`) before any write, appends the cairn command only when it is absent,
+  adds `.cairn-nudge/` to the root `.gitignore`, and the installed bytes are pinned by
+  a test. S28.2 (`e0462fa`) moves `bench/ab_write.py` behind `setup.install_hook` for
+  both harnesses, so the bench measures the user path. The risk row in §6 and
+  `AGENTS.md` are updated in the same change (S28.3).
 - [ ] **Release 0.18.0 decision**: S24-S28 plus the description fix are shipped without a
   release; tag when the user decides.
 
@@ -522,6 +528,9 @@ and 4 unless a sandbox and explicit GitHub/credential controls are configured.
 
 Recommended order: 1 and 4 in Claude Code; 2 and 5 may run in OpenCode or PI.dev; keep 3
 in Claude Code for the outward-facing release and its existing approvals.
+
+Status 2026-11-26: 1 (S28.2, `e0462fa`) and 2 (S28.3, this change) are done; 3, 4 and 5
+stay open.
 
 ### Minors
 
@@ -604,7 +613,7 @@ reopens it.
 
 | Risk                                                              | Mitigation                                                                                                   |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| The agent does not save memories                                  | Clear rules in the snippet plus the `Stop` hook. **Closed by measurement 2026-11-21:** with the hook 30/30 (IC95 0.886-1.000) against 20/30 (0.488-0.808) for the text alone, same run, 1.11x tokens; the install path ships in S28 |
+| The agent does not save memories                                  | Clear rules in the snippet plus the `Stop` hook. **Closed by measurement 2026-11-21:** with the hook 30/30 (IC95 0.886-1.000) against 20/30 (0.488-0.808) for the text alone, same run, 1.11x tokens; shipped in S28: `setup opencode` and `setup claude-code` install it from package assets |
 | The agent saves junk                                              | A "do NOT save..." rule, a 500-character limit and `topic_key` to replace old entries                        |
 | Stale due to a whole-file anchor (false positives on large files) | It only warns (`⚠ revisar`), it does not hide. Measure the rate in the A/B. Anchor to the most specific file |
 | Windows startup latency (antivirus, pipx shim)                    | Measure end-to-end in M4. Minimal imports                                                                    |
