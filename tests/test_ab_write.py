@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import re
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,47 @@ def _module(name: str):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _run_cc_hook(script, payload, cwd=None):
+    return subprocess.run(
+        [sys.executable, "-I", str(script)],
+        input=json.dumps(payload),
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
+    )
+
+
+def _write_cc_tool_transcript(path, name, tool_input, *, is_error=False):
+    entries = [
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "id": "tool-1", "name": name, "input": tool_input}
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tool-1",
+                        "is_error": is_error,
+                    }
+                ]
+            },
+        },
+    ]
+    path.write_text(
+        "".join(json.dumps(entry) + "\n" for entry in entries), encoding="utf-8"
+    )
 
 
 def test_snippet_matches_what_setup_writes():
@@ -251,6 +293,14 @@ def test_cc_stop_arm_writes_settings_hook_and_baseline(tmp_path):
     assert "stop_hook_active" in script.read_text(encoding="utf-8")
 
 
+def test_cc_hook_uses_the_measured_nudge():
+    from cairn_mem.setup import CC_HOOK_ASSET
+
+    module = _module("ab_write")
+    asset = runpy.run_path(str(CC_HOOK_ASSET), run_name="cairn_cc_hook")
+    assert asset["NUDGE"] == module.CC_NUDGE
+
+
 def test_cc_other_arms_do_not_install_the_hook(tmp_path):
     module = _module("ab_write")
     empty = tmp_path / "empty"
@@ -271,26 +321,23 @@ def test_cc_hook_text_is_the_measured_nudge():
 
 
 def test_cc_hook_nudges_once_and_only_without_a_save(tmp_path):
+    from cairn_mem.setup import install_hook
+
     module = _module("ab_write")
     project = tmp_path / "p"
-    module._prepare(project, "stop", harness="claude-code")
+    module._prepare(project, "empty", harness="claude-code")
+    install_hook("claude-code", project)
     script = project / ".claude" / "hooks" / "cairn_stop.py"
 
     def hook(session_id, stop_hook_active=False):
-        return subprocess.run(
-            [sys.executable, str(script)],
-            input=json.dumps(
-                {
-                    "session_id": session_id,
-                    "cwd": str(project),
-                    "stop_hook_active": stop_hook_active,
-                }
-            ),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=30,
-            check=False,
+        return _run_cc_hook(
+            script,
+            {
+                "session_id": session_id,
+                "hook_event_name": "Stop",
+                "cwd": str(project),
+                "stop_hook_active": stop_hook_active,
+            },
         )
 
     # Primera parada sin save: un empujón, y queda en el log del banco.
@@ -317,3 +364,764 @@ def test_cc_hook_nudges_once_and_only_without_a_save(tmp_path):
     continued = hook("s3", stop_hook_active=True)
     assert continued.returncode == 0 and continued.stdout.strip() == ""
     assert module._nudges(project) == 1
+
+
+def test_cc_session_start_uses_a_per_session_save_baseline(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    module = _module("ab_write")
+    project = tmp_path / "p"
+    module._prepare(project, "empty", harness="claude-code")
+    install_hook("claude-code", project)
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    state_dir = project / ".cairn-nudge"
+
+    def hook(session_id, event):
+        result = _run_cc_hook(
+            script,
+            {
+                "session_id": session_id,
+                "hook_event_name": event,
+                "cwd": str(project),
+            },
+        )
+        assert result.returncode == 0, result.stderr
+        return result
+
+    assert hook("a", "SessionStart").stdout == ""
+    assert (state_dir / "a.baseline").read_text(encoding="utf-8") == "0\n"
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="A saved", body="session a added this")
+    finally:
+        store.close()
+
+    assert hook("b", "SessionStart").stdout == ""
+    assert (state_dir / "b.baseline").read_text(encoding="utf-8") == "1\n"
+    nudged = hook("b", "Stop")
+    assert json.loads(nudged.stdout)["decision"] == "block"
+    assert module._nudges(project) == 1
+    assert hook("b", "Stop").stdout == ""
+
+    # Una sesión que sí guardó no se avisa, ni aun si SessionStart se repite.
+    assert hook("a", "SessionStart").stdout == ""
+    assert hook("a", "Stop").stdout == ""
+    assert module._nudges(project) == 1
+
+
+def test_cc_transcript_attributes_saves_to_overlapping_sessions(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+
+    def hook(session_id, event, transcript=None):
+        payload = {
+            "session_id": session_id,
+            "hook_event_name": event,
+            "cwd": str(project),
+        }
+        if transcript is not None:
+            payload["transcript_path"] = str(transcript)
+        result = _run_cc_hook(script, payload)
+        assert result.returncode == 0, result.stderr
+        return result
+
+    transcript_a = tmp_path / "a.jsonl"
+    transcript_b = tmp_path / "b.jsonl"
+    transcript_a.write_text("", encoding="utf-8")
+    transcript_b.write_text("", encoding="utf-8")
+    assert hook("a", "SessionStart", transcript_a).stdout == ""
+    assert hook("b", "SessionStart", transcript_b).stdout == ""
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="A saved", body="only session a saved")
+    finally:
+        store.close()
+
+    _write_cc_tool_transcript(
+        transcript_a, "mcp__cairn__save", {"body": "private transcript content"}
+    )
+    transcript_b = tmp_path / "b.jsonl"
+    transcript_b.write_text(
+        "not-json\n[]\nnull\n"
+        '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+        '"id":"other","name":"mcp__other__save","input":{}}]}}\n'
+        '{"type":"user","message":{"content":[{"type":"tool_result",'
+        '"tool_use_id":"other","is_error":false}]}}\n'
+        '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+        '"id":"echo","name":"Bash","input":{"command":"echo cairn save"}}]}}\n'
+        '{"type":"user","message":{"content":[{"type":"tool_result",'
+        '"tool_use_id":"echo","is_error":false}]}}\n',
+        encoding="utf-8",
+    )
+
+    saved = hook("a", "Stop", transcript_a)
+    assert saved.stdout == "" and saved.stderr == ""
+    nudged = hook("b", "Stop", transcript_b)
+    assert json.loads(nudged.stdout)["decision"] == "block"
+    assert "private transcript content" not in nudged.stdout + nudged.stderr
+    assert (project / ".cairn-nudge.log").read_text(encoding="utf-8") == "b\n"
+    assert not (project / ".cairn-nudge" / "a.seen").exists()
+    assert (project / ".cairn-nudge" / "b.seen").exists()
+
+
+@pytest.mark.parametrize(
+    ("name", "tool_input"),
+    [
+        ("mcp__cairn__save", {"body": "save"}),
+        ("Bash", {"command": "cairn save --kind fact"}),
+    ],
+)
+def test_cc_transcript_failed_save_result_still_nudges(tmp_path, name, tool_input):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "failed.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "failed",
+        "hook_event_name": "Stop",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+    }
+    started = _run_cc_hook(script, {**payload, "hook_event_name": "SessionStart"})
+    assert started.returncode == 0, started.stderr
+    _write_cc_tool_transcript(transcript, name, tool_input, is_error=True)
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Other session", body="project save")
+    finally:
+        store.close()
+
+    result = _run_cc_hook(script, payload)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == "block"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cairn save --kind fact",
+        "cairn-mem save --kind fact",
+        "cairn.exe save --kind fact",
+        "uv run cairn save --kind fact",
+        "pipx run cairn-mem.exe save --kind fact",
+        '"C:\\Program Files\\cairn.exe" save --kind fact',
+        "echo ready && cairn save --kind fact",
+        "echo ready &&\ncairn save --kind fact",
+        "echo ready |\ncairn save --kind fact",
+        "echo ready &\ncairn save --kind fact",
+    ],
+)
+def test_cc_transcript_recognizes_successful_bash_saves(tmp_path, command):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "saved.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "bash-save",
+        "hook_event_name": "Stop",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+    }
+    started = _run_cc_hook(script, {**payload, "hook_event_name": "SessionStart"})
+    assert started.returncode == 0, started.stderr
+    _write_cc_tool_transcript(transcript, "Bash", {"command": command})
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Saved", body="project save")
+    finally:
+        store.close()
+
+    result = _run_cc_hook(script, payload)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert not (project / ".cairn-nudge.log").exists()
+
+
+@pytest.mark.parametrize(
+    ("name", "tool_input"),
+    [
+        ("mcp__cairn__save", {"body": "save"}),
+        ("Bash", {"command": "cairn save"}),
+        ("mcp__cairn__save", {"body": "save", "scope": "personal"}),
+        ("Bash", {"command": "cairn save --personal"}),
+    ],
+)
+def test_cc_transcript_save_without_project_event_still_nudges(
+    tmp_path, name, tool_input
+):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "no-project-event.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "no-project-event",
+        "hook_event_name": "Stop",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+    }
+    started = _run_cc_hook(script, {**payload, "hook_event_name": "SessionStart"})
+    assert started.returncode == 0, started.stderr
+    _write_cc_tool_transcript(transcript, name, tool_input)
+
+    stopped = _run_cc_hook(script, payload)
+    assert stopped.returncode == 0, stopped.stderr
+    assert json.loads(stopped.stdout)["decision"] == "block"
+
+
+@pytest.mark.parametrize(
+    ("name", "tool_input"),
+    [
+        ("mcp__cairn__save", {"body": "save", "scope": "personal"}),
+        ("Bash", {"command": "cairn save --personal"}),
+    ],
+)
+def test_cc_transcript_personal_saves_do_not_satisfy_project_sessions(
+    tmp_path, name, tool_input
+):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "personal.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "personal-save",
+        "hook_event_name": "Stop",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+    }
+    started = _run_cc_hook(script, {**payload, "hook_event_name": "SessionStart"})
+    assert started.returncode == 0, started.stderr
+    _write_cc_tool_transcript(transcript, name, tool_input)
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Other session", body="project save")
+    finally:
+        store.close()
+
+    stopped = _run_cc_hook(script, payload)
+    assert stopped.returncode == 0, stopped.stderr
+    assert json.loads(stopped.stdout)["decision"] == "block"
+
+
+def test_cc_transcript_ignores_pre_session_start_history(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "resumed.jsonl"
+    _write_cc_tool_transcript(transcript, "mcp__cairn__save", {"body": "old save"})
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "resumed",
+        "hook_event_name": "SessionStart",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+        "source": "startup",
+    }
+    started = _run_cc_hook(script, payload)
+    assert started.returncode == 0, started.stderr
+    offset = project / ".cairn-nudge" / "resumed.offset"
+    assert offset.read_text(encoding="utf-8") == f"{transcript.stat().st_size}\n"
+
+    with transcript.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "old-save-2",
+                                "name": "mcp__cairn__save",
+                                "input": {},
+                            }
+                        ]
+                    },
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "old-save-2",
+                                "is_error": False,
+                            }
+                        ]
+                    },
+                }
+            )
+            + "\n"
+        )
+    resumed = _run_cc_hook(script, {**payload, "source": "resume"})
+    assert resumed.returncode == 0, resumed.stderr
+    assert offset.read_text(encoding="utf-8") == f"{transcript.stat().st_size}\n"
+    assert (project / ".cairn-nudge" / "resumed.baseline").read_text() == "0\n"
+
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Other session", body="project save")
+    finally:
+        store.close()
+    with transcript.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(
+            json.dumps(
+                {"type": "assistant", "message": {"content": [{"type": "text"}]}}
+            )
+            + "\n"
+        )
+
+    stopped = _run_cc_hook(script, {**payload, "hook_event_name": "Stop"})
+    assert stopped.returncode == 0, stopped.stderr
+    assert json.loads(stopped.stdout)["decision"] == "block"
+
+
+def test_cc_compact_session_start_preserves_the_transcript_offset(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "compact.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "compact",
+        "hook_event_name": "SessionStart",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+        "source": "startup",
+    }
+    started = _run_cc_hook(script, payload)
+    assert started.returncode == 0, started.stderr
+    _write_cc_tool_transcript(transcript, "mcp__cairn__save", {"body": "before compact"})
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Saved", body="before compact")
+    finally:
+        store.close()
+
+    compacted = _run_cc_hook(script, {**payload, "source": "compact"})
+    assert compacted.returncode == 0, compacted.stderr
+    offset = project / ".cairn-nudge" / "compact.offset"
+    assert offset.read_text(encoding="utf-8") == "0\n"
+    stopped = _run_cc_hook(script, {**payload, "hook_event_name": "Stop"})
+    assert stopped.returncode == 0, stopped.stderr
+    assert stopped.stdout == ""
+
+
+def test_cc_transcript_without_session_offset_uses_baseline_fallback(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "underway.jsonl"
+    _write_cc_tool_transcript(transcript, "mcp__cairn__save", {"body": "before install"})
+
+    result = _run_cc_hook(
+        project / ".claude" / "hooks" / "cairn_stop.py",
+        {
+            "session_id": "underway-transcript",
+            "hook_event_name": "Stop",
+            "cwd": str(project),
+            "transcript_path": str(transcript),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == "block"
+
+
+def test_cc_truncated_transcript_keeps_the_baseline_fallback(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "truncated.jsonl"
+    _write_cc_tool_transcript(transcript, "mcp__cairn__save", {"body": "old save"})
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "truncated",
+        "hook_event_name": "SessionStart",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+    }
+    started = _run_cc_hook(script, payload)
+    assert started.returncode == 0, started.stderr
+    transcript.write_text("", encoding="utf-8")
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Other session", body="project save")
+    finally:
+        store.close()
+
+    stopped = _run_cc_hook(script, {**payload, "hook_event_name": "Stop"})
+    assert stopped.returncode == 0, stopped.stderr
+    assert stopped.stdout == ""
+
+
+def test_cc_resume_without_transcript_invalidates_the_old_offset(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "missing-on-resume.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "missing-on-resume",
+        "hook_event_name": "SessionStart",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+    }
+    started = _run_cc_hook(script, payload)
+    assert started.returncode == 0, started.stderr
+    offset = project / ".cairn-nudge" / "missing-on-resume.offset"
+    assert offset.exists()
+
+    resumed = _run_cc_hook(script, {**payload, "transcript_path": None})
+    assert resumed.returncode == 0, resumed.stderr
+    assert not offset.exists()
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Other session", body="project save")
+    finally:
+        store.close()
+
+    stopped = _run_cc_hook(script, {**payload, "hook_event_name": "Stop"})
+    assert stopped.returncode == 0, stopped.stderr
+    assert stopped.stdout == ""
+
+
+def test_cc_home_relative_transcript_path_records_the_offset(tmp_path, monkeypatch):
+    from cairn_mem.setup import install_hook
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    transcript = home / "relative.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "home-relative",
+        "hook_event_name": "SessionStart",
+        "cwd": str(project),
+        "transcript_path": "~/relative.jsonl",
+    }
+    started = _run_cc_hook(script, payload)
+    assert started.returncode == 0, started.stderr
+    offset = project / ".cairn-nudge" / "home-relative.offset"
+    assert offset.read_text(encoding="utf-8") == "0\n"
+
+
+def test_cc_unparseable_transcript_keeps_the_baseline_fallback(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "unparseable.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "unparseable-transcript",
+        "hook_event_name": "Stop",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+    }
+    started = _run_cc_hook(script, {**payload, "hook_event_name": "SessionStart"})
+    assert started.returncode == 0, started.stderr
+    transcript.write_text("not-json\n[]\nnull\n", encoding="utf-8")
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Saved", body="baseline fallback")
+    finally:
+        store.close()
+
+    result = _run_cc_hook(script, payload)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+
+
+def test_cc_pending_save_result_still_nudges_once(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    transcript = tmp_path / "pending.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    payload = {
+        "session_id": "pending",
+        "hook_event_name": "SessionStart",
+        "cwd": str(project),
+        "transcript_path": str(transcript),
+    }
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    started = _run_cc_hook(script, payload)
+    assert started.returncode == 0, started.stderr
+    transcript.write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "pending-save",
+                            "name": "mcp__cairn__save",
+                            "input": {},
+                        }
+                    ]
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Other session", body="project save")
+    finally:
+        store.close()
+
+    first = _run_cc_hook(script, {**payload, "hook_event_name": "Stop"})
+    assert first.returncode == 0, first.stderr
+    assert json.loads(first.stdout)["decision"] == "block"
+    second = _run_cc_hook(script, {**payload, "stop_hook_active": True})
+    assert second.returncode == 0, second.stderr
+    assert second.stdout == ""
+    assert (project / ".cairn-nudge.log").read_text(encoding="utf-8") == "pending\n"
+
+
+def test_cc_unreadable_transcript_keeps_the_baseline_fallback(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+    payload = {
+        "session_id": "missing-transcript",
+        "hook_event_name": "Stop",
+        "cwd": str(project),
+        "transcript_path": str(tmp_path / "missing.jsonl"),
+    }
+    started = _run_cc_hook(script, {**payload, "hook_event_name": "SessionStart"})
+    assert started.returncode == 0, started.stderr
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Saved", body="baseline fallback")
+    finally:
+        store.close()
+
+    result = _run_cc_hook(script, payload)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+
+
+def test_cc_install_baseline_is_only_the_fallback_for_an_underway_session(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    module = _module("ab_write")
+    project = tmp_path / "p"
+    module._prepare(project, "empty", harness="claude-code")
+    store = Store(str(project / ".cairn"))
+    try:
+        store.save(kind="fact", title="Before install", body="already saved")
+    finally:
+        store.close()
+    install_hook("claude-code", project)
+    assert (project / ".cairn-nudge" / "baseline").read_text() == "1\n"
+
+    result = _run_cc_hook(
+        project / ".claude" / "hooks" / "cairn_stop.py",
+        {
+            "session_id": "underway",
+            "hook_event_name": "Stop",
+            "cwd": str(project),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == "block"
+
+
+def test_cc_hook_uses_the_installed_repo_not_the_incoming_cwd(tmp_path):
+    from cairn_mem.cli import main
+
+    project = tmp_path / "installed repo"
+    nested = project / "src" / "nested"
+    nested.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    assert main(["setup", "claude-code", "--dir", str(project)]) == 0
+
+    result = _run_cc_hook(
+        project / ".claude" / "hooks" / "cairn_stop.py",
+        {
+            "session_id": "root",
+            "hook_event_name": "Stop",
+            "cwd": str(nested),
+        },
+        cwd=outside,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == "block"
+    assert (project / ".cairn-nudge.log").read_text(encoding="utf-8") == "root\n"
+    assert (project / ".cairn-nudge" / "root.seen").exists()
+    assert not (nested / ".cairn-nudge").exists()
+    assert not (outside / ".cairn-nudge").exists()
+
+
+@pytest.mark.parametrize("payload", [[], None, "text", 7, True])
+def test_cc_hook_ignores_non_object_payloads(tmp_path, payload):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    result = _run_cc_hook(
+        project / ".claude" / "hooks" / "cairn_stop.py", payload
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert [path.name for path in (project / ".cairn-nudge").iterdir()] == ["baseline"]
+    assert not (project / ".cairn-nudge.log").exists()
+
+
+@pytest.mark.parametrize(
+    "session_id",
+    ["../escape", "..\\escape", "line\nbreak", "", "x" * 201, None, 7, "absolute"],
+)
+def test_cc_hook_rejects_invalid_session_ids_without_writes(tmp_path, session_id):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if session_id == "absolute":
+        session_id = str(outside / "absolute")
+    script = project / ".claude" / "hooks" / "cairn_stop.py"
+
+    for event in ("SessionStart", "Stop"):
+        result = _run_cc_hook(
+            script,
+            {
+                "session_id": session_id,
+                "hook_event_name": event,
+                "cwd": str(outside),
+            },
+            cwd=outside,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == ""
+
+    assert list(outside.iterdir()) == []
+    assert [path.name for path in (project / ".cairn-nudge").iterdir()] == ["baseline"]
+    assert not (project / ".cairn-nudge.log").exists()
+
+
+def test_cc_hook_skips_non_object_jsonl_values(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    events = project / ".cairn" / "events.jsonl"
+    events.parent.mkdir()
+    events.write_text(
+        '[]\nnull\n"save"\n1\n{"op": "archive"}\nnot-json\n', encoding="utf-8"
+    )
+
+    result = _run_cc_hook(
+        project / ".claude" / "hooks" / "cairn_stop.py",
+        {
+            "session_id": "jsonl",
+            "hook_event_name": "Stop",
+            "cwd": str(project),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == "block"
+
+
+def test_cc_hook_rejects_a_symlink_log_without_writing_outside(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    outside = tmp_path / "outside.log"
+    outside.write_text("outside\n", encoding="utf-8")
+    try:
+        (project / ".cairn-nudge.log").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks unavailable on this host")
+
+    result = _run_cc_hook(
+        project / ".claude" / "hooks" / "cairn_stop.py",
+        {
+            "session_id": "symlink",
+            "hook_event_name": "Stop",
+            "cwd": str(project),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == "block"
+    assert outside.read_text(encoding="utf-8") == "outside\n"
+
+
+def test_cc_hook_logging_failure_does_not_prevent_the_nudge(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    (project / ".cairn-nudge.log").mkdir()
+
+    result = _run_cc_hook(
+        project / ".claude" / "hooks" / "cairn_stop.py",
+        {
+            "session_id": "log-failure",
+            "hook_event_name": "Stop",
+            "cwd": str(project),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["decision"] == "block"
+    assert (project / ".cairn-nudge.log").is_dir()
+
+
+def test_cc_hook_isolated_mode_blocks_sibling_module_shadowing(tmp_path):
+    from cairn_mem.setup import install_hook
+
+    project = tmp_path / "p"
+    install_hook("claude-code", project)
+    (project / ".claude" / "hooks" / "json.py").write_text(
+        'raise RuntimeError("shadowed json")\n', encoding="utf-8"
+    )
+
+    result = _run_cc_hook(
+        project / ".claude" / "hooks" / "cairn_stop.py",
+        {
+            "session_id": "isolated",
+            "hook_event_name": "SessionStart",
+            "cwd": str(project),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert (project / ".cairn-nudge" / "isolated.baseline").read_text() == "0\n"
