@@ -502,6 +502,27 @@ final-answer contains for the read cases, forbidden-tool checks for the negative
 - [ ] **Release 0.18.0 decision**: S24-S28 plus the description fix are shipped without a
   release; tag when the user decides.
 
+### Remaining-work harness routing (2026-11-26)
+
+Assumption: PI.dev runs with its coding-agent package and file/shell tools enabled.
+
+| # | Task | OpenCode | Claude Code | PI.dev |
+|---|------|----------|-------------|--------|
+| 1 | S28.2: benchmark installer migration | Yes | **Optimal** | Conditional |
+| 2 | S28.3: docs and current-state updates | **Optimal** | Yes | **Optimal** |
+| 3 | Release 0.18.0 | Conditional | **Optimal** | Not recommended |
+| 4 | Bash save-attribution hardening | Possible | **Optimal** | Not recommended |
+| 5 | Measure >=80% coverage | **Optimal** | Yes | **Optimal** |
+
+Claude Code is the default for 1, 3 and 4: it has the recent context, Claude Code hook
+semantics and the authenticated GitHub CLI in the current environment. OpenCode fits 1, 2
+and 5 because it supports file editing, shell execution and granular command permissions.
+PI.dev fits 2 and 5; use it for 1 only after confirming its file/shell tooling, and avoid 3
+and 4 unless a sandbox and explicit GitHub/credential controls are configured.
+
+Recommended order: 1 and 4 in Claude Code; 2 and 5 may run in OpenCode or PI.dev; keep 3
+in Claude Code for the outward-facing release and its existing approvals.
+
 ### Minors
 
 - [x] `cairn --version` (nothing printed the version; MCP does it in `serverInfo`).
