@@ -2,9 +2,9 @@
 
 ## State and scope
 
-- **State:** `0.17.0` is published (2026-11-20, tag `v0.17.0`, Trusted Publishing). Every round
-  through S29 is implemented; `0.18.0` is release-ready and awaiting tag `v0.18.0`. The
-  changelog, the open items and the conditions that reopen them live in `PLAN.md`
+- **State:** `0.18.0` is published (2026-11-27, tag `v0.18.0`, Trusted Publishing). Every round
+  through S29 is implemented; Bash save-attribution hardening and coverage measurement remain
+  open. The changelog, the open items and the conditions that reopen them live in `PLAN.md`
   §4, §4.1 and §5; this file carries the current contract only, never a restatement of them.
   `store.py`, `cli.py`, `anchor.py`, `render.py`, `paths.py`, `mcp.py`, `sessions.py`,
   `jsonl.py`, `doctor.py`, `setup.py`, `export.py`, `i18n.py` and `legacy.py` are
@@ -61,7 +61,7 @@ python bench/ab_write.py --harness claude-code --arms empty,stop --reps 30 --jso
 - Publishing goes through `.github/workflows/publish.yml` (Trusted Publishing,
   OIDC, attestations PEP 740): push a tag `v*` and it builds and publishes; no PyPI
   token in the repo. The PyPI pending publisher (owner/repo/workflow
-  `publish.yml`) is registered (`0.17.0` was published this way). Still delete `dist/`
+  `publish.yml`) is registered (`0.18.0` was published this way). Still delete `dist/`
   **and** `build/` when building locally: `uv build` reuses `build/lib` and packages
   modules you already deleted from the tree. One wheel included the old importer
   because of an orphan `build/lib/`.

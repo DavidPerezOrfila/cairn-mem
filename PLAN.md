@@ -326,6 +326,14 @@ goes v5 to v6: the derived DB rebuilds on open and older JSONL replays with `key
 NULL. Verified with a clean install from the public index in an empty venv (`init`, `save`,
 `search` by a keyword, `history`, `doctor` exit 0, version 0.17.0).
 
+**0.18.0 release:** 2026-11-27 on PyPI and tag `v0.18.0`, published from GitHub Actions
+with Trusted Publishing. Contents: S23 (imperative snippet and write-side bench fixes), S24
+(the separate lock file), S25 (`purge` under the append lock), S26 (the backup in the managed
+`.gitignore`), S27-S28 (measured `Stop` hooks installed per harness) and S29 (exact MCP
+annotations), plus the audit's MCP tool and parameter descriptions. No schema change.
+Verified with a clean install from the public index in an empty venv (`init`, `save`, `search`,
+`doctor` exit 0, version 0.18.0).
+
 ## 4.1 Pending rounds (2026-11-18 audit)
 
 S21 and S22 shipped in 0.17.0. Each one started only after the previous was measured; keep
@@ -506,8 +514,8 @@ final-answer contains for the read cases, forbidden-tool checks for the negative
   a test. S28.2 (`e0462fa`) moves `bench/ab_write.py` behind `setup.install_hook` for
   both harnesses, so the bench measures the user path. The risk row in §6 and
   `AGENTS.md` are updated in the same change (S28.3).
-- [ ] **Release 0.18.0**: S23-S29 plus the MCP description fix are release-ready; tag
-  `v0.18.0` after the version PR merges.
+- [x] **Release 0.18.0**: S23-S29 plus the MCP description fix shipped on 2026-11-27 via
+  tag `v0.18.0` and Trusted Publishing.
 
 ### Remaining-work harness routing (2026-11-26)
 
@@ -530,8 +538,8 @@ and 4 unless a sandbox and explicit GitHub/credential controls are configured.
 Recommended order: 1 and 4 in Claude Code; 2 and 5 may run in OpenCode or PI.dev; keep 3
 in Claude Code for the outward-facing release and its existing approvals.
 
-Status 2026-11-27: 1 (S28.2, `e0462fa`) and 2 (S28.3, #95) are done; 3 (release 0.18.0) is
-release-ready; 4 and 5 stay open.
+Status 2026-11-27: 1 (S28.2, `e0462fa`), 2 (S28.3, #95) and 3 (release 0.18.0, #96 and tag
+`v0.18.0`) are done; 4 and 5 stay open.
 
 ### Minors
 
